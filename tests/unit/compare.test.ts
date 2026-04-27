@@ -855,6 +855,94 @@ describe('compare runtime', () => {
     )
   })
 
+  it('does not write Gemini structured stdout JSON into answer artifacts when usage metadata is present without answer text', async () => {
+    const graph = makeGraph()
+    writeProjectFiles()
+    const graphPath = writeGraphFixture(graph)
+
+    const result = await executeCompareRuns(
+      {
+        graphPath,
+        question: 'how does login create a session',
+        outputDir: COMPARE_OUTPUT_ROOT,
+        execTemplate: 'runner --prompt {prompt_file} --mode {mode} --out {output_file}',
+        baselineMode: 'full',
+        now: new Date('2026-04-24T19:30:00.000Z'),
+      },
+      {
+        runner: async (execution) => ({
+          exitCode: 0,
+          stdout: JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [{ inlineData: { mimeType: 'text/plain' } }],
+                },
+              },
+            ],
+            usageMetadata:
+              execution.mode === 'baseline'
+                ? {
+                    promptTokenCount: 1200,
+                    candidatesTokenCount: 90,
+                    totalTokenCount: 1290,
+                  }
+                : {
+                    promptTokenCount: 400,
+                    candidatesTokenCount: 70,
+                    totalTokenCount: 470,
+                  },
+          }),
+          stderr: '',
+          elapsedMs: execution.mode === 'baseline' ? 11 : 17,
+        }),
+      },
+    )
+
+    const report = result.reports[0]!
+    expect(readFileSync(report.answer_paths.baseline, 'utf8')).toBe('')
+    expect(readFileSync(report.answer_paths.graphify, 'utf8')).toBe('')
+    expect(report.usage.baseline).toEqual(
+      expect.objectContaining({
+        provider: 'gemini',
+        input_tokens: 1200,
+        output_tokens: 90,
+        total_tokens: 1290,
+      }),
+    )
+    expect(report.usage.graphify).toEqual(
+      expect.objectContaining({
+        provider: 'gemini',
+        input_tokens: 400,
+        output_tokens: 70,
+        total_tokens: 470,
+      }),
+    )
+
+    const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as {
+      usage: {
+        baseline: Record<string, unknown> | null
+        graphify: Record<string, unknown> | null
+      }
+    }
+    expect(savedReport.usage.baseline).toEqual(
+      expect.objectContaining({
+        provider: 'gemini',
+        input_tokens: 1200,
+        output_tokens: 90,
+        total_tokens: 1290,
+      }),
+    )
+    expect(savedReport.usage.graphify).toEqual(
+      expect.objectContaining({
+        provider: 'gemini',
+        input_tokens: 400,
+        output_tokens: 70,
+        total_tokens: 470,
+      }),
+    )
+  })
+
   it('saves Gemini answers when structured usage metadata is missing and keeps estimate summaries', async () => {
     const graph = makeGraph()
     writeProjectFiles()
