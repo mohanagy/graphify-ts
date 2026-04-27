@@ -950,6 +950,7 @@ describe('compare runtime', () => {
     const graph = makeGraph()
     writeProjectFiles()
     const graphPath = writeGraphFixture(graph)
+    const rawStdout = '{not valid json'
 
     const result = await executeCompareRuns(
       {
@@ -963,7 +964,7 @@ describe('compare runtime', () => {
       {
         runner: async () => ({
           exitCode: 0,
-          stdout: '{not valid json',
+          stdout: rawStdout,
           stderr: '',
           elapsedMs: 11,
         }),
@@ -971,8 +972,8 @@ describe('compare runtime', () => {
     )
 
     const report = result.reports[0]!
-    expect(readFileSync(report.answer_paths.baseline, 'utf8')).toContain('{not valid json')
-    expect(readFileSync(report.answer_paths.graphify, 'utf8')).toContain('{not valid json')
+    expect(readFileSync(report.answer_paths.baseline, 'utf8')).toBe(rawStdout)
+    expect(readFileSync(report.answer_paths.graphify, 'utf8')).toBe(rawStdout)
     expect(report.usage.baseline).toBeNull()
     expect(report.usage.graphify).toBeNull()
   })
