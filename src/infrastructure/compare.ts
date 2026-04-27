@@ -298,13 +298,14 @@ function parseGeminiStructuredAnswer(payload: Record<string, unknown>): string |
     return null
   }
 
+  let answerText = ''
   for (const part of firstCandidate.content.parts) {
     if (isRecord(part) && typeof part.text === 'string') {
-      return part.text
+      answerText += part.text
     }
   }
 
-  return null
+  return answerText.length > 0 ? answerText : null
 }
 
 function parseGeminiStructuredUsage(payload: Record<string, unknown>): ComparePromptUsage | null {

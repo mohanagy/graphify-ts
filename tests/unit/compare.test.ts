@@ -855,6 +855,53 @@ describe('compare runtime', () => {
     )
   })
 
+  it('concatenates Gemini text parts from the first candidate into answer artifacts', async () => {
+    const graph = makeGraph()
+    writeProjectFiles()
+    const graphPath = writeGraphFixture(graph)
+
+    const result = await executeCompareRuns(
+      {
+        graphPath,
+        question: 'how does login create a session',
+        outputDir: COMPARE_OUTPUT_ROOT,
+        execTemplate: 'runner --prompt {prompt_file} --mode {mode} --out {output_file}',
+        baselineMode: 'full',
+        now: new Date('2026-04-24T19:30:00.000Z'),
+      },
+      {
+        runner: async (execution) => ({
+          exitCode: 0,
+          stdout: JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: `${execution.mode} ` }, { inlineData: { mimeType: 'text/plain' } }, { text: 'answer' }, { text: '\n' }],
+                },
+              },
+              {
+                content: {
+                  parts: [{ text: 'ignored candidate answer\n' }],
+                },
+              },
+            ],
+            usageMetadata: {
+              promptTokenCount: 1200,
+              candidatesTokenCount: 90,
+              totalTokenCount: 1290,
+            },
+          }),
+          stderr: '',
+          elapsedMs: execution.mode === 'baseline' ? 11 : 17,
+        }),
+      },
+    )
+
+    const report = result.reports[0]!
+    expect(readFileSync(report.answer_paths.baseline, 'utf8')).toBe('baseline answer\n')
+    expect(readFileSync(report.answer_paths.graphify, 'utf8')).toBe('graphify answer\n')
+  })
+
   it('promotes Gemini-reported input and total tokens into compare summaries', async () => {
     const graph = makeGraph()
     writeProjectFiles()
