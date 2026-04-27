@@ -7,6 +7,7 @@ All notable changes to the TypeScript package will be documented in this file.
 ### Improved
 
 - **Retrieval quality**: improved retrieval ranking with relation-aware expansion so connected evidence surfaces more effectively, and strengthened recall/MRR eval guardrails to prevent misleading benchmark results
+- **Compare usage reporting**: `compare` now captures Claude-reported input and total tokens from structured Claude CLI output, saves plain-text answer artifacts from that output, and falls back to clearly labeled local estimates when provider usage is unavailable
 
 ## [0.8.7] - 2026-04-27
 

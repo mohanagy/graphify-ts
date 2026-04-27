@@ -75,7 +75,7 @@ Outputs land in `examples/demo-repo/graphify-out/`, which is ignored so you can 
 ```bash
 node dist/src/cli/bin.js compare "How does login create a session?" \
   --graph examples/demo-repo/graphify-out/graph.json \
-  --exec 'cat {prompt_file} | claude -p' \
+  --exec 'cat {prompt_file} | claude -p --output-format json' \
   --yes
 ```
 
@@ -85,7 +85,8 @@ What `compare` does:
 - Expands runner placeholders: `{prompt_file}`, `{question}`, `{mode}`, and `{output_file}`.
 - For large prompts, pass `{prompt_file}` through stdin or file redirection. Avoid shell command substitution around `{prompt_file}` (for example `$(cat {prompt_file})`), which can hit OS argument-length limits.
 - Writes a proof bundle under `graphify-out/compare/<timestamp>/` with `baseline-prompt.txt`, `graphify-prompt.txt`, `baseline-answer.txt`, `graphify-answer.txt`, and `report.json`.
-- Reports prompt-token counts as local `cl100k_base` estimates, not provider billing tokens.
+- When the runner emits Claude JSON output (for example `claude -p --output-format json`), `compare` records Claude-reported input and total tokens in `report.json` and the terminal summary while still saving plain-text answer files.
+- Otherwise, prompt-token counts fall back to local `cl100k_base` estimates and the summary labels them as estimates.
 - Preserves partial artifacts when one side fails, and classifies prompt-size failures such as `Prompt is too long` as `context_overflow` evidence in `report.json`.
 
 Use `compare` when you want a showcase or a customer-proof run. Use `benchmark` and `eval` when you want repeatable local measurements without calling a model.
