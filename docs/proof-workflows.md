@@ -32,6 +32,14 @@ node dist/src/cli/bin.js compare "How does login create a session?" \
   --yes
 ```
 
+Gemini-safe installed-CLI invocation:
+
+```bash
+graphify-ts compare "How does auth work?" \
+  --exec 'cat {prompt_file} | gemini -p --output-format json' \
+  --yes
+```
+
 What gets saved under `graphify-out/compare/<timestamp>/`:
 
 - `baseline-prompt.txt`
@@ -40,7 +48,7 @@ What gets saved under `graphify-out/compare/<timestamp>/`:
 - `graphify-answer.txt`
 - `report.json`
 
-Use this when you need customer-proof or your own apples-to-apples answer comparison. It can spend paid model tokens, so it is intentionally separate from the local benchmark/eval path.
+When Gemini emits structured JSON with `usageMetadata`, `compare` captures real reported input and total tokens in `report.json` and the terminal summary. If the runner only returns answer text or malformed JSON, `compare` falls back to labeled local `cl100k_base` prompt estimates instead. Use this when you need customer-proof or your own apples-to-apples answer comparison. It can spend paid model tokens, so it is intentionally separate from the local benchmark/eval path. `benchmark` and `eval` remain offline estimate surfaces.
 
 ## 3. Production and multi-repo proof
 
@@ -78,7 +86,7 @@ What this proves that a single-repo demo cannot:
 |---|---|
 | "Does the graph improve retrieval quality on a labeled set?" | `eval` |
 | "Does the graph reduce prompt size while keeping expected evidence?" | `benchmark` |
-| "Will my actual model answer better with graphify than with a naive baseline?" | `compare` |
+| "Will my actual model answer better with graphify than with a naive baseline, and optionally capture provider-reported usage?" | `compare` |
 | "Can this work across frontend/backend/shared repos?" | `federate` + `serve --stdio` |
 
 For the narrative production benchmark and the GoValidate numbers, see [`examples/why-graphify.md`](../examples/why-graphify.md). For exact support coverage by language and file type, see [`language-capability-matrix.md`](./language-capability-matrix.md).

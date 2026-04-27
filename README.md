@@ -79,16 +79,25 @@ node dist/src/cli/bin.js compare "How does login create a session?" \
   --yes
 ```
 
+Gemini-safe installed-CLI invocation:
+
+```bash
+graphify-ts compare "How does auth work?" \
+  --exec 'cat {prompt_file} | gemini -p --output-format json' \
+  --yes
+```
+
 What `compare` does:
 
 - Prints a warning before execution because it may consume paid model tokens. Use `--yes` for non-interactive runs and CI.
 - Expands runner placeholders: `{prompt_file}`, `{question}`, `{mode}`, and `{output_file}`.
 - For large prompts, pass `{prompt_file}` through stdin or file redirection. Avoid shell command substitution around `{prompt_file}` (for example `$(cat {prompt_file})`), which can hit OS argument-length limits.
 - Writes a proof bundle under `graphify-out/compare/<timestamp>/` with `baseline-prompt.txt`, `graphify-prompt.txt`, `baseline-answer.txt`, `graphify-answer.txt`, and `report.json`.
-- Reports prompt-token counts as local `cl100k_base` estimates, not provider billing tokens.
+- Promotes provider-reported usage into `report.json` and the terminal summary when the runner emits structured JSON with usage (for Gemini, `usageMetadata` from `--output-format json`; for Claude, structured JSON with `usage`).
+- Falls back to labeled local `cl100k_base` prompt estimates when the runner only returns answer text or malformed JSON, so the token source stays explicit.
 - Preserves partial artifacts when one side fails, and classifies prompt-size failures such as `Prompt is too long` as `context_overflow` evidence in `report.json`.
 
-Use `compare` when you want a showcase or a customer-proof run. Use `benchmark` and `eval` when you want repeatable local measurements without calling a model.
+Use `compare` when you want a showcase or a customer-proof run. Use `benchmark` and `eval` when you want repeatable local measurements without calling a model; they remain offline estimate surfaces rather than provider-reported usage surfaces.
 
 ## Graph time travel (ref-to-ref graph compare)
 
