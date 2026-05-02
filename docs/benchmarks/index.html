@@ -3,47 +3,95 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>graphify-ts benchmark proofs</title>
+    <title>graphify-ts — benchmark proofs</title>
+    <meta name="description" content="Public reproducible benchmarks for graphify-ts. Same model, same question, with and without graphify-ts. Receipts committed in the repo." />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <header class="site-header">
+      <span class="brand"><span class="dot" aria-hidden="true"></span>graphify-ts</span>
+      <nav>
+        <a href="https://github.com/mohanagy/graphify-ts">GitHub</a>
+        <a href="https://www.npmjs.com/package/@mohammednagy/graphify-ts">npm</a>
+      </nav>
+    </header>
+
     <main class="shell">
       <section class="hero">
-        <p class="eyebrow">graphify-ts benchmark proofs</p>
-        <h1>Hosted benchmark pages</h1>
+        <p class="eyebrow">Benchmark proofs</p>
+        <h1>Same model. Same question. With and without graphify-ts.</h1>
         <p class="lede">
-          Public wrappers for the committed benchmark evidence. Each page stays short and
-          links straight to the repo-backed files used to verify the numbers.
+          Every number on these pages is reproduced from a committed file in the repo. Each benchmark links straight to the raw evidence (Anthropic-billed <code>usage</code> JSON, prompts, and answers) and a one-line <code>verify.sh</code> that recomputes the headline ratio from those files.
         </p>
+        <dl class="hero-meta">
+          <div class="meta-item"><dt>Source</dt><dd><a href="https://github.com/mohanagy/graphify-ts/tree/main/docs/benchmarks">github.com/mohanagy/graphify-ts</a></dd></div>
+          <div class="meta-item"><dt>License</dt><dd>MIT</dd></div>
+          <div class="meta-item"><dt>Updated</dt><dd>2026-05-02</dd></div>
+        </dl>
       </section>
 
-      <section class="grid cards">
-        <article class="card">
-          <p class="eyebrow">Retrieval benchmark</p>
-          <h2>2026-04-30 — GoValidate native_agent</h2>
-          <p class="muted">
-            Same production codebase, same Claude model, with and without graphify-ts.
-          </p>
-          <ul class="inline-links">
-            <li><a href="./2026-04-30-govalidate/">Open page</a></li>
-            <li><a href="./2026-04-30-govalidate/README.md">README.md</a></li>
-            <li><a href="./2026-04-30-govalidate/verify.sh">verify.sh</a></li>
-          </ul>
-        </article>
+      <section class="section">
+        <div class="section-header">
+          <h2>Published benchmarks</h2>
+          <p>Two scenarios, both measured on real production code.</p>
+        </div>
 
-        <article class="card">
-          <p class="eyebrow">PR review benchmark</p>
-          <h2>2026-05-02 — GoValidate review-compare</h2>
-          <p class="muted">
-            Compact vs verbose <code>pr_impact</code> prompts on a real production branch diff.
-          </p>
-          <ul class="inline-links">
-            <li><a href="./2026-05-02-govalidate-pr-review/">Open page</a></li>
-            <li><a href="./2026-05-02-govalidate-pr-review/report.json">report.json</a></li>
-            <li><a href="./2026-05-02-govalidate-pr-review/verify.sh">verify.sh</a></li>
-          </ul>
-        </article>
+        <div class="benchmark-cards">
+          <article class="benchmark-card">
+            <p class="eyebrow">Retrieval benchmark</p>
+            <div class="card-headline">3<span class="small">× fewer turns</span></div>
+            <h2><a href="./2026-04-30-govalidate/">2026-04-30 — GoValidate <code>native_agent</code></a></h2>
+            <p class="card-summary">
+              The same Claude Code question against a 1,268-file NestJS + Next.js production codebase, asked once with file tools only and once with graphify-ts available. Anthropic-billed <code>usage</code> from <code>claude --output-format json</code>.
+            </p>
+            <div class="card-meta">
+              <span>9 → 3 turns</span>
+              <span>96 → 35 sec</span>
+              <span>615K → 234K tokens</span>
+            </div>
+          </article>
+
+          <article class="benchmark-card">
+            <p class="eyebrow">PR review benchmark</p>
+            <div class="card-headline">7.25<span class="small">× smaller</span></div>
+            <h2><a href="./2026-05-02-govalidate-pr-review/">2026-05-02 — GoValidate <code>review-compare</code></a></h2>
+            <p class="card-summary">
+              A real 36-file branch diff measured with <code>review-compare</code>, comparing the verbose and compact <code>pr_impact</code> prompts side by side. Same review target, smaller prompt.
+            </p>
+            <div class="card-meta">
+              <span>63K → 8.7K prompt</span>
+              <span>42K → 6.1K payload</span>
+              <span>36 files</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <h2>Why these are reproducible</h2>
+          <p>The committed evidence is small, plain text, and signed by the runner.</p>
+        </div>
+        <dl class="setup-list">
+          <dt>Provider-reported numbers</dt>
+          <dd>The retrieval benchmark numbers come from Anthropic's own <code>usage</code> field in the <code>claude --output-format json</code> output. No local <code>cl100k_base</code> estimates in the headline.</dd>
+          <dt>One-line <code>verify.sh</code></dt>
+          <dd>Each benchmark ships a shell script that recomputes the headline number from the committed evidence files. Clone the repo, run it, get the same answer.</dd>
+          <dt>Prompts and answers are committed</dt>
+          <dd>Verbose and compact prompts are in the repo, plus the runner's actual answers, plus the structured <code>report.json</code>. Nothing in the headline is sourced from a screenshot.</dd>
+          <dt>Privacy-sanitized</dt>
+          <dd><code>review-compare</code> sanitizes path-derived identifiers before persisting artifacts; usernames and workstation paths don't leak into the committed evidence.</dd>
+        </dl>
       </section>
     </main>
+
+    <footer class="site-footer">
+      <span>graphify-ts — local-first MCP server and CLI · MIT</span>
+      <span>
+        <a href="https://github.com/mohanagy/graphify-ts">Repo</a> ·
+        <a href="https://www.npmjs.com/package/@mohammednagy/graphify-ts">npm</a> ·
+        <a href="https://github.com/mohanagy/graphify-ts/blob/main/CHANGELOG.md">Changelog</a>
+      </span>
+    </footer>
   </body>
 </html>

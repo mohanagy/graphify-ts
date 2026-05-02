@@ -4,6 +4,17 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.10] - 2026-05-02
+
+### Changed
+
+- **Hosted benchmark pages redesign**: replaced the auto-generated benchmark UI under `docs/benchmarks/` with a Stripe-inspired design system — Inter (with `ss01` + `tnum` features) on white surfaces, deep-navy headings (`#061b31`) with a `#533afd` purple accent, multi-layer blue-tinted shadows, and a 4–8px border-radius scale. Hero, headline-metric, supporting-metric grid, comparison bars, setup list, terminal reproducer block, evidence file list, and disclosure callout were all rebuilt; bar widths remain mathematically tied to the underlying data.
+
+### Fixed
+
+- **Landing page "Why these are reproducible" section**: the four-item explainer was using `<ol><li><dt>/<dd></li></ol>`, which collided with the `.setup-list` 2-column CSS grid and squeezed the right column to one word per line. Switched to a flat `<dl>` so dt/dd pairs map cleanly into the grid.
+- **Public docs surface cleanup**: removed internal planning, review, maintainer, marketplace-prep, and research material from `docs/` so the public docs tree now only exposes user-facing guides and proof artifacts.
+
 ## [0.10.9] - 2026-05-02
 
 ### Added

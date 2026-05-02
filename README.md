@@ -98,7 +98,7 @@ We measure and publish honest numbers, including the trade-offs.
 1. **Cold-start sessions cost about 13% more than no-graph baseline** because the MCP server adds ~5K of tool-schema overhead at session init. Multi-question sessions amortize this and end up cheaper. We're tightening it further; watch the changelog.
 2. **Deep extraction is best on JS/TS** with framework-aware passes for Express, Redux Toolkit, React Router, NestJS, and Next.js. Python / Ruby / Go / Java / Rust use tree-sitter AST. C / Kotlin / C# / Scala / PHP / Swift / Zig use a generic structural extractor. Full matrix: [`docs/language-capability-matrix.md`](docs/language-capability-matrix.md).
 3. **The graph is opinionated, not exhaustive.** It's a structural map for an agent, not a complete program-analysis database. Runtime-generated routes and heavily meta-programmed decorators fall back to the base AST graph rather than pretending to be first-class semantics.
-4. **Comparable tools exist.** `token-savior` publishes a stronger benchmark on a different surface (general agent tasks, MCP-only). `aider`'s repo-map ships a battle-tested PageRank approach that doesn't use MCP at all. **Our angle is local-first plus PR-review-specific tools (`pr_impact`, `risk_map`, `review-compare`) plus multi-repo federation.** The full comparison is in [`docs/research-2026-05-01-architectural-comparison.md`](docs/research-2026-05-01-architectural-comparison.md).
+4. **Comparable tools exist.** `token-savior` publishes a stronger benchmark on a different surface (general agent tasks, MCP-only). `aider`'s repo-map ships a battle-tested PageRank approach that doesn't use MCP at all. **Our angle is local-first plus PR-review-specific tools (`pr_impact`, `risk_map`, `review-compare`) plus multi-repo federation.**
 
 ---
 
@@ -106,7 +106,7 @@ We measure and publish honest numbers, including the trade-offs.
 
 The combination we have not found in a single comparable tool today: **local-only** (no cloud, no API key) plus **MCP-protocol native** (works with Claude / Cursor / Copilot / Gemini / Aider via install commands) plus **diff-aware PR-review tools** (`pr_impact`, `risk_map`, `review-compare`) plus **multi-repo federation** (`federate`). aider's repo-map is local but aider-only; Cursor's `@codebase` is MCP-friendly but cloud-indexed; Sourcegraph Cody self-hosts but is enterprise-priced.
 
-The detailed competitive comparison with citations is in [`docs/research-2026-05-01-architectural-comparison.md`](docs/research-2026-05-01-architectural-comparison.md).
+The short version: graphify-ts is local-first, MCP-native, diff-aware for PR review, and built to work across multiple repos without sending code to a hosted indexing service.
 
 ---
 
@@ -166,10 +166,8 @@ The only command that hits an external service is the optional `compare` / `revi
 
 - [Quick start guide](docs/proof-workflows.md) — three reproducible workflows: local proof, A/B compare, federated proof
 - [Language and capability matrix](docs/language-capability-matrix.md) — exactly what each file type and language gets
-- [Marketplace listing pack](docs/distribution/marketplaces/README.md) — reusable Smithery / awesome-mcp submission assets
 - [Why graphify (with detailed numbers)](examples/why-graphify.md) — the long-form evidence
 - [MCP tool examples](examples/mcp-tool-examples.md) — real input/output for every tool
-- [Architectural comparison](docs/research-2026-05-01-architectural-comparison.md) — vs aider / token-savior / code-review-graph / Cody
 - [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
 
 ---

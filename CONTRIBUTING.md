@@ -53,7 +53,6 @@ If your change affects extraction behavior, prefer adding a small fixture and a 
 When a change affects how end users install, run, or interpret the tool, update:
 
 - `README.md` for user-facing behavior
-- `docs/plans/current-status.md` only when implementation scope, limitations, or roadmap notes materially change
 
 ## Pull requests
 
@@ -76,9 +75,7 @@ Follow the process in [`SECURITY.md`](./SECURITY.md).
 
 This repository includes GitHub issue forms, a pull request template, `CODEOWNERS`, and a CI workflow to support a clean open-source contribution flow.
 
-If you maintain the repository, repository-level protections such as branch protection rules, required checks, and merge restrictions are documented in:
-
-- [`docs/maintainers/repository-settings.md`](./docs/maintainers/repository-settings.md)
+If you maintain the repository, keep repository-level protections such as branch protection rules, required checks, and merge restrictions aligned with the current GitHub repository settings.
 
 ## License
 

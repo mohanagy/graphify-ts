@@ -3,58 +3,165 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>2026-05-02 GoValidate PR review benchmark</title>
+    <title>2026-05-02 GoValidate PR review benchmark — graphify-ts</title>
+    <meta name="description" content="Same PR diff, two prompt packagings. Compact pr_impact prompts shrink the review payload 7.25× without changing the review target. Real 36-file branch, measured with review-compare." />
     <link rel="stylesheet" href="../styles.css" />
   </head>
   <body>
+    <header class="site-header">
+      <span class="brand"><span class="dot" aria-hidden="true"></span>graphify-ts</span>
+      <nav>
+        <a href="https://github.com/mohanagy/graphify-ts">GitHub</a>
+        <a href="https://www.npmjs.com/package/@mohammednagy/graphify-ts">npm</a>
+      </nav>
+    </header>
+
     <main class="shell">
-      <a class="back-link" href="../">&larr; All benchmark pages</a>
+      <a class="back-link" href="../">← All benchmarks</a>
 
       <section class="hero">
-        <p class="eyebrow">PR review benchmark</p>
-        <h1>2026-05-02 — GoValidate PR review benchmark</h1>
+        <p class="eyebrow">PR review benchmark · 2026-05-02</p>
+        <h1>GoValidate <code>review-compare</code> benchmark</h1>
         <p class="lede">
-          A real production branch diff measured with <code>review-compare</code>, showing
-          how compact <code>pr_impact</code> packaging shrinks prompt size without changing
-          the review target.
+          A real production branch diff (36 changed files) packaged two ways and reviewed by the same model. The verbose <code>pr_impact</code> prompt sends the full evidence dump; the compact prompt sends the same review target with the structural neighborhood collapsed. Same diff, same reviewer — only the prompt size changes.
         </p>
+        <dl class="hero-meta">
+          <div class="meta-item"><dt>Codebase</dt><dd>govalidate/platform (NestJS + Next.js)</dd></div>
+          <div class="meta-item"><dt>Diff</dt><dd>36 files changed vs <code>origin/main</code></dd></div>
+          <div class="meta-item"><dt>Runner</dt><dd><code>cat {prompt}.txt | claude -p</code></dd></div>
+        </dl>
       </section>
 
-      <section class="grid cards">
-        <article class="card">
-          <div class="metric">63,024 → 8,690</div>
-          <div class="metric-label">prompt tokens (7.252× smaller)</div>
-        </article>
-        <article class="card">
-          <div class="metric">41,969 → 6,093</div>
-          <div class="metric-label">payload tokens (6.888× smaller)</div>
-        </article>
-        <article class="card">
-          <div class="metric">36</div>
-          <div class="metric-label">changed files in the measured diff</div>
-        </article>
-        <article class="card">
-          <div class="metric">143 / 3</div>
-          <div class="metric-label">seed count / hotspot count</div>
-        </article>
+      <section class="section">
+        <div class="headline-metric">
+          <div class="figure">7.25<span class="small">×</span></div>
+          <div class="label">smaller prompt, same review target</div>
+          <div class="delta">63,024 → 8,690 tokens</div>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric">
+            <div class="figure">6.89<span style="font-size:0.7em">×</span></div>
+            <div class="label">smaller payload</div>
+            <div class="sub">41,969 → 6,093 tokens</div>
+          </div>
+          <div class="metric">
+            <div class="figure">36</div>
+            <div class="label">changed files in the diff</div>
+            <div class="sub">measured against <code>origin/main</code></div>
+          </div>
+          <div class="metric">
+            <div class="figure">143<span style="font-size:0.7em"> / 3</span></div>
+            <div class="label">seed nodes / structural hotspots</div>
+            <div class="sub">line-aware seeds from diff hunks</div>
+          </div>
+          <div class="metric">
+            <div class="figure">2<span style="font-size:0.7em">/2</span></div>
+            <div class="label">runs succeeded</div>
+            <div class="sub">verbose and compact both returned a review</div>
+          </div>
+        </div>
       </section>
 
-      <section class="panel">
-        <h2>Evidence files</h2>
-        <p class="muted">
-          The wrapper stays short on purpose. Use these committed artifacts to inspect the
-          raw report, prompts, answers, and verification script.
-        </p>
-        <ul class="link-list">
-          <li><a href="./README.md">README.md</a></li>
-          <li><a href="./verify.sh">verify.sh</a></li>
-          <li><a href="./report.json">report.json</a></li>
-          <li><a href="./compact-prompt.txt">compact-prompt.txt</a></li>
-          <li><a href="./verbose-prompt.txt">verbose-prompt.txt</a></li>
-          <li><a href="./compact-answer.txt">compact-answer.txt</a></li>
-          <li><a href="./verbose-answer.txt">verbose-answer.txt</a></li>
+      <section class="section">
+        <div class="section-header">
+          <h2>Visual comparison</h2>
+          <p>Bars are proportional to the actual measured token counts.</p>
+        </div>
+
+        <div class="bars">
+          <div class="bar-group">
+            <div class="label-row">
+              <span class="name">Prompt tokens (entire prompt to the model)</span>
+              <span class="delta">7.25× smaller</span>
+            </div>
+            <div class="bar-row">
+              <span class="legend"><span class="swatch baseline" aria-hidden="true"></span>Verbose <code>pr_impact</code></span>
+              <span class="bar"><span class="fill baseline" style="width:100%"></span></span>
+              <span class="value">63,024</span>
+            </div>
+            <div class="bar-row">
+              <span class="legend"><span class="swatch graphify" aria-hidden="true"></span>Compact <code>pr_impact</code></span>
+              <span class="bar"><span class="fill graphify" style="width:13.79%"></span></span>
+              <span class="value">8,690</span>
+            </div>
+          </div>
+
+          <div class="bar-group">
+            <div class="label-row">
+              <span class="name">Payload tokens (just the structural evidence block)</span>
+              <span class="delta">6.89× smaller</span>
+            </div>
+            <div class="bar-row">
+              <span class="legend"><span class="swatch baseline" aria-hidden="true"></span>Verbose <code>pr_impact</code></span>
+              <span class="bar"><span class="fill baseline" style="width:100%"></span></span>
+              <span class="value">41,969</span>
+            </div>
+            <div class="bar-row">
+              <span class="legend"><span class="swatch graphify" aria-hidden="true"></span>Compact <code>pr_impact</code></span>
+              <span class="bar"><span class="fill graphify" style="width:14.52%"></span></span>
+              <span class="value">6,093</span>
+            </div>
+          </div>
+        </div>
+
+        <p class="disclosure" style="margin-top:var(--s-8)"><strong>What this measures:</strong> the same diff, the same reviewer, the same expected output shape. The win comes from how <code>pr_impact</code> packages the structural neighborhood of the changed lines — not from changing what the reviewer is asked to do. Both runs succeeded and produced a valid review.</p>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <h2>Setup</h2>
+        </div>
+        <dl class="setup-list">
+          <dt>Codebase</dt>
+          <dd>The same production NestJS + Next.js SaaS used in the retrieval benchmark.</dd>
+          <dt>Branch under review</dt>
+          <dd>A real working branch with 36 changed files vs <code>origin/main</code>.</dd>
+          <dt>Tool</dt>
+          <dd><code>graphify-ts review-compare</code> — runs both prompt variants against the same reviewer and writes a structured <code>report.json</code>.</dd>
+          <dt>Reviewer</dt>
+          <dd><code>cat {prompt_file} | claude -p</code>. Same model, same flags, both runs.</dd>
+          <dt>Token source</dt>
+          <dd>Locally counted with <code>cl100k_base</code>. Both prompts measured the same way; the ratio is invariant to the tokenizer choice.</dd>
+          <dt>Privacy</dt>
+          <dd><code>review-compare</code> sanitizes path-derived identifiers before persisting the artifacts. Workstation paths and usernames don't leak into the committed evidence.</dd>
+        </dl>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <h2>Reproduce the headline numbers</h2>
+        </div>
+        <pre class="terminal"><code><span class="prompt">$</span> <span class="cmd">git clone https://github.com/mohanagy/graphify-ts.git</span>
+<span class="prompt">$</span> <span class="cmd">cd graphify-ts</span>
+<span class="prompt">$</span> <span class="cmd">bash docs/benchmarks/2026-05-02-govalidate-pr-review/verify.sh</span>
+<span class="comment"># Recomputes prompt-token and payload-token ratios from report.json.</span></code></pre>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <h2>Evidence files</h2>
+          <p>All committed in the repo. Inspect, hash, or rerun against your own branch.</p>
+        </div>
+        <ul class="file-list">
+          <li><a href="./README.md"><span class="ico">MD</span>README.md</a></li>
+          <li><a href="./verify.sh"><span class="ico">SH</span>verify.sh</a></li>
+          <li><a href="./report.json"><span class="ico">JSON</span>report.json</a></li>
+          <li><a href="./compact-prompt.txt"><span class="ico">TXT</span>compact-prompt.txt</a></li>
+          <li><a href="./verbose-prompt.txt"><span class="ico">TXT</span>verbose-prompt.txt</a></li>
+          <li><a href="./compact-answer.txt"><span class="ico">TXT</span>compact-answer.txt</a></li>
+          <li><a href="./verbose-answer.txt"><span class="ico">TXT</span>verbose-answer.txt</a></li>
         </ul>
       </section>
     </main>
+
+    <footer class="site-footer">
+      <span>graphify-ts — local-first MCP server and CLI · MIT</span>
+      <span>
+        <a href="../">All benchmarks</a> ·
+        <a href="https://github.com/mohanagy/graphify-ts">Repo</a> ·
+        <a href="https://www.npmjs.com/package/@mohammednagy/graphify-ts">npm</a>
+      </span>
+    </footer>
   </body>
 </html>
