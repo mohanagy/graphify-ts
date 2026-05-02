@@ -4,6 +4,13 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.11] - 2026-05-02
+
+### Fixed
+
+- **Hosted retrieval benchmark warning color**: replaced the undefined `--amber-400` token in the 2026-04-30 benchmark page with the defined `--c-lemon` warning color so the published trade-off label renders consistently.
+- **Contributing guide clarity**: removed the circular repository-settings sentence from `CONTRIBUTING.md` so the public contribution guide stays concrete and user-facing.
+
 ## [0.10.10] - 2026-05-02
 
 ### Changed

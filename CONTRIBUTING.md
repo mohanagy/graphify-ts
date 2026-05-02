@@ -75,8 +75,6 @@ Follow the process in [`SECURITY.md`](./SECURITY.md).
 
 This repository includes GitHub issue forms, a pull request template, `CODEOWNERS`, and a CI workflow to support a clean open-source contribution flow.
 
-If you maintain the repository, keep repository-level protections such as branch protection rules, required checks, and merge restrictions aligned with the current GitHub repository settings.
-
 ## License
 
 By contributing, you agree that your contributions are licensed under this project's MIT license.

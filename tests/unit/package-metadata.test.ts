@@ -95,6 +95,12 @@ describe('package metadata', () => {
     expect(loadContributingGuide()).toContain("licensed under this project's MIT license")
   })
 
+  it('avoids circular maintainer guidance in the contributing guide', () => {
+    const contributingGuide = loadContributingGuide()
+
+    expect(contributingGuide).not.toContain('current GitHub repository settings')
+  })
+
   it('keeps the eval regression workflow aligned with runner-backed eval requirements', () => {
     const ciWorkflow = loadCiWorkflow()
 

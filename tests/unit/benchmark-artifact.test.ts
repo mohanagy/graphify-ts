@@ -52,6 +52,12 @@ describe('public benchmark artifact (2026-04-30 govalidate)', () => {
     expect(readme).toContain(`$${graphify.total_cost_usd.toFixed(2)}`)
   })
 
+  it('hosted retrieval benchmark page uses only defined warning color tokens', () => {
+    const page = readFileSync(resolve(ARTIFACT_DIR, 'index.html'), 'utf8')
+    expect(page).not.toContain('var(--amber-400)')
+    expect(page).toContain('var(--c-lemon)')
+  })
+
   it('README does not contain the stale 384x/897x/397x marketing claims', () => {
     const lower = readme.toLowerCase()
     for (const stale of ['384x', '397x', '897x', '384×', '397×', '897×']) {
