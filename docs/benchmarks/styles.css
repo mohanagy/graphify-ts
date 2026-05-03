@@ -42,10 +42,14 @@
   --c-lemon-edge:    rgba(155, 104, 41, 0.25);
 
   /* Bar viz fills (light mode) */
+  /* Swatch tints — subtle, used in the small 12px legend chips */
   --bar-baseline:        rgba(100, 116, 141, 0.18);
   --bar-baseline-edge:   rgba(100, 116, 141, 0.55);
   --bar-graphify:        rgba(83, 58, 253, 0.18);
   --bar-graphify-edge:   var(--c-purple);
+  /* Bar fills — saturated, used in the actual chart so the proportion reads at a glance */
+  --bar-baseline-fill:   rgba(100, 116, 141, 0.55);
+  --bar-graphify-fill:   rgba(83, 58, 253, 0.70);
 
   /* ---- Type ----------------------------------------------------------- */
   /* Inter is the open-source stand-in for sohne-var; both ship "ss01" + "tnum" */
@@ -483,11 +487,11 @@ code {
   transform-origin: left;
 }
 .bar-row .bar .fill.baseline {
-  background: var(--bar-baseline);
+  background: var(--bar-baseline-fill);
   box-shadow: inset 0 0 0 1px var(--bar-baseline-edge);
 }
 .bar-row .bar .fill.graphify {
-  background: var(--bar-graphify);
+  background: var(--bar-graphify-fill);
   box-shadow: inset 0 0 0 1px var(--bar-graphify-edge);
 }
 .bar-row .value {
@@ -633,6 +637,20 @@ code {
 .terminal .prompt { color: var(--c-purple-light); user-select: none; margin-right: 0.5em; }
 .terminal .cmd    { color: rgba(255, 255, 255, 0.96); }
 .terminal .comment{ color: rgba(255, 255, 255, 0.45); }
+
+/* Strip the inline-code chip styling when <code> is inside a <pre> block —
+   otherwise the near-white chip background overlays the dark terminal and
+   hides the actual command text behind opaque bars. */
+.terminal code,
+pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font-weight: inherit;
+  font-size: inherit;
+  border-radius: 0;
+}
 
 /* ==========================================================================
    Evidence files

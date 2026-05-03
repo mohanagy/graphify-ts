@@ -4,6 +4,13 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.12] - 2026-05-03
+
+### Fixed
+
+- **Benchmark chart readability**: the hosted benchmark comparison bars now use dedicated saturated fill tokens instead of the faint legend-chip tint, so the measured width differences read clearly at a glance.
+- **Terminal command visibility**: benchmark `<pre><code>` blocks now strip the inline-code chip styling, preventing pale overlays from obscuring commands inside the dark terminal reproducer panels.
+
 ## [0.10.11] - 2026-05-02
 
 ### Fixed

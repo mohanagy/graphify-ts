@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 
 const ARTIFACT_DIR = resolve('docs', 'benchmarks', '2026-04-30-govalidate')
 const REVIEW_ARTIFACT_DIR = resolve('docs', 'benchmarks', '2026-05-02-govalidate-pr-review')
+const BENCHMARK_STYLESHEET = resolve('docs', 'benchmarks', 'styles.css')
 
 describe('public benchmark artifact (2026-04-30 govalidate)', () => {
   const baseline = JSON.parse(readFileSync(resolve(ARTIFACT_DIR, 'baseline-session.json'), 'utf8')) as {
@@ -119,5 +120,22 @@ describe('public benchmark artifact (2026-05-02 govalidate pr review)', () => {
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('verbose_prompt_tokens')
     expect(result.stdout).toContain('compact_prompt_tokens')
+  })
+})
+
+describe('hosted benchmark stylesheet', () => {
+  const styles = readFileSync(BENCHMARK_STYLESHEET, 'utf8')
+
+  it('uses dedicated saturated fill tokens for the comparison bars', () => {
+    expect(styles).toContain('--bar-baseline-fill:   rgba(100, 116, 141, 0.55);')
+    expect(styles).toContain('--bar-graphify-fill:   rgba(83, 58, 253, 0.70);')
+    expect(styles).toMatch(/\.bar-row \.bar \.fill\.baseline \{\s+background: var\(--bar-baseline-fill\);/s)
+    expect(styles).toMatch(/\.bar-row \.bar \.fill\.graphify \{\s+background: var\(--bar-graphify-fill\);/s)
+    expect(styles).not.toMatch(/\.bar-row \.bar \.fill\.baseline \{\s+background: var\(--bar-baseline\);/s)
+    expect(styles).not.toMatch(/\.bar-row \.bar \.fill\.graphify \{\s+background: var\(--bar-graphify\);/s)
+  })
+
+  it('removes inline code chip styling inside terminal pre blocks', () => {
+    expect(styles).toMatch(/\.terminal code,\s*pre code \{\s*background: transparent;\s*border: 0;\s*padding: 0;\s*color: inherit;\s*font-weight: inherit;\s*font-size: inherit;\s*border-radius: 0;\s*\}/s)
   })
 })
