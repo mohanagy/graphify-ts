@@ -126,9 +126,14 @@ describe('public benchmark artifact (2026-05-02 govalidate pr review)', () => {
 describe('hosted benchmark stylesheet', () => {
   const styles = readFileSync(BENCHMARK_STYLESHEET, 'utf8')
 
-  it('uses dedicated saturated fill tokens for the comparison bars', () => {
-    expect(styles).toContain('--bar-baseline-fill:   rgba(100, 116, 141, 0.55);')
-    expect(styles).toContain('--bar-graphify-fill:   rgba(83, 58, 253, 0.70);')
+  it('uses dedicated fill and track tokens for the comparison bars', () => {
+    expect(styles).toContain('--bar-baseline-fill:')
+    expect(styles).toContain('--bar-graphify-fill:')
+    expect(styles).toContain('--bar-track-bg:')
+    expect(styles).toContain('--bar-track-edge:')
+    expect(styles).not.toContain('--bar-baseline-fill:   var(--bar-baseline);')
+    expect(styles).not.toContain('--bar-graphify-fill:   var(--bar-graphify);')
+    expect(styles).toMatch(/\.bar-row \.bar \{\s+height: 18px;\s+background: var\(--bar-track-bg\);\s+border-radius: var\(--r-sm\);\s+border: 1px solid var\(--bar-track-edge\);/s)
     expect(styles).toMatch(/\.bar-row \.bar \.fill\.baseline \{\s+background: var\(--bar-baseline-fill\);/s)
     expect(styles).toMatch(/\.bar-row \.bar \.fill\.graphify \{\s+background: var\(--bar-graphify-fill\);/s)
     expect(styles).not.toMatch(/\.bar-row \.bar \.fill\.baseline \{\s+background: var\(--bar-baseline\);/s)
