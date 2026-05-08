@@ -561,6 +561,14 @@ describe('runBenchmark', () => {
       expect(benchmark.avg_reused_context_tokens).toBe(25)
       expect(benchmark.avg_total_tokens).toBe(285)
       expect(benchmark.effective_reduction_ratio).toBe(Number((benchmark.corpus_tokens / 225).toFixed(1)))
+      expect(benchmark.provider_proof).toEqual({
+        input_tokens_basis: 'provider_reported',
+        effective_tokens_basis: 'provider_cache_read_tokens',
+        total_tokens_basis: 'provider_reported',
+        usage_runs: 2,
+        total_runs: 2,
+        providers: ['claude'],
+      })
       expect(benchmark.per_question).toEqual([
         expect.objectContaining({
           question: 'how does authentication work',
@@ -741,6 +749,7 @@ describe('printBenchmark', () => {
     expect(output).toContain('Avg input tokens (Claude reported): ~410')
     expect(output).toContain('Avg effective input tokens (cache-adjusted): ~400')
     expect(output).toContain('Avg total tokens (Claude reported): ~480')
+    expect(output).toContain('Provider/runtime proof: Claude reported input, cache, and total tokens for 1/1 matched questions')
     expect(output).not.toContain('estimate fallback')
     expect(output).not.toContain('graphify token reduction benchmark')
     expect(output).not.toContain('naive corpus')
@@ -803,6 +812,7 @@ describe('printBenchmark', () => {
     expect(output).toContain('Avg input tokens (Claude reported where available; cl100k_base estimate fallback): ~255')
     expect(output).toContain('Usage capture: Claude reported usage for 1/2 matched questions; remaining runs used local estimate fallback')
     expect(output).not.toContain('Avg total tokens (Claude reported)')
+    expect(output).toContain('Provider/runtime proof: mixed provider-reported usage (1/2 matched questions) with local estimate fallback')
     spy.mockRestore()
   })
 

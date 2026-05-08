@@ -162,12 +162,26 @@ describe('review compare', () => {
     expect(result.report.verbose_effective_prompt_tokens).toBe(result.report.verbose_prompt_tokens)
     expect(result.report.compact_effective_prompt_tokens).toBe(result.report.compact_prompt_tokens)
     expect(result.report.effective_reduction_ratio).toBe(result.report.reduction_ratio)
+    expect(result.report.provider_proof).toEqual({
+      verbose: {
+        input_tokens_source: 'estimated_cl100k_base',
+        effective_tokens_source: 'session_reuse_estimate',
+        total_tokens_source: 'not_available',
+      },
+      compact: {
+        input_tokens_source: 'estimated_cl100k_base',
+        effective_tokens_source: 'session_reuse_estimate',
+        total_tokens_source: 'not_available',
+      },
+      reduction_basis: 'estimated',
+    })
     expect(verbosePrompt).toContain('"changed_files"')
     expect(compactPrompt).toContain('"review_context"')
     expect(compactPrompt).toContain('"supporting_paths"')
     expect(verbosePrompt.indexOf('Mode: verbose')).toBeGreaterThan(verbosePrompt.indexOf('"changed_files"'))
     expect(compactPrompt.indexOf('Mode: compact')).toBeGreaterThan(compactPrompt.indexOf('"review_context"'))
     expect(formatReviewCompareSummary(result)).toContain('Effective prompt tokens')
+    expect(formatReviewCompareSummary(result)).toContain('Provider/runtime proof: local cl100k_base estimate + session reuse accounting')
   })
 
   it('uses the shared review prompt helper instead of duplicating buildContextPrompt calls inline', () => {

@@ -4,6 +4,15 @@ export type ContextPackTaskKind = 'explain' | 'review' | 'impact'
 
 export type ContextPackEvidenceClass = 'primary' | 'supporting' | 'structural' | 'change' | 'impact'
 
+export type ContextPackSemanticCategory =
+  | 'implementation'
+  | 'changes'
+  | 'impact'
+  | 'tests'
+  | 'configuration'
+  | 'contracts'
+  | 'structure'
+
 export interface ContextPackTaskContract {
   version: 1
   task_kind: ContextPackTaskKind
@@ -13,6 +22,8 @@ export interface ContextPackTaskContract {
   prompt?: string
   required_evidence: ContextPackEvidenceClass[]
   preferred_evidence: ContextPackEvidenceClass[]
+  semantic_required: ContextPackSemanticCategory[]
+  semantic_optional: ContextPackSemanticCategory[]
 }
 
 export interface ContextPackNode {
@@ -101,10 +112,23 @@ export interface ContextPackCoverageEntry {
   status: ContextPackCoverageStatus
 }
 
+export interface ContextPackSemanticCoverageEntry {
+  category: ContextPackSemanticCategory
+  label: string
+  required: boolean
+  available_nodes: number
+  selected_nodes: number
+  status: ContextPackCoverageStatus
+}
+
 export interface ContextPackCoverage {
   required_evidence: ContextPackEvidenceClass[]
+  semantic_required: ContextPackSemanticCategory[]
+  semantic_optional: ContextPackSemanticCategory[]
   entries: ContextPackCoverageEntry[]
+  semantic_entries: ContextPackSemanticCoverageEntry[]
   missing_required: ContextPackEvidenceClass[]
+  missing_semantic: ContextPackSemanticCategory[]
   available_relationships: number
   selected_relationships: number
 }

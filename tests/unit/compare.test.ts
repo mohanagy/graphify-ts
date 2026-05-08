@@ -827,6 +827,21 @@ describe('compare runtime', () => {
       baseline: 'claude_reported_input',
       graphify: 'claude_reported_input',
     })
+    expect(report.provider_proof).toEqual({
+      baseline: {
+        provider: 'claude',
+        input_tokens_source: 'claude_reported_input',
+        effective_tokens_source: 'provider_cache_read_tokens',
+        total_tokens_source: 'provider_reported_total',
+      },
+      graphify: {
+        provider: 'claude',
+        input_tokens_source: 'claude_reported_input',
+        effective_tokens_source: 'provider_cache_read_tokens',
+        total_tokens_source: 'provider_reported_total',
+      },
+      reduction_basis: 'provider_reported',
+    })
     expect(report.usage).toEqual({
       baseline: {
         provider: 'claude',
@@ -855,6 +870,7 @@ describe('compare runtime', () => {
     expect(formatCompareSummary(result)).toContain('Input tokens (Claude reported): baseline 1320 · graphify 410')
     expect(formatCompareSummary(result)).toContain('Effective input tokens (cache-adjusted): baseline 1300 · graphify 400')
     expect(formatCompareSummary(result)).toContain('Total tokens (Claude reported): baseline 1410 · graphify 480')
+    expect(formatCompareSummary(result)).toContain('Provider/runtime proof: Claude reported input, cache, and total tokens for 2/2 prompt runs')
   })
 
   it('does not write structured stdout JSON into answer artifacts when usage is present without answer text', async () => {
@@ -936,6 +952,21 @@ describe('compare runtime', () => {
       baseline: 'estimated_cl100k_base',
       graphify: 'estimated_cl100k_base',
     })
+    expect(report.provider_proof).toEqual({
+      baseline: {
+        provider: null,
+        input_tokens_source: 'estimated_cl100k_base',
+        effective_tokens_source: 'session_reuse_estimate',
+        total_tokens_source: 'not_available',
+      },
+      graphify: {
+        provider: null,
+        input_tokens_source: 'estimated_cl100k_base',
+        effective_tokens_source: 'session_reuse_estimate',
+        total_tokens_source: 'not_available',
+      },
+      reduction_basis: 'estimated',
+    })
   })
 
   it('preserves Gemini structured usage parsing through compare execution', async () => {
@@ -991,6 +1022,21 @@ describe('compare runtime', () => {
       baseline: 'gemini_reported_input',
       graphify: 'gemini_reported_input',
     })
+    expect(report.provider_proof).toEqual({
+      baseline: {
+        provider: 'gemini',
+        input_tokens_source: 'gemini_reported_input',
+        effective_tokens_source: 'provider_cache_read_tokens',
+        total_tokens_source: 'provider_reported_total',
+      },
+      graphify: {
+        provider: 'gemini',
+        input_tokens_source: 'gemini_reported_input',
+        effective_tokens_source: 'provider_cache_read_tokens',
+        total_tokens_source: 'provider_reported_total',
+      },
+      reduction_basis: 'provider_reported',
+    })
     expect(report.usage.baseline).toEqual(
       expect.objectContaining({
         provider: 'gemini',
@@ -1032,6 +1078,7 @@ describe('compare runtime', () => {
     )
     expect(formatCompareSummary(result)).toContain('Input tokens (Gemini reported): baseline 1200 · graphify 400')
     expect(formatCompareSummary(result)).toContain('Total tokens (Gemini reported): baseline 1290 · graphify 470')
+    expect(formatCompareSummary(result)).toContain('Provider/runtime proof: Gemini reported input, cache, and total tokens for 2/2 prompt runs')
   })
 
   it('does not write Gemini structured stdout JSON into answer artifacts when usage metadata is present without answer text', async () => {

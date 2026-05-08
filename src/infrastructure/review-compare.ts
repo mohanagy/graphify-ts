@@ -66,6 +66,19 @@ export interface ReviewCompareReport {
   effective_reduction_ratio: number
   verbose_reused_context_tokens: number
   compact_reused_context_tokens: number
+  provider_proof?: {
+    verbose: {
+      input_tokens_source: 'estimated_cl100k_base'
+      effective_tokens_source: 'session_reuse_estimate'
+      total_tokens_source: 'not_available'
+    }
+    compact: {
+      input_tokens_source: 'estimated_cl100k_base'
+      effective_tokens_source: 'session_reuse_estimate'
+      total_tokens_source: 'not_available'
+    }
+    reduction_basis: 'estimated'
+  }
   started_at: string
   completed_at: string
   elapsed_ms: Record<ReviewCompareMode, number>
@@ -388,6 +401,19 @@ export function generateReviewCompareArtifacts(input: ReviewCompareInput): Revie
     ),
     verbose_reused_context_tokens: verbosePromptArtifact.metrics.reused_context_tokens,
     compact_reused_context_tokens: compactPromptArtifact.metrics.reused_context_tokens,
+    provider_proof: {
+      verbose: {
+        input_tokens_source: 'estimated_cl100k_base',
+        effective_tokens_source: 'session_reuse_estimate',
+        total_tokens_source: 'not_available',
+      },
+      compact: {
+        input_tokens_source: 'estimated_cl100k_base',
+        effective_tokens_source: 'session_reuse_estimate',
+        total_tokens_source: 'not_available',
+      },
+      reduction_basis: 'estimated',
+    },
     started_at: now.toISOString(),
     completed_at: now.toISOString(),
     elapsed_ms: {
@@ -473,6 +499,7 @@ export function formatReviewCompareSummary(result: ReviewCompareResult): string 
     `- Prompt tokens: verbose ${result.report.verbose_prompt_tokens} · compact ${result.report.compact_prompt_tokens} · ${formatTokenComparison(result.report.verbose_prompt_tokens, result.report.compact_prompt_tokens)}`,
     `- Effective prompt tokens: verbose ${result.report.verbose_effective_prompt_tokens} · compact ${result.report.compact_effective_prompt_tokens} · ${formatTokenComparison(result.report.verbose_effective_prompt_tokens, result.report.compact_effective_prompt_tokens)}`,
     `- Payload tokens: verbose ${result.report.verbose_payload_tokens} · compact ${result.report.compact_payload_tokens} · ${formatTokenComparison(result.report.verbose_payload_tokens, result.report.compact_payload_tokens)}`,
+    '- Provider/runtime proof: local cl100k_base estimate + session reuse accounting',
     `- Prompt runs: verbose ${result.report.status.verbose} (${result.report.elapsed_ms.verbose} ms) · compact ${result.report.status.compact} (${result.report.elapsed_ms.compact} ms)`,
   ].join('\n')
 }

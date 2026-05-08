@@ -30,16 +30,19 @@ describe('context-pack', () => {
         task_kind: 'explain',
         budget: 320,
         required_evidence: ['primary', 'supporting', 'structural'],
+        semantic_required: ['implementation', 'structure'],
       }))
       expect(classifyTaskContract('review', { budget: 480, prompt: 'Review current changes' })).toEqual(expect.objectContaining({
         task_kind: 'review',
         budget: 480,
         required_evidence: ['change', 'supporting', 'impact'],
+        semantic_required: ['changes', 'impact'],
       }))
       expect(classifyTaskContract('impact', { budget: 640, prompt: 'Analyze blast radius' })).toEqual(expect.objectContaining({
         task_kind: 'impact',
         budget: 640,
         required_evidence: ['primary', 'impact', 'structural'],
+        semantic_required: ['implementation', 'impact', 'structure'],
       }))
     })
 
@@ -55,6 +58,8 @@ describe('context-pack', () => {
         evidence_recipe_id: 'security-review',
         required_evidence: ['change', 'impact', 'supporting'],
         preferred_evidence: ['change', 'impact', 'supporting', 'primary', 'structural'],
+        semantic_required: ['changes', 'impact', 'configuration'],
+        semantic_optional: ['tests', 'contracts'],
       }))
     })
   })
@@ -145,12 +150,17 @@ describe('context-pack', () => {
       ])
       expect(pack.coverage).toEqual(expect.objectContaining({
         missing_required: ['structural'],
+        missing_semantic: ['structure'],
         selected_relationships: 1,
       }))
       expect(pack.coverage.entries).toEqual(expect.arrayContaining([
         expect.objectContaining({ evidence_class: 'primary', status: 'covered', selected_nodes: 1 }),
         expect.objectContaining({ evidence_class: 'supporting', status: 'covered', selected_nodes: 1 }),
         expect.objectContaining({ evidence_class: 'structural', status: 'missing', selected_nodes: 0 }),
+      ]))
+      expect(pack.coverage.semantic_entries).toEqual(expect.arrayContaining([
+        expect.objectContaining({ category: 'implementation', status: 'covered', selected_nodes: 2 }),
+        expect.objectContaining({ category: 'structure', status: 'missing', selected_nodes: 0 }),
       ]))
       expect(pack.expandable).toEqual([
         expect.objectContaining({
@@ -322,6 +332,14 @@ describe('context-pack', () => {
       expect(genericReviewPack.nodes.map((node) => node.label)).toEqual(['ChangedHandler', 'SupportingFixture'])
       expect(securityReviewPack.nodes.map((node) => node.label)).toEqual(['ChangedHandler', 'AuthBypassPath'])
       expect(securityReviewPack.coverage.required_evidence).toEqual(['change', 'impact', 'supporting'])
+      expect(securityReviewPack.coverage.semantic_required).toEqual(['changes', 'impact', 'configuration'])
+      expect(securityReviewPack.coverage.missing_semantic).toEqual(['configuration'])
+      expect(securityReviewPack.coverage.semantic_entries).toEqual(expect.arrayContaining([
+        expect.objectContaining({ category: 'changes', status: 'covered', selected_nodes: 1 }),
+        expect.objectContaining({ category: 'impact', status: 'covered', selected_nodes: 1 }),
+        expect.objectContaining({ category: 'tests', status: 'available', available_nodes: 1, selected_nodes: 0 }),
+        expect.objectContaining({ category: 'configuration', status: 'missing', selected_nodes: 0 }),
+      ]))
       expect(securityReviewPack.claims[1]).toEqual(expect.objectContaining({
         evidence_class: 'impact',
         node_labels: ['AuthBypassPath'],
@@ -546,8 +564,12 @@ describe('context-pack', () => {
         expandable: [],
         coverage: {
           required_evidence: ['primary', 'supporting', 'structural'],
+          semantic_required: ['implementation', 'structure'],
+          semantic_optional: ['contracts', 'configuration', 'tests'],
           entries: [],
+          semantic_entries: [],
           missing_required: ['structural'],
+          missing_semantic: ['structure'],
           available_relationships: 1,
           selected_relationships: 1,
         },
@@ -617,8 +639,12 @@ describe('context-pack', () => {
         expandable: [],
         coverage: {
           required_evidence: ['change', 'supporting', 'impact'],
+          semantic_required: ['changes', 'impact'],
+          semantic_optional: ['tests', 'configuration', 'contracts'],
           entries: [],
+          semantic_entries: [],
           missing_required: ['impact'],
+          missing_semantic: ['impact'],
           available_relationships: 1,
           selected_relationships: 1,
         },

@@ -177,8 +177,12 @@ function fallbackReviewCoverage(reviewBundle: PrReviewBundle): ContextPackCovera
 
   return {
     required_evidence: taskContract.required_evidence,
+    semantic_required: taskContract.semantic_required,
+    semantic_optional: taskContract.semantic_optional,
     entries: [],
+    semantic_entries: [],
     missing_required: [],
+    missing_semantic: [],
     available_relationships: reviewBundle.relationships.length,
     selected_relationships: reviewBundle.relationships.length,
   }

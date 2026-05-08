@@ -1,4 +1,4 @@
-import type { ContextPackEvidenceClass, ContextPackTaskKind } from '../contracts/context-pack.js'
+import type { ContextPackEvidenceClass, ContextPackSemanticCategory, ContextPackTaskKind } from '../contracts/context-pack.js'
 import type { TaskIntentKind } from '../contracts/task-intent.js'
 
 export interface TaskEvidenceRecipe {
@@ -6,6 +6,8 @@ export interface TaskEvidenceRecipe {
   task_kind: ContextPackTaskKind
   required_evidence: readonly ContextPackEvidenceClass[]
   preferred_evidence: readonly ContextPackEvidenceClass[]
+  semantic_required: readonly ContextPackSemanticCategory[]
+  semantic_optional: readonly ContextPackSemanticCategory[]
   step_evidence: readonly [
     readonly ContextPackEvidenceClass[],
     readonly ContextPackEvidenceClass[],
@@ -24,6 +26,8 @@ const TASK_EVIDENCE_RECIPES: Record<TaskIntentKind, TaskEvidenceRecipe> = {
     task_kind: 'explain',
     required_evidence: ['primary', 'supporting', 'structural'],
     preferred_evidence: ['primary', 'supporting', 'structural'],
+    semantic_required: ['implementation', 'structure'],
+    semantic_optional: ['contracts', 'configuration', 'tests'],
     step_evidence: [
       ['primary'],
       ['supporting', 'structural'],
@@ -35,6 +39,8 @@ const TASK_EVIDENCE_RECIPES: Record<TaskIntentKind, TaskEvidenceRecipe> = {
     task_kind: 'review',
     required_evidence: ['change', 'supporting', 'impact'],
     preferred_evidence: ['change', 'supporting', 'impact', 'structural', 'primary'],
+    semantic_required: ['changes', 'impact'],
+    semantic_optional: ['tests', 'configuration', 'contracts'],
     step_evidence: [
       ['change'],
       ['supporting', 'impact', 'structural'],
@@ -46,6 +52,8 @@ const TASK_EVIDENCE_RECIPES: Record<TaskIntentKind, TaskEvidenceRecipe> = {
     task_kind: 'impact',
     required_evidence: ['primary', 'impact', 'structural'],
     preferred_evidence: ['primary', 'impact', 'structural', 'supporting', 'change'],
+    semantic_required: ['implementation', 'impact', 'structure'],
+    semantic_optional: ['configuration', 'contracts', 'tests'],
     step_evidence: [
       ['primary'],
       ['impact', 'structural', 'supporting'],
@@ -57,6 +65,8 @@ const TASK_EVIDENCE_RECIPES: Record<TaskIntentKind, TaskEvidenceRecipe> = {
     task_kind: 'impact',
     required_evidence: ['primary', 'impact', 'supporting'],
     preferred_evidence: ['primary', 'impact', 'supporting', 'structural', 'change'],
+    semantic_required: ['implementation', 'impact', 'configuration'],
+    semantic_optional: ['tests', 'contracts'],
     step_evidence: [
       ['primary', 'impact'],
       ['impact', 'supporting', 'structural'],
@@ -68,6 +78,8 @@ const TASK_EVIDENCE_RECIPES: Record<TaskIntentKind, TaskEvidenceRecipe> = {
     task_kind: 'review',
     required_evidence: ['change', 'impact', 'supporting'],
     preferred_evidence: ['change', 'impact', 'supporting', 'structural', 'primary'],
+    semantic_required: ['changes', 'impact', 'tests'],
+    semantic_optional: ['configuration', 'contracts'],
     step_evidence: [
       ['change', 'impact'],
       ['impact', 'supporting', 'structural'],
@@ -79,6 +91,8 @@ const TASK_EVIDENCE_RECIPES: Record<TaskIntentKind, TaskEvidenceRecipe> = {
     task_kind: 'review',
     required_evidence: ['primary', 'supporting', 'structural'],
     preferred_evidence: ['primary', 'structural', 'supporting', 'change', 'impact'],
+    semantic_required: ['implementation', 'tests', 'structure'],
+    semantic_optional: ['contracts', 'configuration'],
     step_evidence: [
       ['primary', 'structural'],
       ['supporting', 'structural', 'change'],
@@ -90,6 +104,8 @@ const TASK_EVIDENCE_RECIPES: Record<TaskIntentKind, TaskEvidenceRecipe> = {
     task_kind: 'impact',
     required_evidence: ['primary', 'structural', 'impact'],
     preferred_evidence: ['primary', 'structural', 'impact', 'supporting', 'change'],
+    semantic_required: ['implementation', 'structure', 'contracts'],
+    semantic_optional: ['impact', 'tests'],
     step_evidence: [
       ['primary', 'structural'],
       ['structural', 'impact', 'supporting'],
@@ -101,6 +117,8 @@ const TASK_EVIDENCE_RECIPES: Record<TaskIntentKind, TaskEvidenceRecipe> = {
     task_kind: 'impact',
     required_evidence: ['impact', 'primary', 'structural'],
     preferred_evidence: ['impact', 'primary', 'structural', 'supporting', 'change'],
+    semantic_required: ['impact', 'implementation', 'structure'],
+    semantic_optional: ['tests', 'contracts'],
     step_evidence: [
       ['impact', 'primary'],
       ['impact', 'structural', 'supporting'],
@@ -112,6 +130,8 @@ const TASK_EVIDENCE_RECIPES: Record<TaskIntentKind, TaskEvidenceRecipe> = {
     task_kind: 'review',
     required_evidence: ['change', 'impact', 'supporting'],
     preferred_evidence: ['change', 'impact', 'supporting', 'primary', 'structural'],
+    semantic_required: ['changes', 'impact', 'configuration'],
+    semantic_optional: ['tests', 'contracts'],
     step_evidence: [
       ['change', 'impact'],
       ['impact', 'supporting', 'primary'],
@@ -123,6 +143,8 @@ const TASK_EVIDENCE_RECIPES: Record<TaskIntentKind, TaskEvidenceRecipe> = {
     task_kind: 'impact',
     required_evidence: ['impact', 'structural', 'primary'],
     preferred_evidence: ['impact', 'structural', 'primary', 'supporting', 'change'],
+    semantic_required: ['impact', 'structure', 'configuration'],
+    semantic_optional: ['implementation', 'tests'],
     step_evidence: [
       ['impact', 'primary'],
       ['impact', 'structural', 'supporting'],
@@ -144,11 +166,26 @@ function uniqueEvidence(values: readonly ContextPackEvidenceClass[]): ContextPac
   return unique
 }
 
+function uniqueSemanticCategories(values: readonly ContextPackSemanticCategory[]): ContextPackSemanticCategory[] {
+  const seen = new Set<ContextPackSemanticCategory>()
+  const unique: ContextPackSemanticCategory[] = []
+  for (const value of values) {
+    if (seen.has(value)) {
+      continue
+    }
+    seen.add(value)
+    unique.push(value)
+  }
+  return unique
+}
+
 function cloneRecipe(recipe: TaskEvidenceRecipe): TaskEvidenceRecipe {
   return {
     ...recipe,
     required_evidence: [...recipe.required_evidence],
     preferred_evidence: [...recipe.preferred_evidence],
+    semantic_required: [...recipe.semantic_required],
+    semantic_optional: [...recipe.semantic_optional],
     step_evidence: cloneStepEvidence(recipe.step_evidence),
   }
 }
@@ -158,10 +195,19 @@ function reviewFallbackEvidence(values: readonly ContextPackEvidenceClass[]): Co
 }
 
 function reviewFallbackRecipe(recipe: TaskEvidenceRecipe): TaskEvidenceRecipe {
+  const semanticRequired = uniqueSemanticCategories(recipe.semantic_required.map((value) => (value === 'changes' ? 'implementation' : value)))
+  const semanticOptional = uniqueSemanticCategories(
+    recipe.semantic_optional
+      .map((value) => (value === 'changes' ? 'implementation' : value))
+      .filter((value) => !semanticRequired.includes(value)),
+  )
+
   return {
     ...cloneRecipe(recipe),
     required_evidence: reviewFallbackEvidence(recipe.required_evidence),
     preferred_evidence: reviewFallbackEvidence(recipe.preferred_evidence),
+    semantic_required: semanticRequired,
+    semantic_optional: semanticOptional,
     step_evidence: [
       reviewFallbackEvidence(recipe.step_evidence[0]),
       reviewFallbackEvidence(recipe.step_evidence[1]),

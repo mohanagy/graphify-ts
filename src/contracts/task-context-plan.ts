@@ -1,4 +1,4 @@
-import type { ContextPackEvidenceClass, ContextPackTaskKind } from './context-pack.js'
+import type { ContextPackEvidenceClass, ContextPackSemanticCategory, ContextPackTaskKind } from './context-pack.js'
 import type { TaskIntentKind } from './task-intent.js'
 
 export const TASK_CONTEXT_PLAN_VERSION = 1
@@ -28,6 +28,8 @@ export interface TaskContextPlanEvidence {
   recipe_id: TaskIntentKind
   required: ContextPackEvidenceClass[]
   preferred: ContextPackEvidenceClass[]
+  semantic_required: ContextPackSemanticCategory[]
+  semantic_optional: ContextPackSemanticCategory[]
 }
 
 export interface TaskContextPlanStep {

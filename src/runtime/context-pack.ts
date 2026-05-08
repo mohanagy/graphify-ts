@@ -15,6 +15,8 @@ import type {
   ContextPackGraphSignals,
   ContextPackNode,
   ContextPackRelationship,
+  ContextPackSemanticCategory,
+  ContextPackSemanticCoverageEntry,
   ContextPackTaskContract,
   ContextPackTaskKind,
 } from '../contracts/context-pack.js'
@@ -64,6 +66,25 @@ export type CompactContextPackMode =
     max_supporting_nodes?: number
   }
 
+interface MaterializedNodeCandidate<TNode extends ContextPackNode = ContextPackNode> {
+  candidate: ContextPackNodeCandidate<TNode>
+  entry: TNode
+}
+
+const TEST_PATH_PATTERN = /(?:^|\/)(?:__tests__|tests?|fixtures?)(?:\/|$)|\.(?:test|spec)\.[^/]+$/i
+const CONFIG_PATH_PATTERN = /(?:^|\/)(?:config|configs?|settings|env)(?:\/|$)|(?:^|\/)\.env(?:\.[^/]+)?$|(?:^|\/)(?:package|tsconfig|vite|vitest|jest|eslint|prettier|rollup|webpack)\.(?:json|[cm]?js|ts|mjs|cjs)$/i
+const CONTRACT_PATH_PATTERN = /(?:^|\/)(?:contracts?|schemas?|dto|types?|interfaces?|openapi|graphql)(?:\/|$)|(?:^|\/)[^/]*\.d\.ts$/i
+const CONTRACT_NODE_KINDS = new Set(['interface', 'type', 'type_alias', 'typealias', 'enum', 'schema', 'contract'])
+const ALL_SEMANTIC_CATEGORIES: readonly ContextPackSemanticCategory[] = [
+  'implementation',
+  'changes',
+  'impact',
+  'tests',
+  'configuration',
+  'contracts',
+  'structure',
+]
+
 function includedNodeId(node: Pick<ContextPackNode, 'node_id'>): string | null {
   return typeof node.node_id === 'string' && node.node_id.length > 0 ? node.node_id : null
 }
@@ -104,13 +125,14 @@ function classifyCoverageStatus(required: boolean, availableNodes: number, selec
 
 function coverageEntriesForCandidates(
   taskContract: ContextPackTaskContract,
-  nodes: readonly ContextPackNodeCandidate[],
+  nodes: readonly MaterializedNodeCandidate[],
+  selectedNodes: readonly MaterializedNodeCandidate[],
   selectedCounts: ReadonlyMap<ContextPackEvidenceClass, number>,
   relationshipCounts: { available: number; selected: number },
 ): ContextPackCoverage {
   const availableCounts = new Map<ContextPackEvidenceClass, number>()
   for (const node of nodes) {
-    availableCounts.set(node.evidence_class, (availableCounts.get(node.evidence_class) ?? 0) + 1)
+    availableCounts.set(node.candidate.evidence_class, (availableCounts.get(node.candidate.evidence_class) ?? 0) + 1)
   }
 
   const evidenceClasses = orderedEvidence(taskContract, availableCounts.keys())
@@ -129,13 +151,125 @@ function coverageEntriesForCandidates(
     }
   })
 
+  const semanticAvailableCounts = semanticCategoryCounts(nodes)
+  const semanticSelectedCounts = semanticCategoryCounts(selectedNodes)
+  const semanticEntries = orderedSemanticCategories(
+    taskContract,
+    new Set([...semanticAvailableCounts.keys(), ...semanticSelectedCounts.keys()]),
+  ).map((category) => {
+    const available_nodes = semanticAvailableCounts.get(category) ?? 0
+    const selected_nodes = semanticSelectedCounts.get(category) ?? 0
+    const required = taskContract.semantic_required.includes(category)
+
+    return {
+      category,
+      label: semanticCoverageLabel(category),
+      required,
+      available_nodes,
+      selected_nodes,
+      status: classifyCoverageStatus(required, available_nodes, selected_nodes),
+    } satisfies ContextPackSemanticCoverageEntry
+  })
+
   return {
     required_evidence: [...taskContract.required_evidence],
+    semantic_required: [...taskContract.semantic_required],
+    semantic_optional: [...taskContract.semantic_optional],
     entries,
+    semantic_entries: semanticEntries,
     missing_required: entries.filter((entry) => entry.required && entry.selected_nodes === 0).map((entry) => entry.evidence_class),
+    missing_semantic: semanticEntries.filter((entry) => entry.required && entry.selected_nodes === 0).map((entry) => entry.category),
     available_relationships: relationshipCounts.available,
     selected_relationships: relationshipCounts.selected,
   }
+}
+
+function semanticCoverageLabel(category: ContextPackSemanticCategory): string {
+  return category.replace(/_/g, ' ')
+}
+
+function orderedSemanticCategories(
+  taskContract: ContextPackTaskContract,
+  categories: Iterable<ContextPackSemanticCategory>,
+): ContextPackSemanticCategory[] {
+  const ordered: ContextPackSemanticCategory[] = []
+  const seen = new Set<ContextPackSemanticCategory>()
+
+  for (const category of [
+    ...taskContract.semantic_required,
+    ...taskContract.semantic_optional,
+    ...categories,
+  ]) {
+    if (seen.has(category)) {
+      continue
+    }
+    seen.add(category)
+    ordered.push(category)
+  }
+
+  return ordered
+}
+
+function isTestEntry(entry: ContextPackNode): boolean {
+  return TEST_PATH_PATTERN.test(entry.source_file)
+}
+
+function isConfigurationEntry(entry: ContextPackNode): boolean {
+  if (CONFIG_PATH_PATTERN.test(entry.source_file)) {
+    return true
+  }
+
+  const text = `${entry.label} ${entry.snippet ?? ''}`.toLowerCase()
+  return text.includes('process.env') || text.includes('import.meta.env')
+}
+
+function isContractEntry(entry: ContextPackNode): boolean {
+  return CONTRACT_PATH_PATTERN.test(entry.source_file)
+    || (typeof entry.node_kind === 'string' && CONTRACT_NODE_KINDS.has(entry.node_kind.toLowerCase()))
+}
+
+function isImplementationEntry(entry: ContextPackNode): boolean {
+  return entry.file_type === 'code'
+    && !isTestEntry(entry)
+    && !isConfigurationEntry(entry)
+    && !isContractEntry(entry)
+}
+
+function semanticCategoryMatches(category: ContextPackSemanticCategory, node: MaterializedNodeCandidate): boolean {
+  switch (category) {
+    case 'implementation':
+      return isImplementationEntry(node.entry)
+    case 'changes':
+      return node.candidate.evidence_class === 'change'
+    case 'impact':
+      return node.candidate.evidence_class === 'impact'
+    case 'tests':
+      return isTestEntry(node.entry)
+    case 'configuration':
+      return isConfigurationEntry(node.entry)
+    case 'contracts':
+      return isContractEntry(node.entry)
+    case 'structure':
+      return node.candidate.evidence_class === 'structural'
+  }
+}
+
+function semanticCategoryCounts(
+  nodes: readonly MaterializedNodeCandidate[],
+): ReadonlyMap<ContextPackSemanticCategory, number> {
+  const counts = new Map<ContextPackSemanticCategory, number>()
+
+  for (const node of nodes) {
+    for (const category of ALL_SEMANTIC_CATEGORIES) {
+      if (!semanticCategoryMatches(category, node)) {
+        continue
+      }
+
+      counts.set(category, (counts.get(category) ?? 0) + 1)
+    }
+  }
+
+  return counts
 }
 
 function claimLabel(className: ContextPackEvidenceClass): string {
@@ -335,6 +469,8 @@ export function classifyTaskContract(
     ...(options.prompt ? { prompt: options.prompt } : {}),
     required_evidence: [...recipe.required_evidence],
     preferred_evidence: [...recipe.preferred_evidence],
+    semantic_required: [...recipe.semantic_required],
+    semantic_optional: [...recipe.semantic_optional],
   }
 }
 
@@ -397,22 +533,28 @@ export function compileContextPack<
   input: CompileContextPackInput<TNode, TRelationship, TCommunity>,
 ): CompiledContextPack<TNode, TRelationship, TCommunity> {
   const orderedNodes = sortCandidatesByEvidence(input.task_contract, input.nodes)
+  const materializedNodes = orderedNodes.map((candidate) => ({
+    candidate,
+    entry: candidate.build_entry(),
+  }))
   const selectedNodes: TNode[] = []
+  const selectedMaterialized: MaterializedNodeCandidate<TNode>[] = []
   const selectedCounts = new Map<ContextPackEvidenceClass, number>()
   const selectedLabelsByEvidence = new Map<ContextPackEvidenceClass, string[]>()
   const selectedCommunities = new Set<number>()
   let tokenCount = 0
-  let breakIndex = orderedNodes.length
+  let breakIndex = materializedNodes.length
 
-  for (const [index, candidate] of orderedNodes.entries()) {
+  for (const [index, materialized] of materializedNodes.entries()) {
+    const { candidate, entry } = materialized
     const candidateTokens = candidate.estimate_tokens()
     if (tokenCount + candidateTokens > input.task_contract.budget && selectedNodes.length > 0) {
       breakIndex = index
       break
     }
 
-    const entry = candidate.build_entry()
     selectedNodes.push(entry)
+    selectedMaterialized.push(materialized)
     tokenCount += candidateTokens
     selectedCounts.set(candidate.evidence_class, (selectedCounts.get(candidate.evidence_class) ?? 0) + 1)
 
@@ -427,7 +569,7 @@ export function compileContextPack<
     }
   }
 
-  const omittedNodes = orderedNodes.slice(breakIndex)
+  const omittedNodes = materializedNodes.slice(breakIndex).map(({ candidate }) => candidate)
   const relationships = filterRelationships(input.relationships ?? [], selectedNodes)
   const includedLabels = new Set(selectedNodes.map((node) => node.label))
 
@@ -441,7 +583,8 @@ export function compileContextPack<
     expandable: buildExpandableRefs(input.task_contract, omittedNodes),
     coverage: coverageEntriesForCandidates(
         input.task_contract,
-        orderedNodes,
+        materializedNodes,
+        selectedMaterialized,
         selectedCounts,
         {
         available: input.relationships?.length ?? 0,

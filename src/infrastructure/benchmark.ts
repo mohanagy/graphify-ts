@@ -52,6 +52,14 @@ export interface BenchmarkSuccessResult {
   avg_total_tokens?: number | null
   reduction_ratio: number
   effective_reduction_ratio?: number
+  provider_proof?: {
+    input_tokens_basis: 'provider_reported' | 'mixed' | 'estimated'
+    effective_tokens_basis: 'provider_cache_read_tokens' | 'mixed' | 'session_reuse_estimate'
+    total_tokens_basis: 'provider_reported' | 'mixed' | 'not_available'
+    usage_runs: number
+    total_runs: number
+    providers: string[]
+  }
   per_question: BenchmarkQuestionResult[]
 }
 
@@ -104,6 +112,8 @@ function finalizeBenchmarkResult(
 ): BenchmarkSuccessResult {
   const avgQueryTokens = averageQueryTokens(perQuestion)
   const avgEffectiveQueryTokens = averageEffectiveQueryTokens(perQuestion)
+  const usageRuns = perQuestion.reduce((count, entry) => count + (entry.usage ? 1 : 0), 0)
+  const totalTokenRuns = perQuestion.reduce((count, entry) => count + (entry.total_tokens === null || entry.total_tokens === undefined ? 0 : 1), 0)
   return {
     corpus_tokens: baseline.tokens,
     corpus_words: baseline.words,
@@ -123,8 +133,79 @@ function finalizeBenchmarkResult(
     avg_total_tokens: averageReportedTotalTokens(perQuestion),
     reduction_ratio: avgQueryTokens > 0 ? Number((baseline.tokens / avgQueryTokens).toFixed(1)) : 0,
     effective_reduction_ratio: avgEffectiveQueryTokens > 0 ? Number((baseline.tokens / avgEffectiveQueryTokens).toFixed(1)) : 0,
+    provider_proof: {
+      input_tokens_basis:
+        usageRuns === 0
+          ? 'estimated'
+          : usageRuns === perQuestion.length
+            ? 'provider_reported'
+            : 'mixed',
+      effective_tokens_basis:
+        usageRuns === 0
+          ? 'session_reuse_estimate'
+          : usageRuns === perQuestion.length
+            ? 'provider_cache_read_tokens'
+            : 'mixed',
+      total_tokens_basis:
+        totalTokenRuns === 0
+          ? 'not_available'
+          : totalTokenRuns === perQuestion.length
+            ? 'provider_reported'
+            : 'mixed',
+      usage_runs: usageRuns,
+      total_runs: perQuestion.length,
+      providers: [...new Set(perQuestion.flatMap((entry) => (entry.usage ? [entry.usage.provider] : [])))].sort(),
+    },
     per_question: perQuestion,
   }
+}
+
+function benchmarkProviderProofSummary(result: BenchmarkSuccessResult): string {
+  const usageRuns = result.per_question.reduce((count, entry) => count + (entry.usage ? 1 : 0), 0)
+  const totalTokenRuns = result.per_question.reduce((count, entry) => count + (entry.total_tokens === null || entry.total_tokens === undefined ? 0 : 1), 0)
+  const proof = result.provider_proof ?? {
+    input_tokens_basis:
+      usageRuns === 0
+        ? 'estimated'
+        : usageRuns === result.per_question.length
+          ? 'provider_reported'
+          : 'mixed',
+    effective_tokens_basis:
+      usageRuns === 0
+        ? 'session_reuse_estimate'
+        : usageRuns === result.per_question.length
+          ? 'provider_cache_read_tokens'
+          : 'mixed',
+    total_tokens_basis:
+      totalTokenRuns === 0
+        ? 'not_available'
+        : totalTokenRuns === result.per_question.length
+          ? 'provider_reported'
+          : 'mixed',
+    usage_runs: usageRuns,
+    total_runs: result.per_question.length,
+    providers: [...new Set(result.per_question.flatMap((entry) => (entry.usage ? [entry.usage.provider] : [])))].sort(),
+  }
+  const providerLabel =
+    proof.providers.length === 1
+      ? proof.providers[0] === 'gemini'
+        ? 'Gemini'
+        : 'Claude'
+      : 'Provider'
+
+  if (proof.input_tokens_basis === 'estimated') {
+    return `local ${QUERY_TOKEN_ESTIMATOR.model} estimate + session reuse accounting`
+  }
+
+  if (
+    proof.input_tokens_basis === 'provider_reported'
+    && proof.effective_tokens_basis === 'provider_cache_read_tokens'
+    && proof.total_tokens_basis === 'provider_reported'
+  ) {
+    return `${providerLabel} reported input, cache, and total tokens for ${proof.usage_runs}/${proof.total_runs} matched questions`
+  }
+
+  return `mixed provider-reported usage (${proof.usage_runs}/${proof.total_runs} matched questions) with local estimate fallback`
 }
 
 async function runRunnerBackedBenchmark(
@@ -315,6 +396,7 @@ export function printBenchmark(result: BenchmarkResult): void {
   if (usageLine) {
     console.log(usageLine)
   }
+  console.log(`  Provider/runtime proof: ${benchmarkProviderProofSummary(result)}`)
   console.log(`  Corpus compression: ${formatTokenRatio(result.corpus_tokens, result.avg_query_tokens)} per matched question`)
   console.log('\n  Per question:')
   for (const entry of result.per_question) {

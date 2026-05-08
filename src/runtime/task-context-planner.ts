@@ -188,6 +188,8 @@ export function buildTaskContextPlan(input: TaskContextPlanInput): TaskContextPl
       recipe_id: taskContract.evidence_recipe_id,
       required: [...taskContract.required_evidence],
       preferred: [...taskContract.preferred_evidence],
+      semantic_required: [...taskContract.semantic_required],
+      semantic_optional: [...taskContract.semantic_optional],
     },
     steps: [
       planStep('seed', 'retrieve', shape.titles[0], seedBudget, recipe.step_evidence[0], seedScope),

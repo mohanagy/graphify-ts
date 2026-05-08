@@ -20,6 +20,19 @@ export type CompareRunStatus = 'not_run' | 'succeeded' | 'failed' | 'context_ove
 export type CompareFailureReason = 'prompt_too_long' | 'runner_error' | 'exec_error'
 export type ComparePromptTokenSource = 'estimated_cl100k_base' | 'claude_reported_input' | 'gemini_reported_input'
 
+export interface ComparePromptProviderProofEntry {
+  provider: 'claude' | 'gemini' | null
+  input_tokens_source: ComparePromptTokenSource
+  effective_tokens_source: 'provider_cache_read_tokens' | 'session_reuse_estimate'
+  total_tokens_source: 'provider_reported_total' | 'not_available'
+}
+
+export interface ComparePromptProviderProof {
+  baseline: ComparePromptProviderProofEntry
+  graphify: ComparePromptProviderProofEntry
+  reduction_basis: 'provider_reported' | 'mixed' | 'estimated'
+}
+
 export interface ComparePromptPack {
   kind: 'baseline' | 'graphify'
   question: string
@@ -128,6 +141,7 @@ export interface ComparePromptReport {
     baseline: string | null
     graphify: string | null
   }
+  provider_proof?: ComparePromptProviderProof
   paths: ComparePromptArtifactPaths
 }
 
@@ -526,6 +540,7 @@ function syncComparePromptMetrics(report: ComparePromptReport): void {
       : null
   report.prompt_token_source.baseline = comparePromptTokenSource(report.usage.baseline)
   report.prompt_token_source.graphify = comparePromptTokenSource(report.usage.graphify)
+  report.provider_proof = buildCompareProviderProof(report)
 }
 
 function comparePromptTokenSource(usage: ComparePromptUsage | null): ComparePromptTokenSource {
@@ -534,6 +549,38 @@ function comparePromptTokenSource(usage: ComparePromptUsage | null): CompareProm
   }
 
   return usage.provider === 'claude' ? 'claude_reported_input' : 'gemini_reported_input'
+}
+
+function compareProviderForUsage(usage: ComparePromptUsage | null): 'claude' | 'gemini' | null {
+  return usage?.provider ?? null
+}
+
+function buildCompareProviderProofEntry(
+  usage: ComparePromptUsage | null,
+  source: ComparePromptTokenSource,
+): ComparePromptProviderProofEntry {
+  return {
+    provider: compareProviderForUsage(usage),
+    input_tokens_source: source,
+    effective_tokens_source: usage === null ? 'session_reuse_estimate' : 'provider_cache_read_tokens',
+    total_tokens_source: usage === null ? 'not_available' : 'provider_reported_total',
+  }
+}
+
+function buildCompareProviderProof(report: Pick<ComparePromptReport, 'usage' | 'prompt_token_source'>): ComparePromptProviderProof {
+  const baselineUsage = report.usage.baseline
+  const graphifyUsage = report.usage.graphify
+
+  return {
+    baseline: buildCompareProviderProofEntry(baselineUsage, report.prompt_token_source.baseline),
+    graphify: buildCompareProviderProofEntry(graphifyUsage, report.prompt_token_source.graphify),
+    reduction_basis:
+      baselineUsage !== null && graphifyUsage !== null
+        ? 'provider_reported'
+        : baselineUsage !== null || graphifyUsage !== null
+          ? 'mixed'
+          : 'estimated',
+  }
 }
 
 function portablePath(path: string): string {
@@ -1172,6 +1219,32 @@ function usageProviderSummaryLabel(reports: readonly ComparePromptReport[]): str
   return provider === 'gemini' ? 'Gemini' : 'Claude'
 }
 
+function formatCompareProviderProof(result: GenerateCompareArtifactsResult): string {
+  const proofs = result.reports
+    .flatMap((report) => (report.provider_proof ? [report.provider_proof.baseline, report.provider_proof.graphify] : []))
+  const totalRuns = result.reports.length * 2
+  const providerReportedRuns = proofs.filter((proof) => proof.input_tokens_source !== 'estimated_cl100k_base').length
+  const cacheReportedRuns = proofs.filter((proof) => proof.effective_tokens_source === 'provider_cache_read_tokens').length
+  const totalReportedRuns = proofs.filter((proof) => proof.total_tokens_source === 'provider_reported_total').length
+  const providers = [...new Set(proofs.flatMap((proof) => (proof.provider ? [proof.provider] : [])))]
+  const providerLabel =
+    providers.length === 1
+      ? providers[0] === 'gemini'
+        ? 'Gemini'
+        : 'Claude'
+      : 'Provider'
+
+  if (providerReportedRuns <= 0) {
+    return `local ${QUERY_TOKEN_ESTIMATOR.model} estimate + session reuse accounting`
+  }
+
+  if (providerReportedRuns === totalRuns && cacheReportedRuns === totalRuns && totalReportedRuns === totalRuns) {
+    return `${providerLabel} reported input, cache, and total tokens for ${providerReportedRuns}/${totalRuns} prompt runs`
+  }
+
+  return `mixed provider-reported usage (${providerReportedRuns}/${totalRuns} prompt runs) with local estimate fallback`
+}
+
 export function formatCompareSummary(result: GenerateCompareArtifactsResult): string {
   const baselineTokens = sumPromptTokens(result.reports, 'baseline')
   const graphifyTokens = sumPromptTokens(result.reports, 'graphify')
@@ -1223,6 +1296,7 @@ export function formatCompareSummary(result: GenerateCompareArtifactsResult): st
     lines.push(`- Usage capture: ${usageProviderLabel} reported usage for ${usageRuns}/${totalRuns} prompt runs; remaining runs used local estimate fallback`)
   }
   lines.push(`- Reused context tokens: baseline ${baselineReusedTokens} · graphify ${graphifyReusedTokens}`)
+  lines.push(`- Provider/runtime proof: ${formatCompareProviderProof(result)}`)
 
   return lines.join('\n')
 }
@@ -1313,6 +1387,21 @@ export interface NativeAgentCompareReport {
   prompt_token_source: {
     baseline: 'anthropic_provider_reported' | 'unknown'
     graphify: 'anthropic_provider_reported' | 'unknown'
+  }
+  provider_proof?: {
+    baseline: {
+      provider: 'anthropic' | null
+      input_tokens_source: 'anthropic_provider_reported' | 'unknown'
+      effective_tokens_source: 'anthropic_provider_reported' | 'unknown'
+      total_tokens_source: 'anthropic_provider_reported' | 'unknown'
+    }
+    graphify: {
+      provider: 'anthropic' | null
+      input_tokens_source: 'anthropic_provider_reported' | 'unknown'
+      effective_tokens_source: 'anthropic_provider_reported' | 'unknown'
+      total_tokens_source: 'anthropic_provider_reported' | 'unknown'
+    }
+    reduction_basis: 'provider_reported' | 'mixed' | 'unknown'
   }
   started_at: string
   completed_at: string
@@ -1541,6 +1630,21 @@ export async function executeNativeAgentCompare(
         baseline: 'unknown',
         graphify: 'unknown',
       },
+      provider_proof: {
+        baseline: {
+          provider: null,
+          input_tokens_source: 'unknown',
+          effective_tokens_source: 'unknown',
+          total_tokens_source: 'unknown',
+        },
+        graphify: {
+          provider: null,
+          input_tokens_source: 'unknown',
+          effective_tokens_source: 'unknown',
+          total_tokens_source: 'unknown',
+        },
+        reduction_basis: 'unknown',
+      },
       started_at: timestamp.toISOString(),
       completed_at: timestamp.toISOString(),
       paths: {
@@ -1584,6 +1688,14 @@ export async function executeNativeAgentCompare(
             result_path: baselineAnswerPath,
           }
           reportShell.prompt_token_source.baseline = 'anthropic_provider_reported'
+          if (reportShell.provider_proof) {
+            reportShell.provider_proof.baseline = {
+              provider: 'anthropic',
+              input_tokens_source: 'anthropic_provider_reported',
+              effective_tokens_source: 'anthropic_provider_reported',
+              total_tokens_source: 'anthropic_provider_reported',
+            }
+          }
           ensureCompareAnswerFile(baselineAnswerPath, event.result ?? baselineRun.stdout)
         } else {
           reportShell.baseline = {
@@ -1640,6 +1752,14 @@ export async function executeNativeAgentCompare(
           result_path: graphifyAnswerPath,
         }
         reportShell.prompt_token_source.graphify = 'anthropic_provider_reported'
+        if (reportShell.provider_proof) {
+          reportShell.provider_proof.graphify = {
+            provider: 'anthropic',
+            input_tokens_source: 'anthropic_provider_reported',
+            effective_tokens_source: 'anthropic_provider_reported',
+            total_tokens_source: 'anthropic_provider_reported',
+          }
+        }
         ensureCompareAnswerFile(graphifyAnswerPath, event.result ?? graphifyRun.stdout)
       } else {
         reportShell.graphify = {
@@ -1663,6 +1783,16 @@ export async function executeNativeAgentCompare(
             ? computeReduction(reportShell.baseline.total_cost_usd, reportShell.graphify.total_cost_usd)
             : null,
       }
+    }
+    if (reportShell.provider_proof) {
+      reportShell.provider_proof.reduction_basis =
+        reportShell.provider_proof.baseline.input_tokens_source === 'anthropic_provider_reported'
+        && reportShell.provider_proof.graphify.input_tokens_source === 'anthropic_provider_reported'
+          ? 'provider_reported'
+          : reportShell.provider_proof.baseline.input_tokens_source === 'anthropic_provider_reported'
+            || reportShell.provider_proof.graphify.input_tokens_source === 'anthropic_provider_reported'
+            ? 'mixed'
+            : 'unknown'
     }
 
     reportShell.completed_at = now().toISOString()
@@ -1715,6 +1845,7 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
       `    num_turns: baseline ${report.baseline.num_turns} → graphify ${report.graphify.num_turns}${reductions?.num_turns ? ` (${reductions.num_turns}x fewer)` : ''}`,
       `    latency:   baseline ${report.baseline.duration_ms}ms → graphify ${report.graphify.duration_ms}ms${reductions?.duration_ms ? ` (${reductions.duration_ms}x faster)` : ''}`,
       `    input_tokens (Anthropic-reported): baseline ${report.baseline.total_input_tokens_anthropic_exact} → graphify ${report.graphify.total_input_tokens_anthropic_exact}${reductions?.input_tokens ? ` (${reductions.input_tokens}x less)` : ''}`,
+      `    provider/runtime proof: Anthropic reported input, cache, and total tokens for both runs`,
     )
   }
   return lines.join('\n')

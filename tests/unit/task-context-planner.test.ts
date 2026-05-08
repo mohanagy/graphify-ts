@@ -17,6 +17,8 @@ describe('task-context-planner', () => {
         recipe_id: 'explain',
         required: ['primary', 'supporting', 'structural'],
         preferred: ['primary', 'supporting', 'structural'],
+        semantic_required: ['implementation', 'structure'],
+        semantic_optional: ['contracts', 'configuration', 'tests'],
       },
       steps: [
         {
@@ -78,6 +80,8 @@ describe('task-context-planner', () => {
       recipe_id: 'review',
       required: ['change', 'supporting', 'impact'],
       preferred: ['change', 'supporting', 'impact', 'structural', 'primary'],
+      semantic_required: ['changes', 'impact'],
+      semantic_optional: ['tests', 'configuration', 'contracts'],
     })
     expect(plan.steps).toEqual([
       {
@@ -128,6 +132,8 @@ describe('task-context-planner', () => {
       recipe_id: 'review',
       required: ['primary', 'supporting', 'impact'],
       preferred: ['primary', 'supporting', 'impact', 'structural'],
+      semantic_required: ['implementation', 'impact'],
+      semantic_optional: ['tests', 'configuration', 'contracts'],
     })
     expect(plan.steps).toEqual([
       {
@@ -209,6 +215,8 @@ describe('task-context-planner', () => {
       recipe_id: 'test-generation',
       required: ['primary', 'supporting', 'structural'],
       preferred: ['primary', 'structural', 'supporting', 'impact'],
+      semantic_required: ['implementation', 'tests', 'structure'],
+      semantic_optional: ['contracts', 'configuration'],
     })
     expect(plan.steps).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -239,6 +247,8 @@ describe('task-context-planner', () => {
       recipe_id: 'security-review',
       required: ['change', 'impact', 'supporting'],
       preferred: ['change', 'impact', 'supporting', 'primary', 'structural'],
+      semantic_required: ['changes', 'impact', 'configuration'],
+      semantic_optional: ['tests', 'contracts'],
     })
     expect(plan.steps).toEqual(expect.arrayContaining([
       expect.objectContaining({

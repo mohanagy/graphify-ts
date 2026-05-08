@@ -74,8 +74,12 @@ interface ContextPlaneMetadata {
 function emptyCoverage(): ContextPackCoverage {
   return {
     required_evidence: [],
+    semantic_required: [],
+    semantic_optional: [],
     entries: [],
+    semantic_entries: [],
     missing_required: [],
+    missing_semantic: [],
     available_relationships: 0,
     selected_relationships: 0,
   }
