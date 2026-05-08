@@ -61,6 +61,66 @@ function matchKeywordGroups(tokens: ReadonlySet<string>, keywordGroups: readonly
   return matches
 }
 
+function taskIntentRuleLabel(definition: TaskIntentDefinition, rule: TaskIntentSignalRule): string {
+  return `${definition.kind}.${rule.id}`
+}
+
+function validateSingleKeyword(
+  definition: TaskIntentDefinition,
+  rule: TaskIntentSignalRule,
+  field: string,
+  keyword: string,
+): void {
+  const normalizedKeyword = normalizeTerm(keyword)
+  if (normalizedKeyword.length === 0) {
+    throw new Error(
+      `Invalid task intent rule ${taskIntentRuleLabel(definition, rule)}: ${field} must normalize to a non-empty single keyword, got "${keyword}"`,
+    )
+  }
+
+  if (normalizedKeyword.includes(' ')) {
+    throw new Error(
+      `Invalid task intent rule ${taskIntentRuleLabel(definition, rule)}: ${field} must normalize to a single keyword, got "${keyword}"`,
+    )
+  }
+}
+
+function validateRuleDefinition(definition: TaskIntentDefinition, rule: TaskIntentSignalRule): void {
+  const hasAnyPhrases = (rule.any_phrases?.length ?? 0) > 0
+  const hasAnyKeywords = (rule.any_keywords?.length ?? 0) > 0
+  const hasKeywordGroups = (rule.keyword_groups?.length ?? 0) > 0
+
+  if (!hasAnyPhrases && !hasAnyKeywords && !hasKeywordGroups) {
+    throw new Error(
+      `Invalid task intent rule ${taskIntentRuleLabel(definition, rule)}: must define at least one any_phrases, any_keywords, or keyword_groups entry`,
+    )
+  }
+
+  rule.any_keywords?.forEach((keyword, index) => {
+    validateSingleKeyword(definition, rule, `any_keywords[${index}]`, keyword)
+  })
+
+  rule.keyword_groups?.forEach((group, groupIndex) => {
+    if (group.length === 0) {
+      throw new Error(
+        `Invalid task intent rule ${taskIntentRuleLabel(definition, rule)}: keyword_groups[${groupIndex}] must contain at least one keyword`,
+      )
+    }
+
+    group.forEach((keyword, keywordIndex) => {
+      validateSingleKeyword(definition, rule, `keyword_groups[${groupIndex}][${keywordIndex}]`, keyword)
+    })
+  })
+}
+
+function validateTaskIntentDefinitions(): void {
+  TASK_INTENT_DEFINITIONS.forEach((definition) => {
+    definition.rules.forEach((rule) => {
+      validateRuleDefinition(definition, rule)
+    })
+  })
+}
+
 function evaluateRule(
   definition: TaskIntentDefinition,
   normalizedPrompt: string,
@@ -151,6 +211,7 @@ export function normalizeTaskIntentPrompt(prompt: string): string {
 }
 
 export function classifyTaskIntent(prompt: string): TaskIntentClassification {
+  validateTaskIntentDefinitions()
   const normalizedPrompt = normalizeTaskIntentPrompt(prompt)
   const tokens = promptTokens(normalizedPrompt)
   const ruleMatches = TASK_INTENT_DEFINITIONS

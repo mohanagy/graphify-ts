@@ -15,6 +15,19 @@ function defaultContextKindFor(kind: TaskIntentKind): 'explain' | 'review' | 'im
   return definition.default_context_kind
 }
 
+function withTemporaryDefinitions(
+  mutate: (definitions: typeof TASK_INTENT_DEFINITIONS) => void,
+  callback: () => void,
+): void {
+  const originalDefinitions = structuredClone(TASK_INTENT_DEFINITIONS)
+  try {
+    mutate(TASK_INTENT_DEFINITIONS)
+    callback()
+  } finally {
+    TASK_INTENT_DEFINITIONS.splice(0, TASK_INTENT_DEFINITIONS.length, ...originalDefinitions)
+  }
+}
+
 describe('task-intent', () => {
   describe('taxonomy definitions', () => {
     it('publishes a serializable roadmap taxonomy in stable order', () => {
@@ -101,6 +114,53 @@ describe('task-intent', () => {
       expect(classification.confidence).toBe('low')
       expect(classification.matched_rules).toEqual([])
       expect(classification.scores[0]).toEqual({ kind: 'explain', score: 0 })
+    })
+
+    it('rejects multi-word any_keywords entries after normalization', () => {
+      withTemporaryDefinitions((definitions) => {
+        definitions[1]!.rules = [
+          {
+            id: 'review-invalid-keywords',
+            score: 7,
+            any_keywords: ['pull request'],
+          },
+        ]
+      }, () => {
+        expect(() => classifyTaskIntent('Review the pull request for regressions.'))
+          .toThrow(/review\.review-invalid-keywords.*any_keywords\[0\].*pull request/i)
+      })
+    })
+
+    it('rejects multi-word keyword_groups entries after normalization', () => {
+      withTemporaryDefinitions((definitions) => {
+        definitions[2]!.rules = [
+          {
+            id: 'impact-invalid-keyword-groups',
+            score: 6,
+            keyword_groups: [
+              ['blast radius'],
+              ['change'],
+            ],
+          },
+        ]
+      }, () => {
+        expect(() => classifyTaskIntent('What is the blast radius if we change this?'))
+          .toThrow(/impact\.impact-invalid-keyword-groups.*keyword_groups\[0\]\[0\].*blast radius/i)
+      })
+    })
+
+    it('rejects rules that do not define any phrases or keywords', () => {
+      withTemporaryDefinitions((definitions) => {
+        definitions[0]!.rules = [
+          {
+            id: 'explain-invalid-empty-rule',
+            score: 3,
+          },
+        ]
+      }, () => {
+        expect(() => classifyTaskIntent('Explain the graph pipeline.'))
+          .toThrow(/explain\.explain-invalid-empty-rule.*must define at least one/i)
+      })
     })
   })
 })
