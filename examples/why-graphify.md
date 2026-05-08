@@ -25,7 +25,9 @@ graphify-ts prompt "how does auth work?" --provider claude
 
 The agent gets a lean 6-tool MCP surface by default (retrieve, impact, call_chain, community_overview, pr_impact, graph_stats). Set `GRAPHIFY_TOOL_PROFILE=full` in your MCP config (`.mcp.json` for Claude, `.cursor/mcp.json` for Cursor, `.vscode/mcp.json` for VS Code Copilot) to opt into the full 24-tool advanced surface, including `context_pack`, `context_prompt`, and `context_session_reset`.
 
-`pack` is the CLI context payload surface. `prompt` is the provider-aware context compiler: Claude payloads expose `effective_token_count`, `reused_context_tokens`, and `session_state`; Gemini payloads stay plain-text. The matching MCP tools expose the same flows inside the active agent session, with `context_pack` also returning `claims`, `coverage`, and `missing_context`.
+`pack` is the CLI context payload surface. `prompt` is the provider-aware context compiler: Claude payloads expose `effective_token_count`, `reused_context_tokens`, and `session_state`; Gemini payloads stay plain-text. The matching MCP tools expose the same flows inside the active agent session, with `context_pack` now returning not only `claims`, `coverage`, and `missing_context`, but also planner-driven **semantic coverage** and stable expandable handles.
+
+That planner layer matters because the product is no longer doing only "compact retrieval." It now classifies the prompt into a richer task intent, selects a task-specific evidence recipe, and reports whether the selected context still covers the right semantic buckets for the job — for example `changes` + `impact` for review, or `implementation` + `structure` + `tests` for test-generation. The same proof story now extends to benchmark surfaces too: compare/benchmark reports say whether the token win came from provider-reported usage or from local estimate + session-reuse accounting, instead of mixing those together.
 
 ---
 

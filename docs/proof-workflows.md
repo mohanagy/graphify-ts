@@ -52,7 +52,7 @@ What gets saved under `graphify-out/compare/<timestamp>/`:
 - `graphify-answer.txt`
 - `report.json`
 
-When Gemini emits structured JSON with `usageMetadata`, `compare` captures real reported input and total tokens in `report.json` and the terminal summary. If the runner only returns answer text or malformed JSON, `compare` falls back to labeled local `cl100k_base` prompt estimates instead. Use this when you need customer-proof or your own apples-to-apples answer comparison. It can spend paid model tokens, just like runner-backed `benchmark` and `eval`; the difference is that `compare` saves paired answers, while `benchmark` and `eval` score a labeled question set.
+When Gemini emits structured JSON with `usageMetadata`, `compare` captures real reported input and total tokens in `report.json` and the terminal summary. If the runner only returns answer text or malformed JSON, `compare` falls back to labeled local `cl100k_base` prompt estimates instead. Recent report versions also add a **provider/runtime proof** block so you can see whether a reduction is backed by provider-reported input/cache/total-token numbers or by local estimate + session-reuse accounting. Use this when you need customer-proof or your own apples-to-apples answer comparison. It can spend paid model tokens, just like runner-backed `benchmark` and `eval`; the difference is that `compare` saves paired answers, while `benchmark` and `eval` score a labeled question set.
 
 ## 3. PR-review proof on a real diff
 
@@ -72,7 +72,7 @@ What gets saved under `graphify-out/review-compare/<timestamp>/`:
 - `compact-answer.txt`
 - `report.json`
 
-Use this when the question is not "graphify vs. naive baseline", but "did compact review mode make the PR-review prompt materially smaller while keeping the same review surface shape?" The report includes prompt-token deltas, payload-token deltas, run statuses, and elapsed times for both modes.
+Use this when the question is not "graphify vs. naive baseline", but "did compact review mode make the PR-review prompt materially smaller while keeping the same review surface shape?" The report includes prompt-token deltas, payload-token deltas, run statuses, elapsed times for both modes, and a provider/runtime proof note that makes it explicit when review-compare is using local estimate + session-reuse accounting rather than provider-billed usage.
 
 ## 4. Production and multi-repo proof
 
@@ -110,7 +110,7 @@ What this proves that a single-repo demo cannot:
 |---|---|
 | "Does the graph improve retrieval quality on a labeled set?" | `eval` |
 | "Does the graph reduce prompt size while keeping expected evidence?" | `benchmark` |
-| "Will my actual model answer better with graphify than with a naive baseline, and optionally capture provider-reported usage?" | `compare` |
+| "Will my actual model answer better with graphify than with a naive baseline, and optionally capture provider-reported usage + proof metadata?" | `compare` |
 | "Did compact review mode actually shrink the real PR-review prompt on my current diff?" | `review-compare` |
 | "Can this work across frontend/backend/shared repos?" | `federate` + `serve --stdio` |
 

@@ -143,7 +143,7 @@ graphify-ts ships two complementary public surfaces:
 - **CLI context compiler** — `graphify-ts pack` builds compact explain/review/impact payloads for automation, and `graphify-ts prompt` compiles provider-ready prompts for `claude` or `gemini`.
 - **MCP context plane** — in `GRAPHIFY_TOOL_PROFILE=full`, the server also exposes `context_pack`, `context_prompt`, and `context_session_reset` so agents can request the same surfaces without leaving the MCP session.
 
-Use `context_pack` when you want expandable refs plus `claims`, `coverage`, and `missing_context` signals. Use `context_prompt` when you want the provider-ready prompt directly; for Claude, reuse a `session_id` so follow-up prompts resend only deltas and report `effective_token_count` / `reused_context_tokens`.
+Use `context_pack` when you want expandable refs plus `claims`, `coverage`, `missing_context`, and the newer **semantic coverage** contract. The planner layer now classifies prompt intent, applies a task-specific evidence recipe, and reports both evidence-class coverage and semantic buckets like `implementation`, `impact`, `tests`, `configuration`, and `structure`. Use `context_prompt` when you want the provider-ready prompt directly; for Claude, reuse a `session_id` so follow-up prompts resend only deltas and report `effective_token_count` / `reused_context_tokens`.
 
 ---
 
@@ -168,6 +168,7 @@ Full-profile additions include the context-plane tools `context_pack`, `context_
 
 - **Effective cost** is the honest prompt-compiler number for long-lived sessions: compare raw `token_count` to Claude's `effective_token_count` and `reused_context_tokens` to see what cache reuse actually saves.
 - **Coverage contracts** are the proof surfaces that show smaller context did not lose the required evidence. `benchmark` / `eval` cover question coverage, expected evidence, and snippet coverage; `review-compare` covers the same diff, seed, and hotspot surface while shrinking the review payload.
+- **Provider/runtime proof** explains what backs the token claims. `compare` / `benchmark` now distinguish provider-reported input/cache/total-token numbers from local `cl100k_base` + session-reuse estimates, and `review-compare` makes it explicit when a result is estimate-backed rather than provider-billed.
 
 ---
 

@@ -69,19 +69,74 @@ These examples show what your AI agent sees when it calls graphify-ts MCP tools.
   "expandable": [
     {
       "kind": "nodes",
+      "handle_id": "expand:explain:structural:9e7d4c2a11f0",
       "evidence_class": "structural",
       "count": 3,
-      "preview_labels": ["BillingModule", "WebhookController", "CustomerLedger"]
+      "preview": [
+        {
+          "node_id": "billing_module",
+          "label": "BillingModule",
+          "source_file": "backend/src/modules/billing/billing.module.ts",
+          "line_range": { "start_line": 1, "end_line": 42 }
+        },
+        {
+          "node_id": "webhook_controller",
+          "label": "WebhookController",
+          "source_file": "backend/src/modules/billing/controllers/webhook.controller.ts",
+          "line_range": { "start_line": 10, "end_line": 86 }
+        },
+        {
+          "node_id": "customer_ledger",
+          "label": "CustomerLedger",
+          "source_file": "backend/src/modules/billing/domain/customer-ledger.ts",
+          "line_range": { "start_line": 5, "end_line": 33 }
+        }
+      ],
+      "follow_up": {
+        "kind": "context_pack",
+        "task_kind": "explain",
+        "evidence_class": "structural",
+        "focus_files": [
+          "backend/src/modules/billing/billing.module.ts",
+          "backend/src/modules/billing/controllers/webhook.controller.ts",
+          "backend/src/modules/billing/domain/customer-ledger.ts"
+        ],
+        "focus_ranges": [
+          {
+            "source_file": "backend/src/modules/billing/billing.module.ts",
+            "start_line": 1,
+            "end_line": 42
+          },
+          {
+            "source_file": "backend/src/modules/billing/controllers/webhook.controller.ts",
+            "start_line": 10,
+            "end_line": 86
+          },
+          {
+            "source_file": "backend/src/modules/billing/domain/customer-ledger.ts",
+            "start_line": 5,
+            "end_line": 33
+          }
+        ]
+      }
     }
   ],
   "coverage": {
     "required_evidence": ["primary", "supporting", "structural"],
+    "semantic_required": ["implementation", "structure"],
+    "semantic_optional": ["contracts", "configuration", "tests"],
     "entries": [
       { "evidence_class": "primary", "required": true, "available_nodes": 1, "selected_nodes": 1, "status": "covered" },
       { "evidence_class": "supporting", "required": true, "available_nodes": 2, "selected_nodes": 1, "status": "covered" },
       { "evidence_class": "structural", "required": true, "available_nodes": 3, "selected_nodes": 0, "status": "missing" }
     ],
+    "semantic_entries": [
+      { "category": "implementation", "label": "implementation", "required": true, "available_nodes": 2, "selected_nodes": 2, "status": "covered" },
+      { "category": "structure", "label": "structure", "required": true, "available_nodes": 3, "selected_nodes": 0, "status": "missing" },
+      { "category": "tests", "label": "tests", "required": false, "available_nodes": 1, "selected_nodes": 0, "status": "available" }
+    ],
     "missing_required": ["structural"],
+    "missing_semantic": ["structure"],
     "available_relationships": 7,
     "selected_relationships": 1
   },
@@ -89,7 +144,7 @@ These examples show what your AI agent sees when it calls graphify-ts MCP tools.
 }
 ```
 
-**What the agent does with this:** Uses the compact pack as a coverage contract: answer with the selected evidence now, and only expand omitted structural refs if the question needs more detail.
+**What the agent does with this:** Uses the compact pack as a coverage contract: answer with the selected evidence now, inspect `semantic_entries` to see whether implementation/structure/tests are sufficiently covered, and use the stable `handle_id` + `follow_up` metadata only when omitted context is still needed.
 
 ---
 
