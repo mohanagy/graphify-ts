@@ -473,11 +473,12 @@ describe('compare runtime', () => {
       secondPack.prompt.indexOf('Corpus (full):'),
     )
     expect(secondPack.reused_context_tokens).toBeGreaterThan(0)
-    expect(secondPack.effective_token_count).toBeLessThan(secondPack.token_count)
+    expect(secondPack.effective_token_count).toBe(Math.max(0, secondPack.token_count - secondPack.reused_context_tokens))
   })
 
   it('writes delta-oriented follow-up prompt artifacts for multi-question compare runs', () => {
     const graph = makeGraph()
+    const corpusText = makeCorpusText()
     writeProjectFiles()
     const graphPath = writeGraphFixture(graph)
     const questionsPath = join(GRAPH_FIXTURE_ROOT, 'session-compare-questions.json')
@@ -496,6 +497,7 @@ describe('compare runtime', () => {
 
     const result = generateCompareArtifacts({
       graphPath,
+      corpusText,
       questionsPath,
       outputDir: COMPARE_OUTPUT_ROOT,
       execTemplate: 'runner --prompt {prompt_file} --question {question} --mode {mode} --out {output_file}',
@@ -506,15 +508,24 @@ describe('compare runtime', () => {
     expect(result.reports).toHaveLength(2)
     expect(readFileSync(result.reports[0]!.paths.baseline_prompt, 'utf8')).toContain('Corpus (full):')
     expect(readFileSync(result.reports[0]!.paths.graphify_prompt, 'utf8')).toContain('Retrieved graph context:')
+    const followUpReport = result.reports[1]!
     const followUpBaselinePrompt = readFileSync(result.reports[1]!.paths.baseline_prompt, 'utf8')
     const followUpGraphifyPrompt = readFileSync(result.reports[1]!.paths.graphify_prompt, 'utf8')
 
     expect(followUpBaselinePrompt).toContain('Session delta:')
     expect(followUpBaselinePrompt).toContain('Question:\nwhere is session storage defined')
     expect(followUpBaselinePrompt).not.toContain('Corpus (full):')
+    expect(followUpReport.baseline_prompt_tokens_estimated).toBeGreaterThan(estimateQueryTokens(followUpBaselinePrompt))
+    expect(followUpReport.baseline_effective_prompt_tokens).toBe(
+      Math.max(0, followUpReport.baseline_prompt_tokens_estimated - followUpReport.baseline_reused_context_tokens),
+    )
     expect(followUpGraphifyPrompt).toContain('Session delta:')
     expect(followUpGraphifyPrompt).toContain('Question:\nwhere is session storage defined')
     expect(followUpGraphifyPrompt).not.toContain('Retrieved graph context:')
+    expect(followUpReport.graphify_prompt_tokens_estimated).toBeGreaterThan(estimateQueryTokens(followUpGraphifyPrompt))
+    expect(followUpReport.graphify_effective_prompt_tokens).toBe(
+      Math.max(0, followUpReport.graphify_prompt_tokens_estimated - followUpReport.graphify_reused_context_tokens),
+    )
   })
 
   it('builds bounded baseline excerpts for token-dense corpus text', () => {

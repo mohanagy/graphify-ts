@@ -844,7 +844,7 @@ export function buildBaselinePromptPack(input: BuildBaselinePromptPackInput): Co
     session_payload: builtPrompt.session_payload,
     token_count: builtPrompt.metrics.raw_prompt_tokens,
     session_payload_token_count: builtPrompt.metrics.session_payload_tokens,
-    effective_token_count: builtPrompt.metrics.session_payload_tokens,
+    effective_token_count: builtPrompt.metrics.effective_prompt_tokens,
     reused_context_tokens: builtPrompt.metrics.reused_context_tokens,
     session_state: builtPrompt.session_state,
   }
@@ -872,7 +872,7 @@ export function buildGraphifyPromptPack(input: BuildGraphifyPromptPackInput): Co
     session_payload: builtPrompt.session_payload,
     token_count: builtPrompt.metrics.raw_prompt_tokens,
     session_payload_token_count: builtPrompt.metrics.session_payload_tokens,
-    effective_token_count: builtPrompt.metrics.session_payload_tokens,
+    effective_token_count: builtPrompt.metrics.effective_prompt_tokens,
     reused_context_tokens: builtPrompt.metrics.reused_context_tokens,
     session_state: builtPrompt.session_state,
   }
@@ -959,8 +959,8 @@ export function generateCompareArtifacts(input: GenerateCompareArtifactsInput): 
     writeFileSync(paths.baseline_prompt, baselinePromptText, 'utf8')
     writeFileSync(paths.graphify_prompt, graphifyPromptText, 'utf8')
 
-    const baselinePromptTokens = estimateQueryTokens(baselinePromptText)
-    const graphifyPromptTokens = estimateQueryTokens(graphifyPromptText)
+    const baselinePromptTokens = baselinePrompt.token_count
+    const graphifyPromptTokens = graphifyPrompt.token_count
 
     const report: ComparePromptReport = {
       question,
