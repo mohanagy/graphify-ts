@@ -527,7 +527,11 @@ function sortCandidatesByEvidence<TNode extends ContextPackNode>(
 }
 
 function coverageEntryForCandidate(candidate: ContextPackNodeCandidate): CoverageNodeCandidate {
-  if (typeof candidate.source_file === 'string' && candidate.source_file.length > 0) {
+  if (
+    typeof candidate.source_file === 'string'
+    && candidate.source_file.length > 0
+    && !needsMaterializedCoverageEntry(candidate)
+  ) {
     return {
       candidate,
       entry: {
@@ -551,6 +555,28 @@ function coverageEntryForCandidate(candidate: ContextPackNodeCandidate): Coverag
       snippet: entry.snippet ?? null,
     },
   }
+}
+
+function needsMaterializedCoverageEntry(candidate: ContextPackNodeCandidate): boolean {
+  if (typeof candidate.source_file !== 'string' || candidate.source_file.length === 0) {
+    return true
+  }
+  if (typeof candidate.snippet === 'string' && candidate.snippet.length > 0) {
+    return false
+  }
+
+  const entry = {
+    label: candidate.label,
+    source_file: candidate.source_file,
+    file_type: candidate.file_type,
+    node_kind: candidate.node_kind,
+    snippet: null,
+  } satisfies CoverageEntry
+
+  return candidate.file_type === 'code'
+    && !isTestEntry(entry)
+    && !isConfigurationEntry(entry)
+    && !isContractEntry(entry)
 }
 
 export function estimateContextPackEntryTokens(

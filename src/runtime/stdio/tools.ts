@@ -1,4 +1,4 @@
-import { dirname, isAbsolute, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 
 import { buildGraphifyPromptPack } from '../../infrastructure/compare.js'
 import type { TaskContextPlan } from '../../contracts/task-context-plan.js'
@@ -246,17 +246,34 @@ function snippetSourcePathCandidates(graphPath: string, sourceFile: string): str
   if (sourceFile.trim().length === 0) {
     return []
   }
-  if (isAbsolute(sourceFile)) {
-    return [sourceFile]
-  }
 
   const graphDir = dirname(graphPath)
-  const projectDir = graphDir.endsWith('/graphify-out') ? dirname(graphDir) : graphDir
-  return [...new Set([
-    resolve(projectDir, sourceFile),
-    resolve(graphDir, sourceFile),
-    resolve(sourceFile),
-  ])]
+  const projectDir = basename(graphDir) === 'graphify-out' ? dirname(graphDir) : graphDir
+  const roots = [...new Set([graphDir, projectDir].map((root) => resolve(root)))]
+  const candidates = isAbsolute(sourceFile)
+    ? [resolve(sourceFile)]
+    : roots.map((root) => resolve(root, sourceFile))
+
+  return [...new Set(candidates.filter((candidatePath) => roots.some((root) => pathIsInsideRoot(candidatePath, root))))]
+}
+
+function pathIsInsideRoot(candidatePath: string, root: string): boolean {
+  const relativePath = relative(resolve(root), resolve(candidatePath))
+  return relativePath === '' || (!relativePath.startsWith('..') && !isAbsolute(relativePath))
+}
+
+function resolvedFocusedLineNumber(attributes: Record<string, unknown>): { lineNumber: number; derived: boolean } {
+  if (typeof attributes.line_number === 'number' && attributes.line_number > 0) {
+    return {
+      lineNumber: attributes.line_number,
+      derived: false,
+    }
+  }
+
+  return {
+    lineNumber: lineNumberFromSourceLocation(attributes.source_location),
+    derived: true,
+  }
 }
 
 function readFocusedSnippet(
@@ -417,7 +434,7 @@ function buildFocusedExpansionPayload(
     includedIds.add(nodeId)
     let builtEntry: ContextPackNode | undefined
     let tokenCost: number | undefined
-    const lineNumber = lineNumberFromSourceLocation(attributes.source_location)
+    const { lineNumber, derived } = resolvedFocusedLineNumber(attributes)
 
     nodeCandidates.push({
       label: String(attributes.label ?? nodeId),
@@ -447,7 +464,7 @@ function buildFocusedExpansionPayload(
         }
 
         const snippet = readFocusedSnippet(graphPath, sourceFile, lineNumber, {
-          derived: sourceRange === null,
+          derived: derived || sourceRange === null,
           fileCache: snippetFileCache,
         })
         builtEntry = {

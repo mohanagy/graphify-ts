@@ -17,6 +17,7 @@ import {
   installSkill,
   isAgentPlatform,
   isInstallPlatform,
+  uninstallCopilotMcp,
   uninstallSkill,
 } from '../../src/infrastructure/install.js'
 import { normalizeAssertionPath } from './helpers/platform.js'
@@ -482,6 +483,36 @@ describe('install helpers', () => {
       }
 
       expect(mcpConfig.servers?.['graphify-ts']?.env?.GRAPHIFY_TOOL_PROFILE).toBe('full')
+    })
+  })
+
+  it('removes the VS Code Copilot MCP server while preserving unrelated workspace entries', () => {
+    withTempDir((projectDir) => {
+      installCopilotMcp(projectDir)
+
+      const mcpPath = join(projectDir, '.vscode', 'mcp.json')
+      const config = JSON.parse(readFileSync(mcpPath, 'utf8')) as {
+        servers?: Record<string, Record<string, unknown>>
+      }
+      config.servers = {
+        ...config.servers,
+        companion: {
+          command: 'node',
+          args: ['companion.js'],
+        },
+      }
+      writeFileSync(mcpPath, JSON.stringify(config, null, 2), 'utf8')
+
+      uninstallCopilotMcp(projectDir)
+
+      const uninstalled = JSON.parse(readFileSync(mcpPath, 'utf8')) as {
+        servers?: Record<string, Record<string, unknown>>
+      }
+      expect(uninstalled.servers?.['graphify-ts']).toBeUndefined()
+      expect(uninstalled.servers?.companion).toEqual({
+        command: 'node',
+        args: ['companion.js'],
+      })
     })
   })
 

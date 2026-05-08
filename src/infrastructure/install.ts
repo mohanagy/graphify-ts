@@ -1255,6 +1255,24 @@ function installMcpServer(
   return existed ? `${displayPath} -> MCP server updated` : `${displayPath} -> MCP server registered`
 }
 
+function uninstallMcpServer(projectDir: string, target: McpConfigTarget): string | undefined {
+  const mcpJsonPath = join(projectDir, MCP_CONFIG_PATHS[target])
+  if (!existsSync(mcpJsonPath)) {
+    return undefined
+  }
+
+  const isVscode = target === 'copilot'
+  const mcpConfig = readJsonObject(mcpJsonPath)
+  const serversKey = isVscode ? 'servers' : 'mcpServers'
+  if (!isRecord(mcpConfig[serversKey]) || !Object.hasOwn(mcpConfig[serversKey], SKILL_SLUG)) {
+    return undefined
+  }
+
+  delete (mcpConfig[serversKey] as Record<string, unknown>)[SKILL_SLUG]
+  writeJson(mcpJsonPath, mcpConfig)
+  return `${MCP_CONFIG_PATHS[target]} -> MCP server removed`
+}
+
 function installClaudeHook(projectDir: string): string {
   const settingsPath = join(projectDir, '.claude', 'settings.json')
   const settings = readJsonObject(settingsPath)
@@ -1587,6 +1605,10 @@ export function installCopilotMcp(projectDir = '.', options: McpInstallOptions =
   return installMcpServer(resolve(projectDir), 'copilot', process.platform, options)
 }
 
+export function uninstallCopilotMcp(projectDir = '.'): string {
+  return uninstallMcpServer(resolve(projectDir), 'copilot') ?? 'No graphify-ts Copilot MCP server found - nothing to do'
+}
+
 export function cursorInstall(projectDir = '.', options: McpInstallOptions = {}): string {
   const resolvedProjectDir = resolve(projectDir)
   const rulePath = join(resolvedProjectDir, CURSOR_RULE_RELATIVE_PATH)
@@ -1617,14 +1639,9 @@ export function cursorUninstall(projectDir = '.'): string {
     messages.push('No graphify-ts Cursor rule found - nothing to do')
   }
 
-  const mcpJsonPath = join(resolvedProjectDir, MCP_CONFIG_PATHS.cursor)
-  if (existsSync(mcpJsonPath)) {
-    const mcpConfig = readJsonObject(mcpJsonPath)
-    if (isRecord(mcpConfig.mcpServers) && Object.hasOwn(mcpConfig.mcpServers, SKILL_SLUG)) {
-      delete (mcpConfig.mcpServers as Record<string, unknown>)[SKILL_SLUG]
-      writeJson(mcpJsonPath, mcpConfig)
-      messages.push('.cursor/mcp.json -> MCP server removed')
-    }
+  const mcpMessage = uninstallMcpServer(resolvedProjectDir, 'cursor')
+  if (mcpMessage) {
+    messages.push(mcpMessage)
   }
 
   return messages.join('\n')
@@ -1649,14 +1666,9 @@ export function claudeUninstall(projectDir = '.'): string {
     messages.push(hookMessage)
   }
 
-  const mcpJsonPath = join(resolvedProjectDir, '.mcp.json')
-  if (existsSync(mcpJsonPath)) {
-    const mcpConfig = readJsonObject(mcpJsonPath)
-    if (isRecord(mcpConfig.mcpServers) && Object.hasOwn(mcpConfig.mcpServers, SKILL_SLUG)) {
-      delete (mcpConfig.mcpServers as Record<string, unknown>)[SKILL_SLUG]
-      writeJson(mcpJsonPath, mcpConfig)
-      messages.push('.mcp.json -> MCP server removed')
-    }
+  const mcpMessage = uninstallMcpServer(resolvedProjectDir, 'claude')
+  if (mcpMessage) {
+    messages.push(mcpMessage)
   }
 
   // Clean up legacy location

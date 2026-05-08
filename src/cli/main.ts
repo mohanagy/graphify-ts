@@ -26,6 +26,7 @@ import {
   installSkill,
   isAgentPlatform,
   type AgentPlatform,
+  uninstallCopilotMcp,
   uninstallSkill,
 } from '../infrastructure/install.js'
 import { pushGraphToNeo4j } from '../infrastructure/neo4j.js'
@@ -129,6 +130,7 @@ export interface CliDependencies {
   cursorInstall: typeof cursorInstall
   cursorUninstall: typeof cursorUninstall
   installCopilotMcp: typeof installCopilotMcp
+  uninstallCopilotMcp: typeof uninstallCopilotMcp
   pushGraphToNeo4j: typeof pushGraphToNeo4j
   generateGraph: typeof generateGraph
   watchGraph: typeof watchGraph
@@ -219,6 +221,7 @@ const DEFAULT_DEPENDENCIES: CliDependencies = {
   cursorInstall,
   cursorUninstall,
   installCopilotMcp,
+  uninstallCopilotMcp,
   pushGraphToNeo4j,
   generateGraph,
   watchGraph,
@@ -859,6 +862,7 @@ export async function executeCli(argv: string[], io: CliIO = console, dependenci
         io.log(dependencies.installSkill('copilot'))
         io.log(dependencies.installCopilotMcp('.', options.profile ? { profile: options.profile } : {}))
       } else {
+        io.log(dependencies.uninstallCopilotMcp('.'))
         io.log(dependencies.uninstallSkill('copilot'))
       }
       return 0

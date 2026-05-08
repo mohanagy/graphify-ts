@@ -17,6 +17,11 @@ function nodeCandidate(
     label: entry.label,
     ...(typeof entry.node_id === 'string' ? { node_id: entry.node_id } : {}),
     community: entry.community ?? null,
+    ...(typeof entry.source_file === 'string' ? { source_file: entry.source_file } : {}),
+    ...(typeof entry.line_number === 'number' ? { line_number: entry.line_number } : {}),
+    ...(typeof entry.file_type === 'string' ? { file_type: entry.file_type } : {}),
+    ...(typeof entry.node_kind === 'string' ? { node_kind: entry.node_kind } : {}),
+    ...(typeof entry.snippet === 'string' ? { snippet: entry.snippet } : {}),
     evidence_class: evidenceClass,
     estimate_tokens: () => tokenCost,
     build_entry: () => ({ ...entry, evidence_class: evidenceClass }),
@@ -285,6 +290,7 @@ describe('context-pack', () => {
             source_file: 'src/auth.ts',
             line_number: 10,
             file_type: 'code',
+            snippet: 'export function AuthService() {}',
             community: 0,
             evidence_class: 'primary',
             estimate_tokens: () => 10,
@@ -315,6 +321,7 @@ describe('context-pack', () => {
             source_file: 'src/logger.ts',
             line_number: 3,
             file_type: 'code',
+            snippet: 'export const Logger = console',
             evidence_class: 'structural',
             expandable_ref: {
               node_id: 'logger',
@@ -387,6 +394,63 @@ describe('context-pack', () => {
       ])
       expect(primaryBuilds).toBe(1)
       expect(omittedBuilds).toBe(0)
+    })
+
+    it('materializes omitted entries when snippet text is required for semantic coverage classification', () => {
+      let omittedBuilds = 0
+
+      const pack = compileContextPack({
+        task_contract: classifyTaskContract('explain', {
+          budget: 12,
+          prompt: 'Where does runtime configuration appear?',
+        }),
+        nodes: [
+          nodeCandidate({
+            node_id: 'service',
+            label: 'AuthService',
+            source_file: 'src/auth.ts',
+            line_number: 7,
+            file_type: 'code',
+            snippet: 'export function AuthService() {}',
+            match_score: 9,
+            relevance_band: 'direct',
+            community: 0,
+            community_label: 'Auth',
+          }, 'primary', 6),
+          {
+            label: 'EnvAccess',
+            node_id: 'env_access',
+            source_file: 'src/auth.ts',
+            line_number: 21,
+            file_type: 'code',
+            evidence_class: 'supporting',
+            estimate_tokens: () => 20,
+            build_entry: () => {
+              omittedBuilds += 1
+              return {
+                node_id: 'env_access',
+                label: 'EnvAccess',
+                source_file: 'src/auth.ts',
+                line_number: 21,
+                file_type: 'code',
+                snippet: 'const redirect = process.env.AUTH_REDIRECT_URL',
+                match_score: 1,
+                relevance_band: 'peripheral',
+                evidence_class: 'supporting',
+              }
+            },
+          } satisfies ContextPackNodeCandidate<ContextPackNode>,
+        ],
+      })
+
+      expect(pack.coverage.semantic_entries).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          category: 'configuration',
+          available_nodes: 1,
+          selected_nodes: 0,
+        }),
+      ]))
+      expect(omittedBuilds).toBe(1)
     })
 
     it('reorders selected review evidence based on the task-specific recipe preferences', () => {
