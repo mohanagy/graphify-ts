@@ -57,6 +57,25 @@ const TASK_PLANNER_SHAPES: Record<ContextPackTaskKind, TaskPlannerShape> = {
   },
 }
 
+const REVIEW_FALLBACK_EVIDENCE: ContextPackEvidenceClass[] = ['primary', 'supporting', 'impact']
+
+function plannerShape(taskKind: ContextPackTaskKind, changedPaths: readonly string[]): TaskPlannerShape {
+  if (taskKind !== 'review' || changedPaths.length > 0) {
+    return TASK_PLANNER_SHAPES[taskKind]
+  }
+
+  return {
+    preferred_evidence: ['primary', 'supporting', 'impact', 'structural'],
+    budget_shares: TASK_PLANNER_SHAPES.review.budget_shares,
+    titles: ['Collect primary review evidence', 'Expand review context', 'Assemble review context'],
+    step_evidence: [
+      ['primary'],
+      ['supporting', 'impact', 'structural'],
+      ['primary', 'supporting', 'impact'],
+    ],
+  }
+}
+
 function normalizePrompt(prompt: string): string {
   const normalized = prompt.trim()
   if (normalized.length === 0) {
@@ -164,18 +183,22 @@ export function buildTaskContextPlan(input: TaskContextPlanInput): TaskContextPl
   const totalBudget = normalizeBudget(input.budget)
   const focusPaths = normalizePaths(input.focus_paths)
   const changedPaths = normalizePaths(input.changed_paths)
+  const hasReviewChanges = input.task_kind === 'review' && changedPaths.length > 0
   const explicit = explicitScope(focusPaths, changedPaths)
   const reviewExpand = reviewExpansionScope(focusPaths, changedPaths)
-  const seedScope = input.task_kind === 'review' && changedPaths.length > 0
+  const seedScope = hasReviewChanges
     ? { mode: 'changed' as const, paths: [...changedPaths] }
     : explicit
-  const shape = TASK_PLANNER_SHAPES[input.task_kind]
+  const shape = plannerShape(input.task_kind, changedPaths)
   const taskContract = classifyTaskContract(input.task_kind, {
     budget: totalBudget,
     prompt,
   })
   const [seedBudget, expandBudget, assembleBudget] = allocateBudget(totalBudget, shape.budget_shares)
   const retrieveScope = input.task_kind === 'review' ? reviewExpand : explicit
+  const requiredEvidence = input.task_kind === 'review' && !hasReviewChanges
+    ? REVIEW_FALLBACK_EVIDENCE
+    : taskContract.required_evidence
 
   return {
     version: TASK_CONTEXT_PLAN_VERSION,
@@ -188,7 +211,7 @@ export function buildTaskContextPlan(input: TaskContextPlanInput): TaskContextPl
       changed_paths: [...changedPaths],
     },
     evidence: {
-      required: [...taskContract.required_evidence],
+      required: [...requiredEvidence],
       preferred: [...shape.preferred_evidence],
     },
     steps: [

@@ -109,6 +109,54 @@ describe('task-context-planner', () => {
     expect(plan.steps.reduce((total, step) => total + step.budget, 0)).toBe(95)
   })
 
+  it('falls back to primary review evidence when focus paths exist without changed paths', () => {
+    const plan = buildTaskContextPlan({
+      task_kind: 'review',
+      prompt: 'Review auth modules',
+      budget: 95,
+      focus_paths: ['tests/auth.test.ts', 'src/auth.ts', 'tests/auth.test.ts'],
+    })
+
+    expect(plan.scope).toEqual({
+      seed_mode: 'focused',
+      focus_paths: ['src/auth.ts', 'tests/auth.test.ts'],
+      changed_paths: [],
+    })
+    expect(plan.evidence).toEqual({
+      required: ['primary', 'supporting', 'impact'],
+      preferred: ['primary', 'supporting', 'impact', 'structural'],
+    })
+    expect(plan.steps).toEqual([
+      {
+        id: 'seed',
+        kind: 'retrieve',
+        title: 'Collect primary review evidence',
+        budget: 47,
+        evidence: ['primary'],
+        scope_mode: 'focused',
+        scope_paths: ['src/auth.ts', 'tests/auth.test.ts'],
+      },
+      {
+        id: 'expand',
+        kind: 'retrieve',
+        title: 'Expand review context',
+        budget: 28,
+        evidence: ['supporting', 'impact', 'structural'],
+        scope_mode: 'focused',
+        scope_paths: ['src/auth.ts', 'tests/auth.test.ts'],
+      },
+      {
+        id: 'assemble',
+        kind: 'synthesize',
+        title: 'Assemble review context',
+        budget: 20,
+        evidence: ['primary', 'supporting', 'impact'],
+        scope_mode: 'focused',
+        scope_paths: ['src/auth.ts', 'tests/auth.test.ts'],
+      },
+    ])
+  })
+
   it('falls back to global scope for impact planning without explicit paths', () => {
     const plan = buildTaskContextPlan({
       task_kind: 'impact',
