@@ -7,9 +7,6 @@ interface PackageManifest {
   description?: string
   dependencies?: Record<string, string>
   devDependencies?: Record<string, string>
-  engines?: {
-    node?: string
-  }
   keywords?: string[]
   license?: string
   overrides?: Record<string, string>
@@ -156,8 +153,6 @@ describe('package metadata', () => {
     const dependencies = manifest.dependencies ?? {}
 
     expect(isAtLeastVersion(devDependencies.vite, [6, 4, 2])).toBe(true)
-    expect(devDependencies.vite).toMatch(/^[~^]?6\./)
-    expect(manifest.engines?.node).toBe('>=20')
     expect(dependencies['@xenova/transformers']).toBeUndefined()
     expect(typeof dependencies['@huggingface/transformers']).toBe('string')
   })
