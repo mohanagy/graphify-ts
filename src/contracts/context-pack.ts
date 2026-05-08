@@ -1,3 +1,5 @@
+import type { TaskIntentKind } from './task-intent.js'
+
 export type ContextPackTaskKind = 'explain' | 'review' | 'impact'
 
 export type ContextPackEvidenceClass = 'primary' | 'supporting' | 'structural' | 'change' | 'impact'
@@ -5,9 +7,12 @@ export type ContextPackEvidenceClass = 'primary' | 'supporting' | 'structural' |
 export interface ContextPackTaskContract {
   version: 1
   task_kind: ContextPackTaskKind
+  task_intent?: TaskIntentKind
+  evidence_recipe_id: TaskIntentKind
   budget: number
   prompt?: string
   required_evidence: ContextPackEvidenceClass[]
+  preferred_evidence: ContextPackEvidenceClass[]
 }
 
 export interface ContextPackNode {

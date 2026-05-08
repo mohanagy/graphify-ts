@@ -42,6 +42,21 @@ describe('context-pack', () => {
         required_evidence: ['primary', 'impact', 'structural'],
       }))
     })
+
+    it('attaches task-specific evidence recipes when a planned intent is provided', () => {
+      expect(classifyTaskContract('review', {
+        budget: 480,
+        prompt: 'Audit the password reset flow for injection and auth bypass issues.',
+        task_intent: 'security-review',
+        has_change_evidence: true,
+      })).toEqual(expect.objectContaining({
+        task_kind: 'review',
+        task_intent: 'security-review',
+        evidence_recipe_id: 'security-review',
+        required_evidence: ['change', 'impact', 'supporting'],
+        preferred_evidence: ['change', 'impact', 'supporting', 'primary', 'structural'],
+      }))
+    })
   })
 
   describe('compileContextPack', () => {
@@ -197,6 +212,72 @@ describe('context-pack', () => {
           preview_labels: ['ApiHandler'],
         },
       ])
+    })
+
+    it('reorders selected review evidence based on the task-specific recipe preferences', () => {
+      const nodes = [
+        nodeCandidate({
+          node_id: 'changed_handler',
+          label: 'ChangedHandler',
+          source_file: 'src/auth.ts',
+          line_number: 10,
+          file_type: 'code',
+          snippet: 'export function ChangedHandler() {}',
+          match_score: 10,
+          relevance_band: 'direct',
+          community: 0,
+          community_label: 'Auth',
+        }, 'change', 8),
+        nodeCandidate({
+          node_id: 'supporting_fixture',
+          label: 'SupportingFixture',
+          source_file: 'tests/auth.test.ts',
+          line_number: 4,
+          file_type: 'code',
+          snippet: 'expect(refresh()).toBeTruthy()',
+          match_score: 8,
+          relevance_band: 'related',
+          community: 1,
+          community_label: 'Tests',
+        }, 'supporting', 6),
+        nodeCandidate({
+          node_id: 'auth_bypass_path',
+          label: 'AuthBypassPath',
+          source_file: 'src/reset.ts',
+          line_number: 18,
+          file_type: 'code',
+          snippet: 'if (token === "debug") return true',
+          match_score: 7,
+          relevance_band: 'related',
+          community: 2,
+          community_label: 'Security',
+        }, 'impact', 6),
+      ] as const
+
+      const genericReviewPack = compileContextPack({
+        task_contract: classifyTaskContract('review', {
+          budget: 14,
+          prompt: 'Review auth changes',
+        }),
+        nodes,
+      })
+      const securityReviewPack = compileContextPack({
+        task_contract: classifyTaskContract('review', {
+          budget: 14,
+          prompt: 'Audit the password reset flow for injection and auth bypass issues.',
+          task_intent: 'security-review',
+          has_change_evidence: true,
+        }),
+        nodes,
+      })
+
+      expect(genericReviewPack.nodes.map((node) => node.label)).toEqual(['ChangedHandler', 'SupportingFixture'])
+      expect(securityReviewPack.nodes.map((node) => node.label)).toEqual(['ChangedHandler', 'AuthBypassPath'])
+      expect(securityReviewPack.coverage.required_evidence).toEqual(['change', 'impact', 'supporting'])
+      expect(securityReviewPack.claims[1]).toEqual(expect.objectContaining({
+        evidence_class: 'impact',
+        node_labels: ['AuthBypassPath'],
+      }))
     })
   })
 

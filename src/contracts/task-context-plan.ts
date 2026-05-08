@@ -1,4 +1,5 @@
 import type { ContextPackEvidenceClass, ContextPackTaskKind } from './context-pack.js'
+import type { TaskIntentKind } from './task-intent.js'
 
 export const TASK_CONTEXT_PLAN_VERSION = 1
 
@@ -12,6 +13,7 @@ export interface TaskContextPlanInput {
   task_kind: ContextPackTaskKind
   prompt: string
   budget: number
+  task_intent?: TaskIntentKind
   focus_paths?: readonly string[]
   changed_paths?: readonly string[]
 }
@@ -23,6 +25,7 @@ export interface TaskContextPlanScope {
 }
 
 export interface TaskContextPlanEvidence {
+  recipe_id: TaskIntentKind
   required: ContextPackEvidenceClass[]
   preferred: ContextPackEvidenceClass[]
 }

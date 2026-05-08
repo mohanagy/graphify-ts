@@ -14,6 +14,7 @@ describe('task-context-planner', () => {
         changed_paths: [],
       },
       evidence: {
+        recipe_id: 'explain',
         required: ['primary', 'supporting', 'structural'],
         preferred: ['primary', 'supporting', 'structural'],
       },
@@ -74,8 +75,9 @@ describe('task-context-planner', () => {
       changed_paths: ['src/api.ts', 'src/auth.ts'],
     })
     expect(plan.evidence).toEqual({
+      recipe_id: 'review',
       required: ['change', 'supporting', 'impact'],
-      preferred: ['change', 'supporting', 'impact', 'structural'],
+      preferred: ['change', 'supporting', 'impact', 'structural', 'primary'],
     })
     expect(plan.steps).toEqual([
       {
@@ -123,6 +125,7 @@ describe('task-context-planner', () => {
       changed_paths: [],
     })
     expect(plan.evidence).toEqual({
+      recipe_id: 'review',
       required: ['primary', 'supporting', 'impact'],
       preferred: ['primary', 'supporting', 'impact', 'structural'],
     })
@@ -192,6 +195,66 @@ describe('task-context-planner', () => {
         scope_paths: [],
       }),
     ])
+  })
+
+  it('uses a test-generation evidence recipe instead of the generic review defaults', () => {
+    const plan = buildTaskContextPlan({
+      task_kind: 'review',
+      prompt: 'Generate regression tests for token refresh and session expiry.',
+      budget: 90,
+      focus_paths: ['src/auth.ts', 'tests/auth.test.ts'],
+    })
+
+    expect(plan.evidence).toEqual({
+      recipe_id: 'test-generation',
+      required: ['primary', 'supporting', 'structural'],
+      preferred: ['primary', 'structural', 'supporting', 'impact'],
+    })
+    expect(plan.steps).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'seed',
+        evidence: ['primary', 'structural'],
+      }),
+      expect.objectContaining({
+        id: 'expand',
+        evidence: ['supporting', 'structural', 'primary'],
+      }),
+      expect.objectContaining({
+        id: 'assemble',
+        evidence: ['primary', 'supporting', 'structural'],
+      }),
+    ]))
+  })
+
+  it('uses a security-review recipe that prioritizes impact evidence during review planning', () => {
+    const plan = buildTaskContextPlan({
+      task_kind: 'review',
+      prompt: 'Audit the password reset flow for injection and auth bypass issues.',
+      budget: 90,
+      changed_paths: ['src/auth.ts'],
+      focus_paths: ['src/auth.ts', 'src/reset.ts'],
+    })
+
+    expect(plan.evidence).toEqual({
+      recipe_id: 'security-review',
+      required: ['change', 'impact', 'supporting'],
+      preferred: ['change', 'impact', 'supporting', 'primary', 'structural'],
+    })
+    expect(plan.steps).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'seed',
+        scope_mode: 'changed',
+        evidence: ['change', 'impact'],
+      }),
+      expect.objectContaining({
+        id: 'expand',
+        evidence: ['impact', 'supporting', 'primary'],
+      }),
+      expect.objectContaining({
+        id: 'assemble',
+        evidence: ['change', 'impact', 'supporting'],
+      }),
+    ]))
   })
 
   it('guarantees a non-zero budget for each planning step at the minimum supported budget', () => {

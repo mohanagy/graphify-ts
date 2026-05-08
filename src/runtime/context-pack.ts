@@ -12,17 +12,15 @@ import type {
   ContextPackTaskContract,
   ContextPackTaskKind,
 } from '../contracts/context-pack.js'
+import type { TaskIntentKind } from '../contracts/task-intent.js'
 import { estimateQueryTokens } from './serve.js'
-
-const REQUIRED_EVIDENCE_BY_TASK: Record<ContextPackTaskKind, ContextPackEvidenceClass[]> = {
-  explain: ['primary', 'supporting', 'structural'],
-  review: ['change', 'supporting', 'impact'],
-  impact: ['primary', 'impact', 'structural'],
-}
+import { resolveTaskEvidenceRecipe } from './task-evidence-recipes.js'
 
 export interface ClassifyTaskContractOptions {
   budget: number
   prompt?: string
+  task_intent?: TaskIntentKind
+  has_change_evidence?: boolean
 }
 
 export interface ContextPackNodeCandidate<TNode extends ContextPackNode = ContextPackNode> {
@@ -108,10 +106,7 @@ function coverageEntriesForCandidates(
     availableCounts.set(node.evidence_class, (availableCounts.get(node.evidence_class) ?? 0) + 1)
   }
 
-  const evidenceClasses = [
-    ...taskContract.required_evidence,
-    ...[...availableCounts.keys()].filter((evidenceClass) => !taskContract.required_evidence.includes(evidenceClass)),
-  ]
+  const evidenceClasses = orderedEvidence(taskContract, availableCounts.keys())
 
   const entries: ContextPackCoverageEntry[] = evidenceClasses.map((evidence_class) => {
     const available_nodes = availableCounts.get(evidence_class) ?? 0
@@ -144,12 +139,9 @@ function buildClaims(
   taskContract: ContextPackTaskContract,
   labelsByEvidence: ReadonlyMap<ContextPackEvidenceClass, string[]>,
 ): ContextPackClaim[] {
-  const orderedEvidence = [
-    ...taskContract.required_evidence,
-    ...[...labelsByEvidence.keys()].filter((evidenceClass) => !taskContract.required_evidence.includes(evidenceClass)),
-  ]
+  const evidenceOrder = orderedEvidence(taskContract, labelsByEvidence.keys())
 
-  return orderedEvidence.flatMap((evidence_class) => {
+  return evidenceOrder.flatMap((evidence_class) => {
     const nodeLabels = labelsByEvidence.get(evidence_class) ?? []
     if (nodeLabels.length === 0) {
       return []
@@ -174,12 +166,9 @@ function buildExpandableRefs(
     omittedByEvidence.set(node.evidence_class, labels)
   }
 
-  const orderedEvidence = [
-    ...taskContract.required_evidence,
-    ...[...omittedByEvidence.keys()].filter((evidenceClass) => !taskContract.required_evidence.includes(evidenceClass)),
-  ]
+  const evidenceOrder = orderedEvidence(taskContract, omittedByEvidence.keys())
 
-  return orderedEvidence.flatMap((evidence_class) => {
+  return evidenceOrder.flatMap((evidence_class) => {
     const labels = omittedByEvidence.get(evidence_class) ?? []
     if (labels.length === 0) {
       return []
@@ -198,13 +187,63 @@ export function classifyTaskContract(
   taskKind: ContextPackTaskKind,
   options: ClassifyTaskContractOptions,
 ): ContextPackTaskContract {
+  const recipe = resolveTaskEvidenceRecipe(taskKind, {
+    ...(options.task_intent ? { task_intent: options.task_intent } : {}),
+    ...(options.has_change_evidence !== undefined ? { has_change_evidence: options.has_change_evidence } : {}),
+  })
+
   return {
     version: 1,
     task_kind: taskKind,
+    ...(options.task_intent ? { task_intent: recipe.id } : {}),
+    evidence_recipe_id: recipe.id,
     budget: options.budget,
     ...(options.prompt ? { prompt: options.prompt } : {}),
-    required_evidence: [...REQUIRED_EVIDENCE_BY_TASK[taskKind]],
+    required_evidence: [...recipe.required_evidence],
+    preferred_evidence: [...recipe.preferred_evidence],
   }
+}
+
+function orderedEvidence(
+  taskContract: ContextPackTaskContract,
+  evidence: Iterable<ContextPackEvidenceClass>,
+): ContextPackEvidenceClass[] {
+  const ordered: ContextPackEvidenceClass[] = []
+  const seen = new Set<ContextPackEvidenceClass>()
+
+  for (const evidenceClass of [
+    ...taskContract.preferred_evidence,
+    ...taskContract.required_evidence,
+    ...evidence,
+  ]) {
+    if (seen.has(evidenceClass)) {
+      continue
+    }
+    seen.add(evidenceClass)
+    ordered.push(evidenceClass)
+  }
+
+  return ordered
+}
+
+function sortCandidatesByEvidence<TNode extends ContextPackNode>(
+  taskContract: ContextPackTaskContract,
+  nodes: readonly ContextPackNodeCandidate<TNode>[],
+): ContextPackNodeCandidate<TNode>[] {
+  const evidenceOrder = orderedEvidence(taskContract, nodes.map((node) => node.evidence_class))
+  const evidenceRanks = new Map(evidenceOrder.map((evidenceClass, index) => [evidenceClass, index]))
+
+  return nodes
+    .map((node, index) => ({ node, index }))
+    .sort((left, right) => {
+      const leftRank = evidenceRanks.get(left.node.evidence_class) ?? evidenceOrder.length
+      const rightRank = evidenceRanks.get(right.node.evidence_class) ?? evidenceOrder.length
+      if (leftRank !== rightRank) {
+        return leftRank - rightRank
+      }
+      return left.index - right.index
+    })
+    .map((entry) => entry.node)
 }
 
 export function estimateContextPackEntryTokens(
@@ -223,14 +262,15 @@ export function compileContextPack<
 >(
   input: CompileContextPackInput<TNode, TRelationship, TCommunity>,
 ): CompiledContextPack<TNode, TRelationship, TCommunity> {
+  const orderedNodes = sortCandidatesByEvidence(input.task_contract, input.nodes)
   const selectedNodes: TNode[] = []
   const selectedCounts = new Map<ContextPackEvidenceClass, number>()
   const selectedLabelsByEvidence = new Map<ContextPackEvidenceClass, string[]>()
   const selectedCommunities = new Set<number>()
   let tokenCount = 0
-  let breakIndex = input.nodes.length
+  let breakIndex = orderedNodes.length
 
-  for (const [index, candidate] of input.nodes.entries()) {
+  for (const [index, candidate] of orderedNodes.entries()) {
     const candidateTokens = candidate.estimate_tokens()
     if (tokenCount + candidateTokens > input.task_contract.budget && selectedNodes.length > 0) {
       breakIndex = index
@@ -253,7 +293,7 @@ export function compileContextPack<
     }
   }
 
-  const omittedNodes = input.nodes.slice(breakIndex)
+  const omittedNodes = orderedNodes.slice(breakIndex)
   const relationships = filterRelationships(input.relationships ?? [], selectedNodes)
   const includedLabels = new Set(selectedNodes.map((node) => node.label))
 
@@ -266,10 +306,10 @@ export function compileContextPack<
     claims: buildClaims(input.task_contract, selectedLabelsByEvidence),
     expandable: buildExpandableRefs(input.task_contract, omittedNodes),
     coverage: coverageEntriesForCandidates(
-      input.task_contract,
-      input.nodes,
-      selectedCounts,
-      {
+        input.task_contract,
+        orderedNodes,
+        selectedCounts,
+        {
         available: input.relationships?.length ?? 0,
         selected: relationships.length,
       },

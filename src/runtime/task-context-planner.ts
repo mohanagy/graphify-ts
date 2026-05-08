@@ -6,7 +6,9 @@ import {
   type TaskContextPlanScopeMode,
   type TaskContextPlanStep,
 } from '../contracts/task-context-plan.js'
+import { classifyTaskIntent } from './task-intent.js'
 import { classifyTaskContract } from './context-pack.js'
+import { resolveTaskEvidenceRecipe } from './task-evidence-recipes.js'
 
 interface ScopeSelection {
   mode: TaskContextPlanScopeMode
@@ -14,50 +16,24 @@ interface ScopeSelection {
 }
 
 interface TaskPlannerShape {
-  preferred_evidence: ContextPackEvidenceClass[]
   budget_shares: readonly [number, number, number]
   titles: readonly [string, string, string]
-  step_evidence: readonly [
-    readonly ContextPackEvidenceClass[],
-    readonly ContextPackEvidenceClass[],
-    readonly ContextPackEvidenceClass[],
-  ]
 }
 
 const TASK_PLANNER_SHAPES: Record<ContextPackTaskKind, TaskPlannerShape> = {
   explain: {
-    preferred_evidence: ['primary', 'supporting', 'structural'],
     budget_shares: [35, 40, 25],
     titles: ['Collect primary evidence', 'Expand supporting context', 'Assemble final context'],
-    step_evidence: [
-      ['primary'],
-      ['supporting', 'structural'],
-      ['primary', 'supporting', 'structural'],
-    ],
   },
   review: {
-    preferred_evidence: ['change', 'supporting', 'impact', 'structural'],
     budget_shares: [50, 30, 20],
     titles: ['Collect changed evidence', 'Expand review context', 'Assemble review context'],
-    step_evidence: [
-      ['change'],
-      ['supporting', 'impact', 'structural'],
-      ['change', 'supporting', 'impact'],
-    ],
   },
   impact: {
-    preferred_evidence: ['primary', 'impact', 'structural', 'supporting'],
     budget_shares: [30, 45, 25],
     titles: ['Collect impact seeds', 'Expand dependency context', 'Assemble impact context'],
-    step_evidence: [
-      ['primary'],
-      ['impact', 'structural', 'supporting'],
-      ['primary', 'impact', 'structural'],
-    ],
   },
 }
-
-const REVIEW_FALLBACK_EVIDENCE: ContextPackEvidenceClass[] = ['primary', 'supporting', 'impact']
 
 function plannerShape(taskKind: ContextPackTaskKind, changedPaths: readonly string[]): TaskPlannerShape {
   if (taskKind !== 'review' || changedPaths.length > 0) {
@@ -65,14 +41,8 @@ function plannerShape(taskKind: ContextPackTaskKind, changedPaths: readonly stri
   }
 
   return {
-    preferred_evidence: ['primary', 'supporting', 'impact', 'structural'],
     budget_shares: TASK_PLANNER_SHAPES.review.budget_shares,
     titles: ['Collect primary review evidence', 'Expand review context', 'Assemble review context'],
-    step_evidence: [
-      ['primary'],
-      ['supporting', 'impact', 'structural'],
-      ['primary', 'supporting', 'impact'],
-    ],
   }
 }
 
@@ -190,15 +160,19 @@ export function buildTaskContextPlan(input: TaskContextPlanInput): TaskContextPl
     ? { mode: 'changed' as const, paths: [...changedPaths] }
     : explicit
   const shape = plannerShape(input.task_kind, changedPaths)
+  const taskIntent = input.task_intent ?? classifyTaskIntent(prompt).kind
   const taskContract = classifyTaskContract(input.task_kind, {
     budget: totalBudget,
     prompt,
+    task_intent: taskIntent,
+    has_change_evidence: changedPaths.length > 0,
+  })
+  const recipe = resolveTaskEvidenceRecipe(input.task_kind, {
+    task_intent: taskIntent,
+    has_change_evidence: changedPaths.length > 0,
   })
   const [seedBudget, expandBudget, assembleBudget] = allocateBudget(totalBudget, shape.budget_shares)
   const retrieveScope = input.task_kind === 'review' ? reviewExpand : explicit
-  const requiredEvidence = input.task_kind === 'review' && !hasReviewChanges
-    ? REVIEW_FALLBACK_EVIDENCE
-    : taskContract.required_evidence
 
   return {
     version: TASK_CONTEXT_PLAN_VERSION,
@@ -211,13 +185,14 @@ export function buildTaskContextPlan(input: TaskContextPlanInput): TaskContextPl
       changed_paths: [...changedPaths],
     },
     evidence: {
-      required: [...requiredEvidence],
-      preferred: [...shape.preferred_evidence],
+      recipe_id: taskContract.evidence_recipe_id,
+      required: [...taskContract.required_evidence],
+      preferred: [...taskContract.preferred_evidence],
     },
     steps: [
-      planStep('seed', 'retrieve', shape.titles[0], seedBudget, shape.step_evidence[0], seedScope),
-      planStep('expand', 'retrieve', shape.titles[1], expandBudget, shape.step_evidence[1], retrieveScope),
-      planStep('assemble', 'synthesize', shape.titles[2], assembleBudget, shape.step_evidence[2], retrieveScope),
+      planStep('seed', 'retrieve', shape.titles[0], seedBudget, recipe.step_evidence[0], seedScope),
+      planStep('expand', 'retrieve', shape.titles[1], expandBudget, recipe.step_evidence[1], retrieveScope),
+      planStep('assemble', 'synthesize', shape.titles[2], assembleBudget, recipe.step_evidence[2], retrieveScope),
     ],
   }
 }
