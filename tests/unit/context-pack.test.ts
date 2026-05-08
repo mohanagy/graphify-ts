@@ -150,6 +150,54 @@ describe('context-pack', () => {
         bridge_nodes: ['SessionManager'],
       })
     })
+
+    it('keeps the first review node when it alone exceeds budget', () => {
+      const pack = compileContextPack({
+        task_contract: classifyTaskContract('review', { budget: 5, prompt: 'Review current changes' }),
+        nodes: [
+          nodeCandidate({
+            node_id: 'auth_service',
+            label: 'authenticateUser',
+            source_file: 'src/auth.ts',
+            line_number: 10,
+            file_type: 'code',
+            snippet: 'return token.trim()',
+            match_score: 10,
+            relevance_band: 'direct',
+            community: 0,
+            community_label: 'Auth',
+          }, 'change', 8),
+          nodeCandidate({
+            node_id: 'api_handler',
+            label: 'ApiHandler',
+            source_file: 'src/api.ts',
+            line_number: 20,
+            file_type: 'code',
+            snippet: 'return authenticateUser(token)',
+            match_score: 6,
+            relevance_band: 'related',
+            community: 1,
+            community_label: 'API',
+          }, 'supporting', 3),
+        ],
+      })
+
+      expect(pack.nodes.map((node) => node.label)).toEqual(['authenticateUser'])
+      expect(pack.token_count).toBe(8)
+      expect(pack.coverage.missing_required).toEqual(['supporting', 'impact'])
+      expect(pack.coverage.entries).toEqual(expect.arrayContaining([
+        expect.objectContaining({ evidence_class: 'change', status: 'covered', selected_nodes: 1 }),
+        expect.objectContaining({ evidence_class: 'supporting', status: 'missing', selected_nodes: 0 }),
+      ]))
+      expect(pack.expandable).toEqual([
+        {
+          kind: 'nodes',
+          evidence_class: 'supporting',
+          count: 1,
+          preview_labels: ['ApiHandler'],
+        },
+      ])
+    })
   })
 
   describe('compactContextPack', () => {

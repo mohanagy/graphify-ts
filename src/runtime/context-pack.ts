@@ -232,10 +232,7 @@ export function compileContextPack<
 
   for (const [index, candidate] of input.nodes.entries()) {
     const candidateTokens = candidate.estimate_tokens()
-    if (
-      tokenCount + candidateTokens > input.task_contract.budget
-      && (selectedNodes.length > 0 || input.task_contract.task_kind === 'review')
-    ) {
+    if (tokenCount + candidateTokens > input.task_contract.budget && selectedNodes.length > 0) {
       breakIndex = index
       break
     }
