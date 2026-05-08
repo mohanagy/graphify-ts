@@ -4,6 +4,24 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-05-08
+
+### Added
+
+- **Task-context planner release**: added task-intent classification, task-specific evidence recipes, semantic coverage reporting, stable expandable handles, and planner-backed `task_intent` / `plan` metadata across compact context-pack surfaces.
+- **Executable MCP expansion**: added the full-profile `context_expand` MCP tool so agents can reopen omitted context slices from a prior `context_pack` response inside the same MCP session.
+
+### Changed
+
+- **Context-pack/runtime alignment**: aligned CLI `pack` and MCP `context_pack` around planner-aware metadata, normalized budget handling, and consistent impact-target selection.
+- **Docs and examples**: refreshed the README, proof workflows, and MCP examples so the 25-tool full surface, `context_expand`, semantic coverage, and provider/runtime proof disclosures match the shipped runtime.
+
+### Fixed
+
+- **Provider-proof honesty**: corrected compare and benchmark proof reporting so zero-cache provider usage is no longer described as provider-reported cache-read evidence.
+- **Impact and expansion metadata**: preserved `target_file_type` in compact impact payloads, trimmed impact target labels before follow-up lookup, hardened fallback line-range handling, and reject malformed stored `context_expand` handles instead of failing with generic runtime errors.
+- **Workspace hygiene**: added `.test-artifacts/` to `.gitignore` so local test artifacts stay out of release branches and PRs.
+
 ## [0.12.0] - 2026-05-08
 
 ### Added
