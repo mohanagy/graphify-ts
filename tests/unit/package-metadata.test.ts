@@ -153,6 +153,7 @@ describe('package metadata', () => {
     const dependencies = manifest.dependencies ?? {}
 
     expect(isAtLeastVersion(devDependencies.vite, [6, 4, 2])).toBe(true)
+    expect(devDependencies.vite).toMatch(/^[~^]?6\./)
     expect(dependencies['@xenova/transformers']).toBeUndefined()
     expect(typeof dependencies['@huggingface/transformers']).toBe('string')
   })
