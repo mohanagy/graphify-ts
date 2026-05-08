@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync } from 'node:fs'
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { type CliDependencies, executeCli, formatHelp } from '../../src/cli/main.js'
@@ -160,6 +160,28 @@ function createDependencies(): CliDependencies {
   }
 }
 
+function withGraphPathSandbox(testName: string, run: (paths: { relativeGraphPath: string; resolvedGraphPath: string }) => void) {
+  const originalCwd = process.cwd()
+  const sandboxRoot = resolve('graphify-out', 'test-runtime', testName)
+  const relativeGraphPath = 'graphify-out/custom.json'
+  const graphPath = resolve(sandboxRoot, relativeGraphPath)
+
+  rmSync(sandboxRoot, { recursive: true, force: true })
+  mkdirSync(resolve(sandboxRoot, 'graphify-out'), { recursive: true })
+  writeFileSync(graphPath, '{}\n', 'utf8')
+
+  try {
+    process.chdir(sandboxRoot)
+    run({
+      relativeGraphPath,
+      resolvedGraphPath: realpathSync(graphPath),
+    })
+  } finally {
+    process.chdir(originalCwd)
+    rmSync(sandboxRoot, { recursive: true, force: true })
+  }
+}
+
 describe('cli parser', () => {
   it('parses query args with defaults and overrides', () => {
     expect(parseQueryArgs(['how does auth work'])).toEqual({
@@ -201,13 +223,6 @@ describe('cli parser', () => {
       task: 'explain',
       graphPath: 'graphify-out/graph.json',
     })
-
-    expect(parsePackArgs(['review current diff', '--task=review', '--graph', 'custom.json'])).toEqual({
-      prompt: 'review current diff',
-      budget: 3000,
-      task: 'review',
-      graphPath: 'custom.json',
-    })
   })
 
   it('rejects invalid pack args', () => {
@@ -224,12 +239,6 @@ describe('cli parser', () => {
       provider: 'claude',
       graphPath: 'graphify-out/graph.json',
     })
-
-    expect(parsePromptArgs(['review current diff', '--provider=gemini', '--graph', 'custom.json'])).toEqual({
-      prompt: 'review current diff',
-      provider: 'gemini',
-      graphPath: 'custom.json',
-    })
   })
 
   it('rejects invalid prompt args', () => {
@@ -237,6 +246,30 @@ describe('cli parser', () => {
     expect(() => parsePromptArgs(['how does auth work'])).toThrow('error: --provider is required')
     expect(() => parsePromptArgs(['how does auth work', '--provider', 'openai'])).toThrow('error: --provider must be one of claude, gemini')
     expect(() => parsePromptArgs(['how does auth work', '--wat'])).toThrow('error: unknown option for prompt: --wat')
+  })
+
+  it('validates explicit graph paths for pack and prompt commands with the shared graph helper', () => {
+    withGraphPathSandbox('context-cli-graph-paths', ({ relativeGraphPath, resolvedGraphPath }) => {
+      expect(parsePackArgs(['review current diff', '--task=review', '--graph', relativeGraphPath])).toEqual({
+        prompt: 'review current diff',
+        budget: 3000,
+        task: 'review',
+        graphPath: resolvedGraphPath,
+      })
+
+      expect(parsePromptArgs(['review current diff', '--provider=gemini', '--graph', relativeGraphPath])).toEqual({
+        prompt: 'review current diff',
+        provider: 'gemini',
+        graphPath: resolvedGraphPath,
+      })
+
+      expect(() => parsePackArgs(['review current diff', '--graph', '../../../outside/graph.json'])).toThrow(
+        'Only paths inside graphify-out/ are permitted',
+      )
+      expect(() => parsePromptArgs(['review current diff', '--provider', 'claude', '--graph', '../../../outside/graph.json'])).toThrow(
+        'Only paths inside graphify-out/ are permitted',
+      )
+    })
   })
 
   it('parses path args with defaults and overrides', () => {

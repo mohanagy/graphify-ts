@@ -4,7 +4,7 @@ import { KnowledgeGraph } from '../../src/contracts/graph.js'
 import { runContextPromptCommand, type ContextPromptCommandDependencies } from '../../src/infrastructure/context-prompt-command.js'
 
 describe('context-prompt-command', () => {
-  it('emits a compact deterministic provider prompt payload', async () => {
+  it('compiles Claude output from the cache-aware session payload', async () => {
     const graph = new KnowledgeGraph()
     const dependencies: ContextPromptCommandDependencies = {
       loadGraph: vi.fn().mockReturnValue(graph),
@@ -19,12 +19,12 @@ describe('context-prompt-command', () => {
       buildGraphifyPromptPack: vi.fn().mockReturnValue({
         kind: 'graphify',
         question: 'how does auth work',
-        prompt: 'Retrieved graph context\n\nQuestion:\nhow does auth work',
-        session_payload: 'Retrieved graph context\n\nQuestion:\nhow does auth work',
+        prompt: 'provider-agnostic prompt',
+        session_payload: 'claude session payload',
         token_count: 120,
-        session_payload_token_count: 120,
-        effective_token_count: 120,
-        reused_context_tokens: 0,
+        session_payload_token_count: 140,
+        effective_token_count: 118,
+        reused_context_tokens: 22,
         session_state: {
           version: 1,
           revision: 1,
@@ -49,19 +49,66 @@ describe('context-prompt-command', () => {
       prompt: 'how does auth work',
       graph_path: 'graphify-out/graph.json',
       compiled: {
-        kind: 'graphify',
-        question: 'how does auth work',
-        prompt: 'Retrieved graph context\n\nQuestion:\nhow does auth work',
-        session_payload: 'Retrieved graph context\n\nQuestion:\nhow does auth work',
-        token_count: 120,
-        session_payload_token_count: 120,
-        effective_token_count: 120,
-        reused_context_tokens: 0,
+        provider: 'claude',
+        format: 'session_payload',
+        prompt: 'claude session payload',
+        token_count: 140,
+        effective_token_count: 118,
+        reused_context_tokens: 22,
         session_state: {
           version: 1,
           revision: 1,
           refs: {},
         },
+      },
+    }))
+  })
+
+  it('compiles Gemini output from the provider-agnostic prompt text', async () => {
+    const graph = new KnowledgeGraph()
+    const dependencies: ContextPromptCommandDependencies = {
+      loadGraph: vi.fn().mockReturnValue(graph),
+      retrieveContext: vi.fn().mockReturnValue({
+        question: 'how does auth work',
+        token_count: 18,
+        matched_nodes: [],
+        relationships: [],
+        community_context: [],
+        graph_signals: { god_nodes: [], bridge_nodes: [] },
+      }),
+      buildGraphifyPromptPack: vi.fn().mockReturnValue({
+        kind: 'graphify',
+        question: 'how does auth work',
+        prompt: 'provider-agnostic prompt',
+        session_payload: 'claude session payload',
+        token_count: 120,
+        session_payload_token_count: 140,
+        effective_token_count: 118,
+        reused_context_tokens: 22,
+        session_state: {
+          version: 1,
+          revision: 1,
+          refs: {},
+        },
+      }),
+    }
+
+    const output = await runContextPromptCommand({
+      prompt: 'how does auth work',
+      provider: 'gemini',
+      graphPath: 'graphify-out/graph.json',
+    }, dependencies)
+
+    expect(output).toBe(JSON.stringify({
+      provider: 'gemini',
+      task: 'explain',
+      prompt: 'how does auth work',
+      graph_path: 'graphify-out/graph.json',
+      compiled: {
+        provider: 'gemini',
+        format: 'prompt',
+        prompt: 'provider-agnostic prompt',
+        token_count: 120,
       },
     }))
   })

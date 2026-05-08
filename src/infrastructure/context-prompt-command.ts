@@ -1,4 +1,4 @@
-import type { PromptCliOptions } from '../cli/parser.js'
+import type { PromptCliOptions, PromptCliProvider } from '../cli/parser.js'
 import type { KnowledgeGraph } from '../contracts/graph.js'
 import { buildGraphifyPromptPack, type ComparePromptPack } from './compare.js'
 import { retrieveContext, type RetrieveResult } from '../runtime/retrieve.js'
@@ -18,6 +18,44 @@ const DEFAULT_DEPENDENCIES: ContextPromptCommandDependencies = {
   buildGraphifyPromptPack: (input) => buildGraphifyPromptPack(input),
 }
 
+type CompiledProviderPrompt =
+  | {
+      provider: 'claude'
+      format: 'session_payload'
+      prompt: string
+      token_count: number
+      effective_token_count: number
+      reused_context_tokens: number
+      session_state: ComparePromptPack['session_state']
+    }
+  | {
+      provider: 'gemini'
+      format: 'prompt'
+      prompt: string
+      token_count: number
+    }
+
+function compilePromptForProvider(provider: PromptCliProvider, promptPack: ComparePromptPack): CompiledProviderPrompt {
+  if (provider === 'claude') {
+    return {
+      provider,
+      format: 'session_payload',
+      prompt: promptPack.session_payload,
+      token_count: promptPack.session_payload_token_count,
+      effective_token_count: promptPack.effective_token_count,
+      reused_context_tokens: promptPack.reused_context_tokens,
+      session_state: promptPack.session_state,
+    }
+  }
+
+  return {
+    provider,
+    format: 'prompt',
+    prompt: promptPack.prompt,
+    token_count: promptPack.token_count,
+  }
+}
+
 export async function runContextPromptCommand(
   options: PromptCliOptions,
   dependencies: ContextPromptCommandDependencies = DEFAULT_DEPENDENCIES,
@@ -31,12 +69,13 @@ export async function runContextPromptCommand(
     question: options.prompt,
     retrieval,
   })
+  const providerCompiled = compilePromptForProvider(options.provider, compiled)
 
   return JSON.stringify({
     provider: options.provider,
     task: 'explain',
     prompt: options.prompt,
     graph_path: options.graphPath,
-    compiled,
+    compiled: providerCompiled,
   })
 }

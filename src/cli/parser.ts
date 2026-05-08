@@ -1,7 +1,7 @@
 import { isAbsolute, resolve } from 'node:path'
 
 import type { ContextPackTaskKind } from '../contracts/context-pack.js'
-import { validateGraphOutputPath } from '../shared/security.js'
+import { validateGraphOutputPath, validateGraphPath } from '../shared/security.js'
 import { type InstallPlatform, isInstallPlatform } from '../infrastructure/install.js'
 
 export class UsageError extends Error {
@@ -296,6 +296,10 @@ function validateReviewCompareOutputDir(outputDir: string): string {
   return isAbsolute(outputDir) ? resolve(outputDir) : validateGraphOutputPath(outputDir)
 }
 
+function parseValidatedGraphPath(flag: string, value: string | undefined): string {
+  return validateGraphPath(requireOptionValue(flag, value))
+}
+
 export function parseQueryArgs(args: string[]): QueryCliOptions {
   const question = args[0]?.trim()
   if (!question) {
@@ -434,14 +438,14 @@ export function parsePackArgs(args: string[]): PackCliOptions {
     }
 
     if (argument === '--graph') {
-      graphPath = requireOptionValue('--graph', args[index + 1])
+      graphPath = parseValidatedGraphPath('--graph', args[index + 1])
       index += 1
       continue
     }
 
     if (argument.startsWith('--graph=')) {
       const [, value] = argument.split('=', 2)
-      graphPath = requireOptionValue('--graph', value)
+      graphPath = parseValidatedGraphPath('--graph', value)
       continue
     }
 
@@ -491,14 +495,14 @@ export function parsePromptArgs(args: string[]): PromptCliOptions {
     }
 
     if (argument === '--graph') {
-      graphPath = requireOptionValue('--graph', args[index + 1])
+      graphPath = parseValidatedGraphPath('--graph', args[index + 1])
       index += 1
       continue
     }
 
     if (argument.startsWith('--graph=')) {
       const [, value] = argument.split('=', 2)
-      graphPath = requireOptionValue('--graph', value)
+      graphPath = parseValidatedGraphPath('--graph', value)
       continue
     }
 
