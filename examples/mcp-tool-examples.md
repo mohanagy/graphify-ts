@@ -144,7 +144,7 @@ These examples show what your AI agent sees when it calls graphify-ts MCP tools.
 }
 ```
 
-**What the agent does with this:** Uses the compact pack as a coverage contract: answer with the selected evidence now, inspect `semantic_entries` to see whether implementation/structure/tests are sufficiently covered, and call `context_expand` with the stable `handle_id` only when omitted context is still needed.
+**What the agent does with this:** Uses the compact pack as a coverage contract and answers now with the selected evidence. Then it inspects `semantic_entries` to see whether implementation, structure, and tests are sufficiently covered. Only when coverage is still missing does it call `context_expand` with the stable `handle_id`.
 
 ---
 

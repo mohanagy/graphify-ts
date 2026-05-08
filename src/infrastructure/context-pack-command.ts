@@ -154,12 +154,12 @@ function impactMetadata(
   return contextMetadata(pack)
 }
 
-function baseResponse(options: PackCliOptions, plan: TaskContextPlan) {
+function baseResponse(options: PackCliOptions, plan: TaskContextPlan, budget: number) {
   return {
     task: options.task,
     task_intent: plan.evidence.recipe_id,
     prompt: options.prompt,
-    budget: options.budget,
+    budget,
     graph_path: options.graphPath,
     plan,
   }
@@ -179,7 +179,7 @@ export async function runContextPackCommand(
 
   if (options.task === 'review') {
     const reviewResult = dependencies.analyzePrImpact(graph, '.', {
-      budget: options.budget,
+      budget: plannerBudget,
       taskIntent: initialPlan.evidence.recipe_id,
     })
     const reviewPack = dependencies.compactPrImpactResult(reviewResult)
@@ -196,7 +196,7 @@ export async function runContextPackCommand(
     })
 
     return JSON.stringify({
-      ...baseResponse(options, plan),
+      ...baseResponse(options, plan, plannerBudget),
       pack: reviewPack,
       ...contextMetadata(reviewResult.review_bundle ?? {}),
     })
@@ -205,7 +205,7 @@ export async function runContextPackCommand(
   if (options.task === 'impact') {
     const retrieval = dependencies.retrieveContext(graph, {
       question: options.prompt,
-      budget: options.budget,
+      budget: plannerBudget,
       taskIntent: initialPlan.evidence.recipe_id,
     })
     const impactTarget = pickImpactTarget(retrieval)
@@ -217,22 +217,22 @@ export async function runContextPackCommand(
     const impactPack = dependencies.compactImpactResult(impactResult)
 
     return JSON.stringify({
-      ...baseResponse(options, initialPlan),
+      ...baseResponse(options, initialPlan, plannerBudget),
       target: impactTarget,
       pack: impactPack,
-      ...impactMetadata(impactResult, options.budget, options.prompt, initialPlan.evidence.recipe_id),
+      ...impactMetadata(impactResult, plannerBudget, options.prompt, initialPlan.evidence.recipe_id),
     })
   }
 
   const retrieval = dependencies.retrieveContext(graph, {
     question: options.prompt,
-    budget: options.budget,
+    budget: plannerBudget,
     taskIntent: initialPlan.evidence.recipe_id,
   })
   const explainPack = dependencies.compactRetrieveResult(retrieval)
 
   return JSON.stringify({
-    ...baseResponse(options, initialPlan),
+    ...baseResponse(options, initialPlan, plannerBudget),
     pack: explainPack,
     ...contextMetadata(retrieval),
   })

@@ -453,7 +453,7 @@ function expandableLineRange(node: Pick<ScoredNode, 'lineNumber' | 'sourceLocati
     }
   }
 
-  if (node.lineNumber > 0) {
+  if (Number.isFinite(node.lineNumber) && Number.isInteger(node.lineNumber) && node.lineNumber > 0) {
     return {
       start_line: node.lineNumber,
       end_line: node.lineNumber,

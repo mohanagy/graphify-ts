@@ -92,6 +92,33 @@ interface StoredContextPackHandle {
   follow_up: ContextPackExpandableFollowUp
 }
 
+function isStoredContextPackHandle(value: unknown): value is StoredContextPackHandle {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  const candidate = value as Record<string, unknown>
+  if (typeof candidate.prompt !== 'string') {
+    return false
+  }
+  if (candidate.task !== 'explain' && candidate.task !== 'review' && candidate.task !== 'impact') {
+    return false
+  }
+  if (typeof candidate.task_intent !== 'string') {
+    return false
+  }
+  if (!candidate.follow_up || typeof candidate.follow_up !== 'object' || Array.isArray(candidate.follow_up)) {
+    return false
+  }
+
+  const followUp = candidate.follow_up as Record<string, unknown>
+  return followUp.kind === 'context_pack'
+    && typeof followUp.task_kind === 'string'
+    && typeof followUp.evidence_class === 'string'
+    && Array.isArray(followUp.focus_files)
+    && Array.isArray(followUp.focus_ranges)
+}
+
 function emptyCoverage(): ContextPackCoverage {
   return {
     required_evidence: [],
@@ -770,12 +797,15 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
       if (!stored || typeof stored !== 'object' || Array.isArray(stored)) {
         return helpers.failure(id, helpers.jsonrpcInvalidParams, `Unknown context_pack handle_id '${handleId}'. Expand handles are only available within the MCP session that produced them.`)
       }
+      if (!isStoredContextPackHandle(stored)) {
+        return helpers.failure(id, helpers.jsonrpcInvalidParams, `Malformed context_pack handle_id '${handleId}'. Re-run context_pack and retry context_expand within the same MCP session.`)
+      }
 
       const payload = buildFocusedExpansionPayload(
         graph,
         graphPath,
         handleId,
-        stored as StoredContextPackHandle,
+        stored,
         budget ?? 1500,
         helpers,
       )

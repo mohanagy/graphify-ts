@@ -346,6 +346,7 @@ export function compactImpactResult(result: ImpactResult): CompactImpactResult {
   return {
     target: result.target,
     target_file: result.target_file,
+    ...(result.target_file_type ? { target_file_type: result.target_file_type } : {}),
     depth: result.depth,
     direct_dependents: result.direct_dependents.map(compactNode),
     transitive_dependents: result.transitive_dependents.map(compactNode),

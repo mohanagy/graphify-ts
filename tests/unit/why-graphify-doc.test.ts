@@ -64,7 +64,8 @@ describe('public marketing copy honesty', () => {
     })
 
     it('keeps the README full MCP additions list aligned with the shipped get_neighbors tool', () => {
-      expect(content).toContain('The full surface is 24 tools')
+      expect(content).toContain('The full surface is 25 tools')
+      expect(content).toContain('`context_expand`')
       expect(content).toContain('`get_neighbors`')
     })
   })
@@ -75,6 +76,7 @@ describe('public marketing copy honesty', () => {
 
     it('documents the context-plane MCP tools', () => {
       expect(content).toContain('## context_pack')
+      expect(content).toContain('## context_expand')
       expect(content).toContain('## context_prompt')
       expect(content).toContain('## context_session_reset')
       expect(lower).toContain('effective_token_count')

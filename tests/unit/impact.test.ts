@@ -657,6 +657,7 @@ describe('impact', () => {
       const compactResult = compactImpactResult(rawResult)
 
       expect(JSON.stringify(compactResult).length).toBeLessThan(JSON.stringify(rawResult).length)
+      expect(compactResult.target_file_type).toBe('code')
       expect(compactResult.shared_file_type).toBe('code')
       expect(compactResult.direct_dependents[0]).not.toHaveProperty('file_type')
       expect(compactResult.direct_dependents[0]).not.toHaveProperty('community_label')

@@ -2345,6 +2345,35 @@ describe('retrieve', () => {
       expect(workspaceBridgesSpy).toHaveBeenCalledTimes(1)
     })
 
+    it('omits fallback expandable ranges for malformed line numbers', () => {
+      const graph = new KnowledgeGraph()
+      graph.addNode('auth_service', {
+        label: 'AuthService',
+        file_type: 'code',
+        source_file: '/src/auth.ts',
+        source_location: 'L1',
+        community: 0,
+      })
+      graph.addNode('session_mgr', {
+        label: 'SessionManager',
+        file_type: 'code',
+        source_file: '/src/session.ts',
+        line_number: Infinity,
+        community: 0,
+      })
+      graph.addEdge('auth_service', 'session_mgr', {
+        relation: 'calls',
+        confidence: 'EXTRACTED',
+        source_file: '/src/auth.ts',
+      })
+
+      const result = retrieveContext(graph, { question: 'auth', budget: 1 })
+      const preview = (result.expandable ?? []).flatMap((entry) => entry.preview).find((entry) => entry.node_id === 'session_mgr')
+
+      expect(preview).toBeDefined()
+      expect(preview).not.toHaveProperty('line_range')
+    })
+
     it('compacts repeated node metadata for default payloads', () => {
       const graph = buildTestGraph()
       graph.graph.community_labels = { 0: 'Auth', 1: 'Data', 2: 'Observability' }

@@ -181,6 +181,49 @@ describe('context-pack-command', () => {
     }))
   })
 
+  it('normalizes sub-minimum explain budgets before retrieving', async () => {
+    const graph = new KnowledgeGraph()
+    const dependencies: ContextPackCommandDependencies = {
+      loadGraph: vi.fn().mockReturnValue(graph),
+      retrieveContext: vi.fn().mockReturnValue({
+        question: 'auth',
+        token_count: 4,
+        matched_nodes: [],
+        relationships: [],
+        community_context: [],
+        graph_signals: { god_nodes: [], bridge_nodes: [] },
+      }),
+      compactRetrieveResult: vi.fn().mockReturnValue({
+        question: 'auth',
+        token_count: 4,
+        matched_nodes: [],
+        relationships: [],
+        community_context: [],
+        graph_signals: { god_nodes: [], bridge_nodes: [] },
+      }),
+      analyzePrImpact: vi.fn(),
+      compactPrImpactResult: vi.fn(),
+      analyzeImpact: vi.fn(),
+      compactImpactResult: vi.fn(),
+    }
+
+    const output = await runContextPackCommand({
+      prompt: 'auth',
+      budget: 1,
+      task: 'explain',
+      graphPath: 'graphify-out/graph.json',
+    }, dependencies)
+
+    expect(dependencies.retrieveContext).toHaveBeenCalledWith(graph, {
+      question: 'auth',
+      budget: 3,
+      taskIntent: 'explain',
+    })
+    expect(JSON.parse(output)).toEqual(expect.objectContaining({
+      budget: 3,
+    }))
+  })
+
   it('emits a compact deterministic review pack', async () => {
     const graph = new KnowledgeGraph()
     const dependencies: ContextPackCommandDependencies = {
@@ -270,6 +313,86 @@ describe('context-pack-command', () => {
       expandable: [],
       missing_context: [],
       missing_semantic: [],
+    }))
+  })
+
+  it('normalizes sub-minimum review budgets before analyzing PR impact', async () => {
+    const graph = new KnowledgeGraph()
+    const dependencies: ContextPackCommandDependencies = {
+      loadGraph: vi.fn().mockReturnValue(graph),
+      retrieveContext: vi.fn(),
+      compactRetrieveResult: vi.fn(),
+      analyzePrImpact: vi.fn().mockReturnValue({
+        base_branch: 'origin/main',
+        changed_files: [],
+        changed_ranges: [],
+        changed_nodes: [],
+        seed_nodes: [],
+        per_node_impact: [],
+        total_blast_radius: 0,
+        affected_files: [],
+        affected_communities: [],
+        review_context: {
+          supporting_paths: [],
+          test_paths: [],
+          hotspots: [],
+        },
+        review_bundle: {
+          budget: 3,
+          token_count: 0,
+          nodes: [],
+          relationships: [],
+          community_context: [],
+        },
+        risk_summary: {
+          high_impact_nodes: [],
+          cross_community_changes: 0,
+          top_risks: [],
+        },
+      }),
+      compactPrImpactResult: vi.fn().mockReturnValue({
+        base_branch: 'origin/main',
+        changed_files: [],
+        changed_ranges: [],
+        seed_nodes: [],
+        per_node_impact: [],
+        total_blast_radius: 0,
+        affected_communities: [],
+        review_context: {
+          supporting_paths: [],
+          test_paths: [],
+          hotspots: [],
+        },
+        review_bundle: {
+          budget: 3,
+          token_count: 0,
+          nodes: [],
+          relationships: [],
+          community_context: [],
+        },
+        risk_summary: {
+          high_impact_nodes: [],
+          cross_community_changes: 0,
+          top_risks: [],
+        },
+      }),
+      analyzeImpact: vi.fn(),
+      compactImpactResult: vi.fn(),
+    }
+
+    const output = await runContextPackCommand({
+      prompt: 'review auth diff',
+      budget: 1,
+      task: 'review',
+      graphPath: 'graphify-out/graph.json',
+    }, dependencies)
+
+    expect(dependencies.analyzePrImpact).toHaveBeenCalledWith(graph, '.', {
+      budget: 3,
+      taskIntent: 'pr-review-risk',
+    })
+    expect(JSON.parse(output)).toEqual(expect.objectContaining({
+      budget: 3,
     }))
   })
 
@@ -458,5 +581,74 @@ describe('context-pack-command', () => {
       },
     }))
     expect(payload.missing_semantic).not.toContain('implementation')
+  })
+
+  it('normalizes sub-minimum impact budgets before retrieval and metadata assembly', async () => {
+    const graph = new KnowledgeGraph()
+    const dependencies: ContextPackCommandDependencies = {
+      loadGraph: vi.fn().mockReturnValue(graph),
+      retrieveContext: vi.fn().mockReturnValue({
+        question: 'auth',
+        token_count: 2,
+        matched_nodes: [
+          {
+            label: 'AuthService',
+            source_file: 'src/auth.ts',
+            line_number: 1,
+            snippet: null,
+            match_score: 1,
+            relevance_band: 'direct',
+            community: 0,
+            community_label: 'Auth',
+            file_type: 'code',
+          },
+        ],
+        relationships: [],
+        community_context: [],
+        graph_signals: { god_nodes: [], bridge_nodes: [] },
+      }),
+      compactRetrieveResult: vi.fn(),
+      analyzePrImpact: vi.fn(),
+      compactPrImpactResult: vi.fn(),
+      analyzeImpact: vi.fn().mockReturnValue({
+        target: 'AuthService',
+        target_file: 'src/auth.ts',
+        target_file_type: 'code',
+        depth: 3,
+        direct_dependents: [],
+        transitive_dependents: [],
+        affected_files: [],
+        affected_communities: [],
+        top_paths_per_community: [],
+        total_affected: 0,
+      }),
+      compactImpactResult: vi.fn().mockReturnValue({
+        target: 'AuthService',
+        target_file: 'src/auth.ts',
+        depth: 3,
+        direct_dependents: [],
+        transitive_dependents: [],
+        affected_files: [],
+        affected_communities: [],
+        top_paths_per_community: [],
+        total_affected: 0,
+      }),
+    }
+
+    const output = await runContextPackCommand({
+      prompt: 'auth',
+      budget: 1,
+      task: 'impact',
+      graphPath: 'graphify-out/graph.json',
+    }, dependencies)
+
+    expect(dependencies.retrieveContext).toHaveBeenCalledWith(graph, {
+      question: 'auth',
+      budget: 3,
+      taskIntent: 'impact',
+    })
+    expect(JSON.parse(output)).toEqual(expect.objectContaining({
+      budget: 3,
+    }))
   })
 })

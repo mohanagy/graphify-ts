@@ -353,7 +353,7 @@ function expandablePreviewForCandidate(candidate: ContextPackNodeCandidate): Con
   const providedLineRange = normalizeExpandableLineRange(candidate.expandable_ref?.line_range)
   const lineRange = providedLineRange ?? (() => {
     const entry = fallbackEntry()
-    return entry.line_number > 0
+    return Number.isFinite(entry.line_number) && Number.isInteger(entry.line_number) && entry.line_number > 0
       ? {
           start_line: entry.line_number,
           end_line: entry.line_number,
@@ -582,11 +582,11 @@ export function compileContextPack<
     claims: buildClaims(input.task_contract, selectedLabelsByEvidence),
     expandable: buildExpandableRefs(input.task_contract, omittedNodes),
     coverage: coverageEntriesForCandidates(
-        input.task_contract,
-        materializedNodes,
-        selectedMaterialized,
-        selectedCounts,
-        {
+      input.task_contract,
+      materializedNodes,
+      selectedMaterialized,
+      selectedCounts,
+      {
         available: input.relationships?.length ?? 0,
         selected: relationships.length,
       },

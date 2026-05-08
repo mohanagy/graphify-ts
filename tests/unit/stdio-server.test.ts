@@ -1091,6 +1091,45 @@ describe('stdio runtime', () => {
     }
   })
 
+  it('rejects malformed stored context-pack handles during expansion', async () => {
+    const root = createGraphFixtureRoot()
+    try {
+      const graphPath = join(root, 'graph.json')
+      const sessionState = {
+        logLevel: 'info' as const,
+        subscribedResourceUris: new Set<string>(),
+        resourceVersions: new Map<string, string>(),
+        resourceListSignature: null,
+        contextPromptSessions: new Map(),
+        contextPackHandles: new Map<string, unknown>([
+          ['broken-handle', { prompt: 'How does AuthService reach Transport?' }],
+        ]),
+      }
+
+      const response = await Promise.resolve(handleStdioRequest(graphPath, {
+        id: 1,
+        method: 'tools/call',
+        params: {
+          name: 'context_expand',
+          arguments: {
+            handle_id: 'broken-handle',
+          },
+        },
+      }, sessionState))
+
+      expect(response).toEqual({
+        jsonrpc: '2.0',
+        id: 1,
+        error: {
+          code: -32602,
+          message: "Malformed context_pack handle_id 'broken-handle'. Re-run context_pack and retry context_expand within the same MCP session.",
+        },
+      })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('evicts the oldest stored context prompt session when the session cache is full', async () => {
     const root = createGraphFixtureRoot()
     try {
