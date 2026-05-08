@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { ContextInventoryEntry } from '../../src/contracts/context-inventory.js'
+import type { ContextInventoryEntry, ContextInventoryValue } from '../../src/contracts/context-inventory.js'
 import { createContextInventoryEntry, normalizeContextInventorySource } from '../../src/runtime/context-inventory.js'
 
 describe('context-inventory', () => {
@@ -122,5 +122,36 @@ describe('context-inventory', () => {
         refs: ['tests/unit/context-inventory.test.ts'],
       },
     })
+  })
+
+  it('rejects circular attribute structures', () => {
+    const circular = {} as Record<string, unknown>
+    circular.self = circular
+
+    expect(() => createContextInventoryEntry({
+      id: 'build-errors',
+      source: {
+        kind: 'log',
+        locator: 'vitest',
+      },
+      content: 'FAIL tests/unit/context-inventory.test.ts',
+      attributes: {
+        circular: circular as ContextInventoryValue,
+      },
+    })).toThrow('Context inventory entry attributes.circular.self must be JSON-serializable')
+  })
+
+  it('rejects non-finite attribute numbers', () => {
+    expect(() => createContextInventoryEntry({
+      id: 'build-errors',
+      source: {
+        kind: 'log',
+        locator: 'vitest',
+      },
+      content: 'FAIL tests/unit/context-inventory.test.ts',
+      attributes: {
+        duration_ms: Number.NaN,
+      },
+    })).toThrow('Context inventory entry attributes.duration_ms must be a finite number')
   })
 })

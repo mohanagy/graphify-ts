@@ -157,6 +157,71 @@ function normalizeTags(tags: readonly string[] | undefined): string[] | undefine
   return normalized.length > 0 ? normalized.sort((left, right) => left.localeCompare(right)) : undefined
 }
 
+function normalizeContextInventoryValue(
+  value: unknown,
+  path: string,
+  ancestors = new Set<object>(),
+): ContextInventoryValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return value
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new Error(`${path} must be a finite number`)
+    }
+    return value
+  }
+
+  if (typeof value !== 'object') {
+    throw new Error(`${path} must be JSON-serializable`)
+  }
+
+  if (ancestors.has(value)) {
+    throw new Error(`${path} must be JSON-serializable`)
+  }
+
+  ancestors.add(value)
+  try {
+    if (Array.isArray(value)) {
+      const normalized: ContextInventoryValue[] = []
+      for (let index = 0; index < value.length; index += 1) {
+        if (!(index in value)) {
+          throw new Error(`${path}[${index}] must be JSON-serializable`)
+        }
+        normalized.push(normalizeContextInventoryValue(value[index], `${path}[${index}]`, ancestors))
+      }
+      return normalized
+    }
+
+    const prototype = Object.getPrototypeOf(value)
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new Error(`${path} must be JSON-serializable`)
+    }
+
+    const normalized: Record<string, ContextInventoryValue> = {}
+    for (const [key, nestedValue] of Object.entries(value)) {
+      normalized[key] = normalizeContextInventoryValue(nestedValue, `${path}.${key}`, ancestors)
+    }
+    return normalized
+  } finally {
+    ancestors.delete(value)
+  }
+}
+
+function normalizeAttributes(value: unknown): Record<string, ContextInventoryValue> | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  const normalized = normalizeContextInventoryValue(value, 'Context inventory entry attributes')
+  if (normalized === null || Array.isArray(normalized) || typeof normalized !== 'object') {
+    throw new Error('Context inventory entry attributes must be a JSON-serializable object')
+  }
+
+  return normalized
+}
+
 export function normalizeContextInventorySource(
   input: ContextInventorySourceInput | ContextInventorySourceDescriptor,
 ): ContextInventorySourceDescriptor {
@@ -193,6 +258,7 @@ export function createContextInventoryEntry(input: ContextInventoryEntryInput): 
 
   const summary = normalizeString(input.summary)
   const tags = normalizeTags(input.tags)
+  const attributes = normalizeAttributes(input.attributes)
 
   return {
     version: 1,
@@ -202,6 +268,6 @@ export function createContextInventoryEntry(input: ContextInventoryEntryInput): 
     ...(summary ? { summary } : {}),
     ...(input.token_count !== undefined ? { token_count: input.token_count } : {}),
     ...(tags ? { tags } : {}),
-    ...(input.attributes ? { attributes: input.attributes } : {}),
+    ...(attributes ? { attributes } : {}),
   }
 }
