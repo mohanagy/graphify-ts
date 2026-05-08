@@ -441,9 +441,39 @@ describe('compare runtime', () => {
     expect(fullPack.prompt).toContain('Question:\nhow does login create a session')
     expect(fullPack.prompt).toContain('authenticateUser')
     expect(fullPack.prompt).toContain('SessionManager')
+    expect(fullPack.prompt.indexOf('Question:\nhow does login create a session')).toBeGreaterThan(
+      fullPack.prompt.indexOf('Corpus (full):'),
+    )
+    expect(fullPack.effective_token_count).toBe(fullPack.token_count)
+    expect(fullPack.reused_context_tokens).toBe(0)
     expect(boundedPack.prompt).toContain('[bounded baseline excerpt]')
     expect(boundedPack.prompt.length).toBeLessThan(fullPack.prompt.length)
     expect(estimateQueryTokens(boundedPack.prompt)).toBeLessThanOrEqual(120)
+  })
+
+  it('reuses stable compare context across session-aware prompt packs', () => {
+    const graph = makeGraph()
+    const corpusText = makeCorpusText()
+
+    const firstPack = buildBaselinePromptPack({
+      question: 'how does login create a session',
+      graph,
+      corpusText,
+      mode: 'full',
+    })
+    const secondPack = buildBaselinePromptPack({
+      question: 'where is session storage defined',
+      graph,
+      corpusText,
+      mode: 'full',
+      session: firstPack.session_state,
+    })
+
+    expect(secondPack.prompt.indexOf('Question:\nwhere is session storage defined')).toBeGreaterThan(
+      secondPack.prompt.indexOf('Corpus (full):'),
+    )
+    expect(secondPack.reused_context_tokens).toBeGreaterThan(0)
+    expect(secondPack.effective_token_count).toBeLessThan(secondPack.token_count)
   })
 
   it('builds bounded baseline excerpts for token-dense corpus text', () => {
@@ -737,6 +767,10 @@ describe('compare runtime', () => {
     expect(readFileSync(report.answer_paths.graphify, 'utf8')).toBe('graphify answer\n')
     expect(report.baseline_prompt_tokens).toBe(1320)
     expect(report.graphify_prompt_tokens).toBe(410)
+    expect(report.baseline_effective_prompt_tokens).toBe(1300)
+    expect(report.graphify_effective_prompt_tokens).toBe(400)
+    expect(report.baseline_reused_context_tokens).toBe(20)
+    expect(report.graphify_reused_context_tokens).toBe(10)
     expect(report.prompt_token_source).toEqual({
       baseline: 'claude_reported_input',
       graphify: 'claude_reported_input',
@@ -765,7 +799,9 @@ describe('compare runtime', () => {
     })
     expect(report.baseline_total_tokens).toBe(1410)
     expect(report.graphify_total_tokens).toBe(480)
+    expect(report.effective_reduction_ratio).toBe(Number((1300 / 400).toFixed(1)))
     expect(formatCompareSummary(result)).toContain('Input tokens (Claude reported): baseline 1320 · graphify 410')
+    expect(formatCompareSummary(result)).toContain('Effective input tokens (cache-adjusted): baseline 1300 · graphify 400')
     expect(formatCompareSummary(result)).toContain('Total tokens (Claude reported): baseline 1410 · graphify 480')
   })
 

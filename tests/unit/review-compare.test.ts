@@ -159,9 +159,15 @@ describe('review compare', () => {
     expect(result.report.verbose_prompt_tokens).toBe(estimateQueryTokens(verbosePrompt))
     expect(result.report.compact_prompt_tokens).toBe(estimateQueryTokens(compactPrompt))
     expect(result.report.reduction_ratio).toBeGreaterThan(1)
+    expect(result.report.verbose_effective_prompt_tokens).toBe(result.report.verbose_prompt_tokens)
+    expect(result.report.compact_effective_prompt_tokens).toBe(result.report.compact_prompt_tokens)
+    expect(result.report.effective_reduction_ratio).toBe(result.report.reduction_ratio)
     expect(verbosePrompt).toContain('"changed_files"')
     expect(compactPrompt).toContain('"review_context"')
     expect(compactPrompt).toContain('"supporting_paths"')
+    expect(verbosePrompt.indexOf('Mode: verbose')).toBeGreaterThan(verbosePrompt.indexOf('"changed_files"'))
+    expect(compactPrompt.indexOf('Mode: compact')).toBeGreaterThan(compactPrompt.indexOf('"review_context"'))
+    expect(formatReviewCompareSummary(result)).toContain('Effective prompt tokens')
   })
 
   it('allows nested output directories whose parent does not exist yet', () => {

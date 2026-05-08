@@ -511,7 +511,8 @@ describe('runBenchmark', () => {
             outputFile: string
           }) => {
             executions.push(execution)
-            const inputTokens = execution.question.includes('authentication') ? 320 : 180
+            const inputTokens = execution.question.includes('authentication') ? 280 : 170
+            const cacheReadTokens = execution.question.includes('authentication') ? 40 : 10
             const totalTokens = execution.question.includes('authentication') ? 360 : 210
             return {
               exitCode: 0,
@@ -521,9 +522,9 @@ describe('runBenchmark', () => {
                 result: `Answer for ${execution.question}\n`,
                 usage: {
                   input_tokens: inputTokens,
-                  output_tokens: totalTokens - inputTokens,
+                  output_tokens: totalTokens - inputTokens - cacheReadTokens,
                   cache_creation_input_tokens: 0,
-                  cache_read_input_tokens: 0,
+                  cache_read_input_tokens: cacheReadTokens,
                 },
               }),
               stderr: '',
@@ -553,11 +554,16 @@ describe('runBenchmark', () => {
       expect(benchmark.matched_question_count).toBe(2)
       expect(benchmark.unmatched_questions).toEqual(['xyzzy plugh zorkmid'])
       expect(benchmark.avg_query_tokens).toBe(250)
+      expect(benchmark.avg_effective_query_tokens).toBe(225)
+      expect(benchmark.avg_reused_context_tokens).toBe(25)
       expect(benchmark.avg_total_tokens).toBe(285)
+      expect(benchmark.effective_reduction_ratio).toBe(Number((benchmark.corpus_tokens / 225).toFixed(1)))
       expect(benchmark.per_question).toEqual([
         expect.objectContaining({
           question: 'how does authentication work',
           query_tokens: 320,
+          effective_query_tokens: 280,
+          reused_context_tokens: 40,
           total_tokens: 360,
           prompt_token_source: 'claude_reported_input',
           usage: expect.objectContaining({
@@ -573,6 +579,8 @@ describe('runBenchmark', () => {
         expect.objectContaining({
           question: 'what is the main entry point',
           query_tokens: 180,
+          effective_query_tokens: 170,
+          reused_context_tokens: 10,
           total_tokens: 210,
           prompt_token_source: 'claude_reported_input',
           usage: expect.objectContaining({
@@ -695,12 +703,17 @@ describe('printBenchmark', () => {
       matched_expected_label_count: 0,
       missing_expected_labels: [],
       avg_query_tokens: 410,
+      avg_effective_query_tokens: 400,
+      avg_reused_context_tokens: 10,
       avg_total_tokens: 480,
       reduction_ratio: 2.4,
+      effective_reduction_ratio: 2.5,
       per_question: [
         {
           question: 'how does authentication work',
           query_tokens: 410,
+          effective_query_tokens: 400,
+          reused_context_tokens: 10,
           total_tokens: 480,
           reduction: 2.4,
           expected_labels: [],
@@ -723,6 +736,7 @@ describe('printBenchmark', () => {
     const output = spy.mock.calls.flat().join('\n')
     expect(output).toContain('graphify runner-backed benchmark')
     expect(output).toContain('Avg input tokens (Claude reported): ~410')
+    expect(output).toContain('Avg effective input tokens (cache-adjusted): ~400')
     expect(output).toContain('Avg total tokens (Claude reported): ~480')
     expect(output).not.toContain('estimate fallback')
     expect(output).not.toContain('graphify token reduction benchmark')
