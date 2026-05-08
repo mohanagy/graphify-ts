@@ -31,12 +31,17 @@ export function buildContextSession(
 ): { session_state: ContextSessionState; session_delta: ContextSessionDelta } {
   const baseState = previous ?? createContextSessionState()
   const sortedRefs = [...refs].sort(compareRefs)
+  const seenRefs = new Set<string>()
   const added: ContextSessionDelta['added'] = []
   const updated: ContextSessionDelta['updated'] = []
   const reused_refs: string[] = []
 
   const nextRefs: ContextSessionState['refs'] = {}
   for (const ref of sortedRefs) {
+    if (seenRefs.has(ref.ref)) {
+      throw new Error(`Duplicate context session ref: ${ref.ref}`)
+    }
+    seenRefs.add(ref.ref)
     const tokenCount = ref.token_count ?? estimateQueryTokens(ref.content)
     const hash = hashContent(ref.content)
     nextRefs[ref.ref] = {
