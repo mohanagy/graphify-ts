@@ -483,32 +483,38 @@ describe('pr impact', () => {
     ])
   })
 
-  it('returns an empty review bundle when the budget cannot fit the first review node', () => {
+  it('keeps the first review node when it alone exceeds the review budget', () => {
     const root = createRepo()
     repoRoots.push(root)
     updateFile(root, 'src/auth.ts', (content) => content.replace('  const status = "ok"', '  const status = token.startsWith("Bearer ") ? "ok" : "fail"'))
 
     const result = analyzePrImpact(buildGraph(root), root, { budget: 1 })
 
-    expect(result.review_bundle).toEqual({
-      budget: 1,
-      token_count: 0,
-      nodes: [],
-      relationships: [],
-      community_context: [],
-      task_contract: expect.objectContaining({
-        task_kind: 'review',
-        required_evidence: ['change', 'supporting', 'impact'],
+    expect(result.review_bundle.budget).toBe(1)
+    expect(result.review_bundle.token_count).toBeGreaterThan(1)
+    expect(result.review_bundle.nodes).toHaveLength(1)
+    expect(result.review_bundle.nodes[0]).toEqual(expect.objectContaining({
+      label: 'authenticateUser',
+      evidence_class: 'change',
+      relevance_band: 'direct',
+    }))
+    expect(result.review_bundle.relationships).toEqual([])
+    expect(result.review_bundle.task_contract).toEqual(expect.objectContaining({
+      task_kind: 'review',
+      required_evidence: ['change', 'supporting', 'impact'],
+    }))
+    expect(result.review_bundle.claims).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        evidence_class: 'change',
+        node_labels: ['authenticateUser'],
       }),
-      claims: [],
-      expandable: expect.arrayContaining([
-        expect.objectContaining({ kind: 'nodes', evidence_class: 'change' }),
-        expect.objectContaining({ kind: 'nodes', evidence_class: 'supporting' }),
-      ]),
-      coverage: expect.objectContaining({
-        missing_required: ['change', 'supporting', 'impact'],
-      }),
-    })
+    ]))
+    expect(result.review_bundle.expandable).toEqual([
+      expect.objectContaining({ kind: 'nodes', evidence_class: 'supporting' }),
+    ])
+    expect(result.review_bundle.coverage).toEqual(expect.objectContaining({
+      missing_required: ['supporting', 'impact'],
+    }))
   })
 
   it('falls back to file-level seeds when nodes do not have line metadata', () => {

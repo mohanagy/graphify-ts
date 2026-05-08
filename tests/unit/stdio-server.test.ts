@@ -709,6 +709,7 @@ describe('stdio runtime', () => {
           node_id: expect.any(String),
         }),
       )
+      expect(retrieveDefaultPayload.matched_nodes[0]).not.toHaveProperty('evidence_class')
       expect(retrieveDefaultPayload.matched_nodes[0]).not.toHaveProperty('file_type')
       expect(retrieveDefaultPayload.matched_nodes[0]).not.toHaveProperty('community_label')
       expect(retrieveDefaultPayload.matched_nodes[0]).not.toHaveProperty('framework_boost')

@@ -125,8 +125,8 @@ function matchedNodeId(node: Pick<RetrieveMatchedNode, 'node_id'>): string | nul
   return typeof node.node_id === 'string' && node.node_id.length > 0 ? node.node_id : null
 }
 
-function stripRetrieveMatchedNodeIdentity<T extends RetrieveMatchedNode | CompactRetrieveMatchedNode>(node: T): Omit<T, 'node_id'> {
-  const { node_id: _nodeId, ...rest } = node
+function stripRetrieveMatchedNodeIdentity<T extends RetrieveMatchedNode | CompactRetrieveMatchedNode>(node: T): Omit<T, 'node_id' | 'evidence_class'> {
+  const { node_id: _nodeId, evidence_class: _evidenceClass, ...rest } = node
   return rest
 }
 

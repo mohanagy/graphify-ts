@@ -10,6 +10,7 @@ import { extractJs } from '../../src/pipeline/extract.js'
 import { inspectReduxModuleExports } from '../../src/pipeline/extract/frameworks/redux.js'
 import {
   compactRetrieveResult,
+  compactRetrieveResultForStdio,
   reciprocalRankFuse,
   retrieveContext,
   scoreNode,
@@ -2712,6 +2713,22 @@ describe('retrieve', () => {
       })
 
       expect(compactResult.matched_nodes[0]).not.toHaveProperty('node_kind')
+    })
+
+    it('strips evidence_class from compact stdio retrieve payloads', () => {
+      const graph = buildExpansionGraph()
+      const rawResult = retrieveContext(graph, { question: 'auth', budget: 1 })
+
+      expect(rawResult.matched_nodes[0]?.evidence_class).toBe('primary')
+
+      const compactResult = compactRetrieveResultForStdio(rawResult)
+
+      expect(compactResult.matched_nodes[0]).toEqual(expect.objectContaining({
+        label: rawResult.matched_nodes[0]?.label,
+      }))
+      expect(compactResult.matched_nodes[0]).not.toHaveProperty('evidence_class')
+      expect(compactResult.claims).toEqual(rawResult.claims)
+      expect(compactResult.coverage).toEqual(rawResult.coverage)
     })
 
     it('assigns higher match_score to direct matches than neighbors', () => {
