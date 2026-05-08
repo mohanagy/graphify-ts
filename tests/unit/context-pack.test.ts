@@ -432,6 +432,66 @@ describe('context-pack', () => {
         ],
       })
     })
+
+    it('ignores non-finite expandable ranges and falls back to entry line numbers', () => {
+      const pack = compileContextPack({
+        task_contract: classifyTaskContract('explain', { budget: 10, prompt: 'Explain auth flow' }),
+        nodes: [
+          nodeCandidate({
+            node_id: 'auth_service',
+            label: 'AuthService',
+            source_file: 'src/auth.ts',
+            line_number: 10,
+            file_type: 'code',
+            snippet: 'export function AuthService() {}',
+            match_score: 9,
+            relevance_band: 'direct',
+            community: 0,
+            community_label: 'Auth',
+          }, 'primary', 10),
+          {
+            ...nodeCandidate({
+              node_id: 'logger',
+              label: 'Logger',
+              source_file: 'src/logger.ts',
+              line_number: 3,
+              file_type: 'code',
+              snippet: 'export const Logger = console',
+              match_score: 2,
+              relevance_band: 'peripheral',
+              community: 2,
+              community_label: 'Observability',
+            }, 'structural', 9),
+            expandable_ref: {
+              node_id: 'logger',
+              label: 'Logger',
+              source_file: 'src/logger.ts',
+              line_range: {
+                start_line: Number.NaN,
+                end_line: Number.POSITIVE_INFINITY,
+              },
+            },
+          },
+        ],
+      })
+
+      expect(pack.expandable[0]?.preview[0]).toEqual({
+        node_id: 'logger',
+        label: 'Logger',
+        source_file: 'src/logger.ts',
+        line_range: {
+          start_line: 3,
+          end_line: 3,
+        },
+      })
+      expect(pack.expandable[0]?.follow_up.focus_ranges).toEqual([
+        {
+          source_file: 'src/logger.ts',
+          start_line: 3,
+          end_line: 3,
+        },
+      ])
+    })
   })
 
   describe('compactContextPack', () => {

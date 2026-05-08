@@ -198,9 +198,9 @@ function normalizeExpandableLineRange(range: ContextPackExpandableLineRange | un
     return undefined
   }
 
-  const start = Math.trunc(range.start_line)
-  const end = Math.trunc(range.end_line)
-  if (start < 1 || end < 1) {
+  const start = range.start_line
+  const end = range.end_line
+  if (!Number.isInteger(start) || start < 1 || !Number.isInteger(end) || end < 1) {
     return undefined
   }
 
