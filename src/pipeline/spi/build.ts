@@ -1,4 +1,5 @@
-// SPI v1 — file + symbol + call layer builder (slices 1a, 1b, 2a of #72).
+// SPI v1 — file + symbol + call + type layer builder
+// (slices 1a, 1b, 2a, 2b of #72).
 //
 // Produces a SemanticProgramIndex containing:
 //   - workspace metadata + fingerprint
@@ -9,14 +10,20 @@
 //   - declares edges (file -> symbol) for every emitted symbol
 //   - calls edges (caller symbol -> callee symbol), resolved via the
 //     TypeScript type checker. High-confidence when the resolution is
-//     unique and points at a SpiSymbol; medium when the same name has
-//     sibling overload declarations; skipped when the callee resolves
-//     outside the workspace (node_modules / .d.ts) or to a non-SpiSymbol
-//     construct (e.g. an arrow function inside an array literal).
+//     unique; medium when the callee identifier has sibling overload
+//     declarations.
+//   - type edges via the same type checker pass:
+//       * extends   (class -> class, interface -> interface)
+//       * implements (class -> interface)
+//       * param_type  (function/method -> type/interface/class)
+//       * return_type (function/method -> type/interface/class)
+//     All emitted at high confidence; skipped silently for builtins
+//     (string, number, etc.), inline object types, generic parameters,
+//     and unions/intersections that don't map to a single declaration.
 //
-// Type relationships, tests, framework, and diff overlay land in subsequent
-// slices of #72. This module never touches the existing pipeline; it is
-// pure additive substrate.
+// Tests, framework, and diff overlay land in subsequent slices of #72.
+// This module never touches the existing pipeline; it is pure additive
+// substrate.
 
 import { createHash } from 'node:crypto'
 import {
@@ -86,7 +93,7 @@ export function buildSpi(opts: BuildSpiOptions): SemanticProgramIndex {
   if (!existsSync(root) || !statSync(root).isDirectory()) {
     throw new Error(`SPI build: workspace root not found or not a directory: ${root}`)
   }
-  const extractorVersion = opts.extractorVersion ?? 'spi-v1.0.0-slice-2a'
+  const extractorVersion = opts.extractorVersion ?? 'spi-v1.0.0-slice-2b'
   const now = opts.now ?? (() => new Date())
 
   const files: SpiFile[] = []
@@ -131,9 +138,9 @@ export function buildSpi(opts: BuildSpiOptions): SemanticProgramIndex {
     visitFile(sourceFile, file, root, pathToFileId, symbols, edges, diagnostics)
   }
 
-  // Slice 2a: a second pass uses ts.Program + the type checker to resolve
-  // call expressions and emit `calls` edges between SpiSymbols.
-  addCallEdges({ files, root, pathToFileId, symbols, edges, diagnostics })
+  // Slices 2a + 2b: a second pass uses ts.Program + the type checker to
+  // emit calls / extends / implements / param_type / return_type edges.
+  addTypeCheckerEdges({ files, root, pathToFileId, symbols, edges, diagnostics })
 
   files.sort((a, b) => a.path.localeCompare(b.path))
   symbols.sort((a, b) => a.id.localeCompare(b.id))
@@ -535,10 +542,10 @@ function toPosix(p: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Call layer (slice 2a)
+// Type-checker pass: call layer (slice 2a) + type layer (slice 2b)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type CallEdgeContext = {
+type TypeCheckerEdgeContext = {
   files: SpiFile[]
   root: string
   pathToFileId: Map<string, string>
@@ -547,7 +554,7 @@ type CallEdgeContext = {
   diagnostics: SpiDiagnostic[]
 }
 
-function addCallEdges(ctx: CallEdgeContext): void {
+function addTypeCheckerEdges(ctx: TypeCheckerEdgeContext): void {
   const { files, root, pathToFileId, edges, diagnostics } = ctx
   const rootNames = files.map((f) => toPosix(join(root, f.path)))
   if (rootNames.length === 0) return
@@ -563,18 +570,20 @@ function addCallEdges(ctx: CallEdgeContext): void {
     diagnostics.push({
       id: 'spi.call.program-create-failed',
       level: 'warn',
-      message: `SPI call layer skipped: ts.createProgram threw (${(err as Error).message})`,
+      message: `SPI call+type layer skipped: ts.createProgram threw (${(err as Error).message})`,
     })
     return
   }
   const checker = program.getTypeChecker()
-  const seen = new Set<string>()
+  const seenCalls = new Set<string>()
+  const seenTypeEdges = new Set<string>()
 
   for (const file of files) {
     const abs = toPosix(join(root, file.path))
     const sourceFile = program.getSourceFile(abs)
     if (!sourceFile) continue
-    walkCallExpressions(sourceFile, file.id, checker, pathToFileId, edges, seen)
+    walkCallExpressions(sourceFile, file.id, checker, pathToFileId, edges, seenCalls)
+    walkTypeReferences(sourceFile, file.id, checker, pathToFileId, edges, seenTypeEdges)
   }
 }
 
@@ -759,4 +768,175 @@ function defaultCompilerOptions(): ts.CompilerOptions {
     esModuleInterop: true,
     isolatedModules: true,
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Type layer (slice 2b): extends / implements / param_type / return_type edges
+// ─────────────────────────────────────────────────────────────────────────────
+
+type TypeEdgeKind = 'extends' | 'implements' | 'param_type' | 'return_type'
+
+function walkTypeReferences(
+  sourceFile: ts.SourceFile,
+  fileId: string,
+  checker: ts.TypeChecker,
+  pathToFileId: Map<string, string>,
+  edges: SpiEdge[],
+  seen: Set<string>,
+): void {
+  const visit = (node: ts.Node): void => {
+    if (ts.isClassDeclaration(node) && node.name) {
+      const fromId = makeSymbolId(fileId, 'class', node.name.text)
+      visitHeritageClauses(node.heritageClauses, fromId, sourceFile, fileId, checker, pathToFileId, edges, seen)
+    } else if (ts.isInterfaceDeclaration(node)) {
+      const fromId = makeSymbolId(fileId, 'interface', node.name.text)
+      visitHeritageClauses(node.heritageClauses, fromId, sourceFile, fileId, checker, pathToFileId, edges, seen)
+    }
+
+    if (
+      ts.isFunctionDeclaration(node) ||
+      ts.isMethodDeclaration(node) ||
+      ts.isConstructorDeclaration(node) ||
+      ts.isGetAccessorDeclaration(node) ||
+      ts.isSetAccessorDeclaration(node)
+    ) {
+      const fromId = lookupSpiSymbolForDeclaration(node, fileId)
+      if (fromId) visitSignatureTypes(node, fromId, sourceFile, fileId, checker, pathToFileId, edges, seen)
+    }
+
+    if ((ts.isFunctionExpression(node) || ts.isArrowFunction(node)) && ts.isVariableDeclaration(node.parent)) {
+      // Const/let/var holding an arrow function: param/return types attribute
+      // to the variable's SpiSymbol.
+      const fromId = lookupSpiSymbolForDeclaration(node, fileId)
+      if (fromId) visitSignatureTypes(node, fromId, sourceFile, fileId, checker, pathToFileId, edges, seen)
+    }
+
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+}
+
+function visitHeritageClauses(
+  clauses: ts.NodeArray<ts.HeritageClause> | undefined,
+  fromId: string,
+  sourceFile: ts.SourceFile,
+  fileId: string,
+  checker: ts.TypeChecker,
+  pathToFileId: Map<string, string>,
+  edges: SpiEdge[],
+  seen: Set<string>,
+): void {
+  if (!clauses) return
+  for (const clause of clauses) {
+    const kind: TypeEdgeKind = clause.token === ts.SyntaxKind.ExtendsKeyword ? 'extends' : 'implements'
+    for (const heritageType of clause.types) {
+      // heritageType is ExpressionWithTypeArguments. Its `.expression` is the
+      // identifier or property access that names the parent type.
+      const symbol = followAlias(checker.getSymbolAtLocation(heritageType.expression), checker)
+      emitTypeEdgeFromSymbol(fromId, kind, symbol, heritageType, sourceFile, fileId, pathToFileId, edges, seen)
+    }
+  }
+}
+
+function visitSignatureTypes(
+  node: ts.SignatureDeclaration,
+  fromId: string,
+  sourceFile: ts.SourceFile,
+  fileId: string,
+  checker: ts.TypeChecker,
+  pathToFileId: Map<string, string>,
+  edges: SpiEdge[],
+  seen: Set<string>,
+): void {
+  for (const param of node.parameters) {
+    if (param.type) {
+      const symbol = symbolForTypeNode(param.type, checker)
+      emitTypeEdgeFromSymbol(fromId, 'param_type', symbol, param.type, sourceFile, fileId, pathToFileId, edges, seen)
+    }
+  }
+  if (node.type) {
+    const symbol = symbolForTypeNode(node.type, checker)
+    emitTypeEdgeFromSymbol(fromId, 'return_type', symbol, node.type, sourceFile, fileId, pathToFileId, edges, seen)
+  }
+}
+
+function symbolForTypeNode(typeNode: ts.TypeNode, checker: ts.TypeChecker): ts.Symbol | undefined {
+  // Direct TypeReference: walk to the typeName for the most reliable lookup.
+  if (ts.isTypeReferenceNode(typeNode)) {
+    return followAlias(checker.getSymbolAtLocation(typeNode.typeName), checker)
+  }
+  // Other type nodes (object literal types, unions, intersections, builtins)
+  // fall back to the resolved type's symbol. Builtins return undefined or a
+  // synthetic intrinsic symbol with no usable declarations — naturally
+  // skipped downstream.
+  return followAlias(checker.getTypeFromTypeNode(typeNode).getSymbol(), checker)
+}
+
+// Imported types come back as alias symbols whose own declaration is the
+// ImportSpecifier, not the underlying interface/class/type-alias/enum. Walk
+// the alias chain so the lookup lands on the real declaration in the
+// originating file.
+function followAlias(symbol: ts.Symbol | undefined, checker: ts.TypeChecker): ts.Symbol | undefined {
+  if (!symbol) return undefined
+  if ((symbol.flags & ts.SymbolFlags.Alias) === 0) return symbol
+  try {
+    return checker.getAliasedSymbol(symbol)
+  } catch {
+    return undefined
+  }
+}
+
+function emitTypeEdgeFromSymbol(
+  fromId: string,
+  kind: TypeEdgeKind,
+  symbol: ts.Symbol | undefined,
+  evidenceNode: ts.Node,
+  sourceFile: ts.SourceFile,
+  fileId: string,
+  pathToFileId: Map<string, string>,
+  edges: SpiEdge[],
+  seen: Set<string>,
+): void {
+  if (!symbol) return
+  const decl = symbol.declarations?.[0]
+  if (!decl) return
+  const declSourceFile = decl.getSourceFile()
+  if (declSourceFile.isDeclarationFile) return
+  const targetFileId = pathToFileId.get(declSourceFile.fileName)
+  if (!targetFileId) return
+
+  const toId = lookupTypeReferenceSymbolId(decl, targetFileId)
+  if (!toId) return
+  if (toId === fromId) return // skip self-references
+
+  const dedupeKey = `${fromId}|${toId}|${kind}`
+  if (seen.has(dedupeKey)) return
+  seen.add(dedupeKey)
+
+  edges.push({
+    from: fromId,
+    to: toId,
+    kind,
+    confidence: 'high',
+    source: 'typescript-semantic',
+    evidence: { file_id: fileId, range: rangeOf(evidenceNode, sourceFile) },
+  })
+}
+
+// Type-side counterpart to lookupSpiSymbolForDeclaration: maps
+// class/interface/type-alias/enum declarations onto their SpiSymbol id.
+function lookupTypeReferenceSymbolId(decl: ts.Declaration, fileId: string): string | null {
+  if (ts.isClassDeclaration(decl) && decl.name) {
+    return makeSymbolId(fileId, 'class', decl.name.text)
+  }
+  if (ts.isInterfaceDeclaration(decl)) {
+    return makeSymbolId(fileId, 'interface', decl.name.text)
+  }
+  if (ts.isTypeAliasDeclaration(decl)) {
+    return makeSymbolId(fileId, 'type-alias', decl.name.text)
+  }
+  if (ts.isEnumDeclaration(decl)) {
+    return makeSymbolId(fileId, 'enum', decl.name.text)
+  }
+  return null
 }
