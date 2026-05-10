@@ -35,6 +35,8 @@ function reviewBundleWithLabels(labels: ReadonlyArray<string>): PrImpactResult['
       snippet: null,
       match_score: 0,
       relevance_band: 'direct',
+      community: null,
+      community_label: null,
     })),
     relationships: [],
     community_context: [],
