@@ -151,8 +151,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'community_overview',
-    description:
-      'Get a micro-level overview of all communities — names, sizes, and top nodes. Use this first to understand the codebase structure before diving into specific communities.',
+    description: 'Overview of all communities: names, sizes, top nodes. Call first to map the codebase before zooming in.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -160,76 +159,70 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'impact',
-    description:
-      'Analyze the blast radius of changing a node. Returns direct dependents, transitive dependents, affected files, and affected communities. Use this before making changes to understand what could break.',
+    description: 'Blast-radius for a node: direct + transitive dependents, affected files and communities.',
     inputSchema: {
       type: 'object',
       required: ['label'],
       properties: {
-        label: { type: 'string', description: 'Label of the node to analyze impact for' },
-        depth: { type: 'number', description: 'Maximum traversal depth (default 3, max 5)' },
+        label: { type: 'string', description: 'Node label' },
+        depth: { type: 'number', description: 'Max traversal depth (default 3, max 5)' },
         edge_types: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Optional: limit to specific edge types (e.g. ["calls", "imports_from"])',
+          description: 'Limit to edge types (e.g. ["calls","imports_from"])',
         },
-        verbose: { type: 'boolean', description: 'Optional: return the legacy verbose impact payload instead of the default compact response.' },
-        compact: { type: 'boolean', description: 'Deprecated alias: use verbose=false or omit both flags for the default compact response.' },
+        verbose: { type: 'boolean', description: 'Return verbose payload (default: compact)' },
       },
     },
   },
   {
     name: 'call_chain',
-    description:
-      'Find all execution paths between two nodes filtered by call/import edges. Returns ordered chains showing how execution flows from source to target.',
+    description: 'Ordered execution paths between two nodes via call/import edges.',
     inputSchema: {
       type: 'object',
       required: ['source', 'target'],
       properties: {
         source: { type: 'string', description: 'Starting node label' },
         target: { type: 'string', description: 'Target node label' },
-        max_hops: { type: 'number', description: 'Maximum chain length (default 8)' },
+        max_hops: { type: 'number', description: 'Max chain length (default 8)' },
         edge_types: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Edge types to follow (default: ["calls", "imports_from"])',
+          description: 'Edge types to follow (default: ["calls","imports_from"])',
         },
       },
     },
   },
   {
     name: 'pr_impact',
-    description:
-      'Analyze the impact of current git changes against the knowledge graph. Parses git diff, finds affected nodes, and computes blast radius across the codebase. Use before creating a PR to understand risk.',
+    description: 'Blast-radius of current git changes: parses diff, finds affected nodes, computes review bundle.',
     inputSchema: {
       type: 'object',
       properties: {
-        base_branch: { type: 'string', description: 'Base branch to diff against (default: auto-detect main/master)' },
-        depth: { type: 'number', description: 'Blast radius depth (default 3)' },
+        base_branch: { type: 'string', description: 'Base branch (default: auto-detect main/master)' },
+        depth: { type: 'number', description: 'Blast-radius depth (default 3)' },
         budget: { type: 'number', description: 'Review bundle token budget (default 2000)' },
-        verbose: { type: 'boolean', description: 'Optional: return the legacy verbose pr_impact payload instead of the default compact response.' },
-        compact: { type: 'boolean', description: 'Deprecated alias: use verbose=false or omit both flags for the default compact response.' },
+        verbose: { type: 'boolean', description: 'Return verbose payload (default: compact)' },
       },
     },
   },
   {
     name: 'retrieve',
-    description:
-      'Retrieve relevant context from the knowledge graph for a natural language question. Returns matched nodes with code snippets, relationships, community context, and structural signals (god nodes, bridges). Use this as the primary tool for answering codebase questions.',
+    description: 'Graph-relevant context for a natural-language question: matched nodes + snippets, relationships, community context, structural signals.',
     inputSchema: {
       type: 'object',
       required: ['question', 'budget'],
       properties: {
-        question: { type: 'string', description: 'Natural language question about the codebase' },
-        budget: { type: 'number', description: 'Maximum tokens to return in the context bundle' },
-        community: { type: 'number', description: 'Optional: limit retrieval to one community id' },
-        file_type: { type: 'string', description: 'Optional: limit retrieval to one file type (e.g. code, document)' },
-        semantic: { type: 'boolean', description: 'Optional: enable local embedding-based semantic fallback for conceptual queries.' },
-        semantic_model: { type: 'string', description: 'Optional: override the local embedding model or local model path used when semantic=true.' },
-        rerank: { type: 'boolean', description: 'Optional: enable local cross-encoder reranking for the candidate pool.' },
-        rerank_model: { type: 'string', description: 'Optional: override the local reranker model or local model path used when rerank=true.' },
-        verbose: { type: 'boolean', description: 'Optional: return the legacy verbose retrieve payload instead of the default compact response.' },
-        compact: { type: 'boolean', description: 'Deprecated alias: use verbose=false or omit both flags for the default compact response.' },
+        question: { type: 'string', description: 'Natural-language question' },
+        budget: { type: 'number', description: 'Max tokens in the context bundle' },
+        community: { type: 'number', description: 'Filter to one community id' },
+        file_type: { type: 'string', description: 'Filter to one file type (e.g. code, document)' },
+        semantic: { type: 'boolean', description: 'Enable embedding-based semantic fallback' },
+        semantic_model: { type: 'string', description: 'Override semantic model or local path' },
+        rerank: { type: 'boolean', description: 'Enable cross-encoder reranking' },
+        rerank_model: { type: 'string', description: 'Override reranker model or local path' },
+        verbose: { type: 'boolean', description: 'Return verbose payload (default: compact)' },
+        retrieval_level: { type: 'number', description: 'Override retrieval-gate level 0-5 (#75)' },
       },
     },
   },

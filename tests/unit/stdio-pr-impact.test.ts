@@ -332,7 +332,11 @@ describe('stdio pr impact', () => {
 
     expect(tool?.inputSchema.properties.budget).toEqual(expect.objectContaining({ type: 'number' }))
     expect(tool?.inputSchema.properties.verbose).toEqual(expect.objectContaining({ type: 'boolean' }))
-    expect(tool?.inputSchema.properties.compact).toEqual(expect.objectContaining({ type: 'boolean' }))
+    // The `compact` flag was de-advertised in #82 to shrink cold-start
+    // schema overhead. The runtime still tolerates it for backward compat
+    // (the handler validates it on receipt) but it is no longer surfaced
+    // in tools/list. The runtime tolerance is exercised below.
+    expect(tool?.inputSchema.properties.compact).toBeUndefined()
 
     const response = await Promise.resolve(handleStdioRequest(graphPath, {
       id: 2,
