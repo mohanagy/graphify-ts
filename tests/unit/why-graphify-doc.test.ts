@@ -227,6 +227,59 @@ describe('public marketing copy honesty', () => {
     })
   })
 
+  describe('docs/designs/2026-05-10-spi-v1.md', () => {
+    const content = readDoc('docs/designs/2026-05-10-spi-v1.md')
+
+    it('declares the design scope and links the tracking issue (#70)', () => {
+      expect(content).toMatch(/#70|issues\/70/)
+      expect(content).toContain('v0.14-substrate')
+      expect(content).toContain('design only')
+    })
+
+    it('locks in the SemanticProgramIndex top-level shape', () => {
+      expect(content).toContain('type SemanticProgramIndex')
+      expect(content).toContain('version: 1')
+      expect(content).toContain('files:')
+      expect(content).toContain('symbols:')
+      expect(content).toContain('edges:')
+      expect(content).toContain('diagnostics:')
+    })
+
+    it('documents every layer #70 lists in the issue body', () => {
+      for (const layer of [
+        'File layer',
+        'Symbol layer',
+        'Call layer',
+        'Type layer',
+        'Test layer',
+        'Diff layer',
+        'Framework layer',
+      ]) {
+        expect(content).toContain(layer)
+      }
+    })
+
+    it('locks confidence to {high, medium, low} and source provenance to a closed set', () => {
+      expect(content).toMatch(/confidence:\s*'high'\s*\|\s*'medium'\s*\|\s*'low'/)
+      expect(content).toContain("'typescript-semantic'")
+      expect(content).toContain("'tree-sitter'")
+      expect(content).toContain("'framework-decorator'")
+      expect(content).toContain("'heuristic'")
+    })
+
+    it('cross-links the consuming and adjacent issues so the design is discoverable', () => {
+      for (const ref of ['#69', '#71', '#72', '#73', '#74', '#77', '#78']) {
+        expect(content).toContain(ref)
+      }
+    })
+
+    it('explicitly lists non-goals and open questions to scope the design honestly', () => {
+      expect(content).toContain('## Non-goals')
+      expect(content).toContain('## Open questions')
+      expect(content).toContain('## Risks')
+    })
+  })
+
   describe('examples/mcp-tool-examples.md', () => {
     const content = readDoc('examples/mcp-tool-examples.md')
     const lower = content.toLowerCase()
