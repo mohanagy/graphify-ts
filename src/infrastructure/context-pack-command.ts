@@ -4,6 +4,8 @@ import type { KnowledgeGraph } from '../contracts/graph.js'
 import type { TaskContextPlan } from '../contracts/task-context-plan.js'
 import type { PackCliOptions } from '../cli/parser.js'
 import { classifyTaskContract, compileContextPack, estimateContextPackEntryTokens, type ContextPackNodeCandidate } from '../runtime/context-pack.js'
+import type { RetrievalGateDecision } from '../contracts/retrieval-gate.js'
+import { classifyRetrievalLevel } from '../runtime/retrieval-gate.js'
 import { pickImpactTarget } from '../runtime/context-pack-target.js'
 import { analyzeImpact, compactImpactResult, type ImpactResult } from '../runtime/impact.js'
 import { analyzePrImpact, compactPrImpactResult, type PrImpactResult } from '../runtime/pr-impact.js'
@@ -39,6 +41,7 @@ interface ContextPlaneMetadata {
   coverage: ContextPackCoverage
   missing_context: ContextPackEvidenceClass[]
   missing_semantic: ContextPackCoverage['missing_semantic']
+  retrieval_gate?: RetrievalGateDecision
 }
 
 function emptyCoverage(): ContextPackCoverage {
@@ -60,6 +63,7 @@ function contextMetadata(
     claims: ContextPackClaim[]
     expandable: ContextPackExpandableRef[]
     coverage: ContextPackCoverage
+    retrieval_gate: RetrievalGateDecision
   }>,
 ): ContextPlaneMetadata {
   const coverage = payload.coverage ?? emptyCoverage()
@@ -69,6 +73,7 @@ function contextMetadata(
     coverage,
     missing_context: coverage.missing_required,
     missing_semantic: coverage.missing_semantic,
+    ...(payload.retrieval_gate ? { retrieval_gate: payload.retrieval_gate } : {}),
   }
 }
 
@@ -149,6 +154,7 @@ function impactMetadata(
     task_contract: classifyTaskContract('impact', { budget, prompt, task_intent: taskIntent }),
     nodes: candidates,
     community_context: result.affected_communities,
+    retrieval_gate: classifyRetrievalLevel({ prompt }),
   })
 
   return contextMetadata(pack)
