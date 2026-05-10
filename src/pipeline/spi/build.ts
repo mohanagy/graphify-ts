@@ -1,4 +1,4 @@
-// SPI v1 — file + symbol layer builder (slices 1a + 1b of #72).
+// SPI v1 — file + symbol + call layer builder (slices 1a, 1b, 2a of #72).
 //
 // Produces a SemanticProgramIndex containing:
 //   - workspace metadata + fingerprint
@@ -7,10 +7,16 @@
 //   - one SpiSymbol per declared function/class/interface/type/enum/method/
 //     constant/variable/namespace in each file
 //   - declares edges (file -> symbol) for every emitted symbol
+//   - calls edges (caller symbol -> callee symbol), resolved via the
+//     TypeScript type checker. High-confidence when the resolution is
+//     unique and points at a SpiSymbol; medium when the same name has
+//     sibling overload declarations; skipped when the callee resolves
+//     outside the workspace (node_modules / .d.ts) or to a non-SpiSymbol
+//     construct (e.g. an arrow function inside an array literal).
 //
-// Calls, type relationships, tests, framework, and diff overlay land in
-// subsequent slices of #72. This module never touches the existing pipeline;
-// it is pure additive substrate.
+// Type relationships, tests, framework, and diff overlay land in subsequent
+// slices of #72. This module never touches the existing pipeline; it is
+// pure additive substrate.
 
 import { createHash } from 'node:crypto'
 import {
@@ -80,7 +86,7 @@ export function buildSpi(opts: BuildSpiOptions): SemanticProgramIndex {
   if (!existsSync(root) || !statSync(root).isDirectory()) {
     throw new Error(`SPI build: workspace root not found or not a directory: ${root}`)
   }
-  const extractorVersion = opts.extractorVersion ?? 'spi-v1.0.0-slice-1b'
+  const extractorVersion = opts.extractorVersion ?? 'spi-v1.0.0-slice-2a'
   const now = opts.now ?? (() => new Date())
 
   const files: SpiFile[] = []
@@ -121,6 +127,10 @@ export function buildSpi(opts: BuildSpiOptions): SemanticProgramIndex {
     )
     visitFile(sourceFile, file, root, pathToFileId, symbols, edges, diagnostics)
   }
+
+  // Slice 2a: a second pass uses ts.Program + the type checker to resolve
+  // call expressions and emit `calls` edges between SpiSymbols.
+  addCallEdges({ files, root, pathToFileId, symbols, edges, diagnostics })
 
   files.sort((a, b) => a.path.localeCompare(b.path))
   symbols.sort((a, b) => a.id.localeCompare(b.id))
@@ -519,4 +529,231 @@ function workspaceFingerprint(root: string, extractorVersion: string): string {
 
 function toPosix(p: string): string {
   return p.split('\\').join('/')
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Call layer (slice 2a)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type CallEdgeContext = {
+  files: SpiFile[]
+  root: string
+  pathToFileId: Map<string, string>
+  symbols: SpiSymbol[]
+  edges: SpiEdge[]
+  diagnostics: SpiDiagnostic[]
+}
+
+function addCallEdges(ctx: CallEdgeContext): void {
+  const { files, root, pathToFileId, edges, diagnostics } = ctx
+  const rootNames = files.map((f) => join(root, f.path))
+  if (rootNames.length === 0) return
+
+  const compilerOptions = loadCompilerOptions(root)
+  let program: ts.Program
+  try {
+    program = ts.createProgram({ rootNames, options: compilerOptions })
+  } catch (err) {
+    // ts.createProgram can throw on misconfigured workspaces (e.g., circular
+    // path mappings). Record a diagnostic so the failure is visible without
+    // tanking the rest of the index.
+    diagnostics.push({
+      id: 'spi.call.program-create-failed',
+      level: 'warn',
+      message: `SPI call layer skipped: ts.createProgram threw (${(err as Error).message})`,
+    })
+    return
+  }
+  const checker = program.getTypeChecker()
+  const seen = new Set<string>()
+
+  for (const file of files) {
+    const abs = join(root, file.path)
+    const sourceFile = program.getSourceFile(abs)
+    if (!sourceFile) continue
+    walkCallExpressions(sourceFile, file.id, checker, pathToFileId, edges, seen)
+  }
+}
+
+function walkCallExpressions(
+  sourceFile: ts.SourceFile,
+  fileId: string,
+  checker: ts.TypeChecker,
+  pathToFileId: Map<string, string>,
+  edges: SpiEdge[],
+  seen: Set<string>,
+): void {
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callerId = findEnclosingSpiSymbolId(node, fileId)
+      if (callerId) {
+        const callee = resolveCallee(node, checker, pathToFileId)
+        if (callee && callee.id !== callerId) {
+          const dedupeKey = `${callerId}|${callee.id}`
+          if (!seen.has(dedupeKey)) {
+            seen.add(dedupeKey)
+            edges.push({
+              from: callerId,
+              to: callee.id,
+              kind: 'calls',
+              confidence: callee.confidence,
+              source: 'typescript-semantic',
+              evidence: { file_id: fileId, range: rangeOf(node, sourceFile) },
+            })
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+}
+
+function findEnclosingSpiSymbolId(callExpr: ts.CallExpression, fileId: string): string | null {
+  let current: ts.Node | undefined = callExpr.parent
+  while (current) {
+    if (ts.isFunctionDeclaration(current) && current.name) {
+      return makeSymbolId(fileId, 'function', current.name.text)
+    }
+    if (ts.isMethodDeclaration(current) && current.name && ts.isIdentifier(current.name)) {
+      const cls = current.parent
+      if (ts.isClassDeclaration(cls) && cls.name) {
+        return makeSymbolId(fileId, 'method', `${cls.name.text}.${current.name.text}`)
+      }
+    }
+    if (ts.isConstructorDeclaration(current)) {
+      const cls = current.parent
+      if (ts.isClassDeclaration(cls) && cls.name) {
+        return makeSymbolId(fileId, 'method', `${cls.name.text}.constructor`)
+      }
+    }
+    if (
+      (ts.isGetAccessorDeclaration(current) || ts.isSetAccessorDeclaration(current)) &&
+      current.name &&
+      ts.isIdentifier(current.name)
+    ) {
+      const cls = current.parent
+      if (ts.isClassDeclaration(cls) && cls.name) {
+        return makeSymbolId(fileId, 'method', `${cls.name.text}.${current.name.text}`)
+      }
+    }
+    if (ts.isVariableDeclaration(current) && ts.isIdentifier(current.name)) {
+      const list = current.parent
+      const stmt = list.parent
+      // Only top-level variable statements have a SpiSymbol in v1 — local
+      // variables inside another function aren't emitted, so keep walking up
+      // past them until we find an enclosing function/method/class.
+      if (ts.isVariableStatement(stmt) && ts.isSourceFile(stmt.parent)) {
+        const isConst = (stmt.declarationList.flags & ts.NodeFlags.Const) !== 0
+        const kind: SpiSymbolKind = isConst ? 'constant' : 'variable'
+        return makeSymbolId(fileId, kind, current.name.text)
+      }
+    }
+    current = current.parent
+  }
+  return null
+}
+
+function resolveCallee(
+  callExpr: ts.CallExpression,
+  checker: ts.TypeChecker,
+  pathToFileId: Map<string, string>,
+): { id: string; confidence: 'high' | 'medium' | 'low' } | null {
+  const signature = checker.getResolvedSignature(callExpr)
+  if (!signature) return null
+  const decl = signature.getDeclaration() as ts.Declaration | undefined
+  if (!decl) return null
+
+  const sourceFile = decl.getSourceFile()
+  if (sourceFile.isDeclarationFile) return null
+  const targetFileId = pathToFileId.get(sourceFile.fileName)
+  if (!targetFileId) return null
+
+  const id = lookupSpiSymbolForDeclaration(decl, targetFileId)
+  if (!id) return null
+
+  // Confidence: medium when the callee identifier has multiple declarations
+  // (overloads, ambient + impl), high otherwise.
+  const exprSymbol = checker.getSymbolAtLocation(callExpr.expression)
+    ?? (callExpr.expression.kind === ts.SyntaxKind.PropertyAccessExpression
+      ? checker.getSymbolAtLocation((callExpr.expression as ts.PropertyAccessExpression).name)
+      : undefined)
+  const overloadCount = exprSymbol?.declarations?.length ?? 1
+  const confidence: 'high' | 'medium' = overloadCount > 1 ? 'medium' : 'high'
+  return { id, confidence }
+}
+
+function lookupSpiSymbolForDeclaration(decl: ts.Declaration, fileId: string): string | null {
+  if (ts.isFunctionDeclaration(decl) && decl.name) {
+    return makeSymbolId(fileId, 'function', decl.name.text)
+  }
+  if (ts.isMethodDeclaration(decl) && decl.name && ts.isIdentifier(decl.name)) {
+    const cls = decl.parent
+    if (ts.isClassDeclaration(cls) && cls.name) {
+      return makeSymbolId(fileId, 'method', `${cls.name.text}.${decl.name.text}`)
+    }
+  }
+  if (ts.isConstructorDeclaration(decl)) {
+    const cls = decl.parent
+    if (ts.isClassDeclaration(cls) && cls.name) {
+      return makeSymbolId(fileId, 'method', `${cls.name.text}.constructor`)
+    }
+  }
+  if (
+    (ts.isGetAccessorDeclaration(decl) || ts.isSetAccessorDeclaration(decl)) &&
+    decl.name &&
+    ts.isIdentifier(decl.name)
+  ) {
+    const cls = decl.parent
+    if (ts.isClassDeclaration(cls) && cls.name) {
+      return makeSymbolId(fileId, 'method', `${cls.name.text}.${decl.name.text}`)
+    }
+  }
+  if (ts.isFunctionExpression(decl) || ts.isArrowFunction(decl)) {
+    const vd = decl.parent
+    if (ts.isVariableDeclaration(vd) && ts.isIdentifier(vd.name)) {
+      const stmt = vd.parent.parent
+      if (ts.isVariableStatement(stmt)) {
+        const isConst = (stmt.declarationList.flags & ts.NodeFlags.Const) !== 0
+        const kind: SpiSymbolKind = isConst ? 'constant' : 'variable'
+        return makeSymbolId(fileId, kind, vd.name.text)
+      }
+    }
+  }
+  return null
+}
+
+function loadCompilerOptions(root: string): ts.CompilerOptions {
+  const tsConfigPath = join(root, 'tsconfig.json')
+  if (existsSync(tsConfigPath)) {
+    try {
+      const content = readFileSync(tsConfigPath, 'utf8')
+      const parsed = ts.parseConfigFileTextToJson(tsConfigPath, content)
+      if (parsed.config) {
+        const config = ts.parseJsonConfigFileContent(parsed.config, ts.sys, root)
+        // Always keep type-check side effects suppressed; we only want the
+        // checker for resolution, not diagnostics.
+        return { ...config.options, noEmit: true, skipLibCheck: true }
+      }
+    } catch {
+      // Fall through to defaults if the user's tsconfig is malformed; the call
+      // layer is best-effort, not a blocker.
+    }
+  }
+  return defaultCompilerOptions()
+}
+
+function defaultCompilerOptions(): ts.CompilerOptions {
+  return {
+    target: ts.ScriptTarget.Latest,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    allowJs: true,
+    jsx: ts.JsxEmit.Preserve,
+    noEmit: true,
+    skipLibCheck: true,
+    strict: false,
+    esModuleInterop: true,
+    isolatedModules: true,
+  }
 }
