@@ -23,12 +23,19 @@
 //     and unions/intersections that don't map to a single declaration.
 //   - covered_by edges (heuristic test layer, slice 3c) from source files
 //     to test files that import them.
-//   - NestJS framework edges (slice 3b base): module_imports/provides/exports
-//     and controller_route, plus framework_role tagging on detected
-//     module/controller/provider classes and route methods. The 3b-ii
-//     slice layers @UseGuards/@UsePipes/@UseInterceptors, constructor
-//     injection, @Inject('TOKEN') string tokens, and dynamic
-//     Module.forRoot/forRootAsync resolution on top of this base.
+//   - NestJS framework edges:
+//       * Slice 3b base: module_imports/provides/exports, controller_route,
+//         plus framework_role tagging on detected module/controller/provider
+//         classes and route methods.
+//       * Slice 3b-ii: guards / pipes / intercepts edges from
+//         @UseGuards / @UsePipes / @UseInterceptors at class or method
+//         level; injects edges from constructor parameter types and from
+//         @Inject('TOKEN') decorators (resolved through a workspace-wide
+//         token map built from `useClass` / `useExisting` provider
+//         bindings); low-confidence module_imports edges for dynamic
+//         module shapes (`Module.forRoot(...)` / `forRootAsync(...)` /
+//         register variants) with an info-level diagnostic recording
+//         that the runtime providers list could not be enumerated.
 //
 // This module never touches the existing pipeline; it is pure additive
 // substrate.
@@ -55,7 +62,7 @@ import type {
   SpiSymbolKind,
 } from './types.js'
 import { addTestLayerEdges } from './test-layer.js'
-import { detectNestFramework } from './framework-nestjs.js'
+import { collectNestTokenMap, detectNestFramework } from './framework-nestjs.js'
 
 export type BuildSpiOptions = {
   root: string
@@ -103,7 +110,7 @@ export function buildSpi(opts: BuildSpiOptions): SemanticProgramIndex {
   if (!existsSync(root) || !statSync(root).isDirectory()) {
     throw new Error(`SPI build: workspace root not found or not a directory: ${root}`)
   }
-  const extractorVersion = opts.extractorVersion ?? 'spi-v1.0.0-slice-3b'
+  const extractorVersion = opts.extractorVersion ?? 'spi-v1.0.0-slice-3b-ii'
   const now = opts.now ?? (() => new Date())
 
   const files: SpiFile[] = []
@@ -603,6 +610,19 @@ function addTypeCheckerEdges(ctx: TypeCheckerEdgeContext): void {
     else symbolsByFile.set(sym.file_id, [sym])
   }
 
+  // Workspace-level NestJS token-binding pass (slice 3b-ii). Walked once
+  // before the per-file framework detection so @Inject('TOKEN') in any
+  // file can resolve against any module's `useClass` / `useExisting`
+  // bindings regardless of file order.
+  const programSourceFiles = files
+    .map((f) => program.getSourceFile(toPosix(join(root, f.path))))
+    .filter((sf): sf is ts.SourceFile => sf !== undefined)
+  const tokenMap = collectNestTokenMap({
+    sourceFiles: programSourceFiles,
+    pathToFileId,
+    checker,
+  })
+
   for (const file of files) {
     const abs = toPosix(join(root, file.path))
     const sourceFile = program.getSourceFile(abs)
@@ -617,6 +637,7 @@ function addTypeCheckerEdges(ctx: TypeCheckerEdgeContext): void {
       diagnostics,
       pathToFileId,
       checker,
+      tokenMap,
     })
   }
 }
