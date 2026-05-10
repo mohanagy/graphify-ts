@@ -76,6 +76,17 @@ describe('public marketing copy honesty', () => {
       expect(content).toContain('`get_neighbors`')
     })
 
+    it('pins the measured post-#82 core-profile schema overhead numbers in the Honest disclosure section', () => {
+      // Per the project's doc-honesty rule, a README claim about a measured
+      // number must be backed by a test that asserts the README contains the
+      // current measurement. If a future PR reduces it further, update both
+      // the README number and the regex below in the same PR. The matched
+      // numbers come straight from tests/unit/mcp-schema-budget.test.ts.
+      expect(lower).toMatch(/~\s*750\s*tokens/)
+      expect(lower).toMatch(/~?\s*3[,.]?000\s*bytes/)
+      expect(lower).toMatch(/30%/)
+    })
+
     it('pins the 2026-05-09 demo-video caption headline reductions', () => {
       expect(content).toMatch(/2[,]?811[,]?682/)
       expect(content).toMatch(/532[,]?021/)

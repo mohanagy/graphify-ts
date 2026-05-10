@@ -122,7 +122,7 @@ PR-review proof on a real diff:
 
 Receipts: [`docs/benchmarks/2026-05-02-govalidate-pr-review/`](docs/benchmarks/2026-05-02-govalidate-pr-review/).
 
-> **The honest summary**: graphify-ts adds a one-time MCP/tool overhead at session start (~13% on cold starts). Multi-question sessions amortize this and end up cheaper. Cost trade-offs depend on session length; see **Honest disclosure** below.
+> **The honest summary**: graphify-ts adds a one-time MCP/tool overhead at session start (now ~750 tokens of tool schema for the core profile, down from ~1,070 after [#82](https://github.com/mohanagy/graphify-ts/pull/?q=is%3Apr+82) — a 30% drop). Multi-question sessions amortize this and end up cheaper. Cost trade-offs depend on session length; see **Honest disclosure** below.
 
 ---
 
@@ -239,7 +239,7 @@ The only command that hits an external service is the optional `compare` / `revi
 
 We measure and publish honest numbers, including the trade-offs. Smaller context is not automatically better unless the selected context is relevant — which is why graphify-ts ships coverage contracts (`benchmark`, `eval`, `review-compare`) that prove the smaller pack still contains the required evidence.
 
-1. **Cold-start sessions cost about 13% more than no-graph baseline** because the MCP server adds ~5K of tool-schema overhead at session init. Multi-question sessions amortize this and end up cheaper. We're tightening it further; watch the changelog.
+1. **Cold-start sessions add a one-time MCP/tool-schema cost at session init.** As of #82 the core (6-tool) profile emits **~3,000 bytes / ~750 tokens** on `tools/list` (down from ~4,270 bytes / ~1,070 tokens, a 30% reduction). The cold-start premium against the no-graph baseline scales with that number; the previously documented "~13%" figure was measured against the older 5K overhead and will be re-benchmarked in the next release. Multi-question sessions amortize this overhead and end up cheaper. A regression test (`tests/unit/mcp-schema-budget.test.ts`) pins the byte ceiling so future tool additions can't silently re-inflate it.
 2. **Deep extraction is best on JS/TS** with framework-aware passes for Express, Redux Toolkit, React Router, NestJS, and Next.js. Python / Ruby / Go / Java / Rust use tree-sitter AST. C / Kotlin / C# / Scala / PHP / Swift / Zig use a generic structural extractor.
 3. **Static analysis cannot resolve every dynamic runtime behavior.** Runtime-generated routes, heavy meta-programmed decorators, and string-built imports fall back to the base AST graph rather than pretending to be first-class semantics.
 4. **Token reduction depends on project structure and task type.** "How does auth work?" benefits more than "fix this typo." Always validate important code changes with tests and review.
@@ -266,7 +266,7 @@ Planned:
 - 🔜 Better PR-impact coverage scoring on diff hotspots
 - 🔜 Cache-aware prompt layout that minimizes Claude session-cache invalidation
 - 🔜 Delta-only context packs between runs (only ship what the agent doesn't already have)
-- 🔜 Tighter cold-start MCP overhead (currently ~5K of tool schema)
+- ✅ Tighter cold-start MCP overhead (core profile ~3,000 bytes, down from ~4,270 — 30% drop, see #82)
 - 🔜 More framework-aware passes (Prisma, tRPC, Hono, Fastify)
 - 🔜 Deeper Python / Go semantic passes beyond tree-sitter AST
 
