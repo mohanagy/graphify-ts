@@ -644,11 +644,14 @@ function addTypeCheckerEdges(ctx: TypeCheckerEdgeContext): void {
     // variables (1c-ii.b) and named-handler route registrations (1c-ii.c)
     // emitting route_handler edges from binding→handler. Middleware and
     // synthetic route nodes land in 1c-ii.d and 1c-ii.e respectively.
+    // The checker is passed through for declaration-identity resolution
+    // so lexical shadows don't produce false-positive route tags.
     detectExpressFramework({
       sourceFile,
       fileId: file.id,
       symbolsByFile,
       edges,
+      checker,
     })
   }
 }

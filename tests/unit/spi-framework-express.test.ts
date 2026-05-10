@@ -215,6 +215,38 @@ describe('SPI Express framework detector (slice 1c-ii.b)', () => {
       expect(routeEdges).toHaveLength(0)
     })
 
+    it('does NOT tag the outer handler when a lexical shadow uses the same identifier (CodeRabbit fix)', () => {
+      // Critical correctness regression: an inner scope that shadows
+      // either the receiver (`const app = { get: ... }`) or the handler
+      // (`const handler = ...`) must not cause the OUTER express_app and
+      // OUTER handler symbols to be treated as a route registration. The
+      // detector compares the receiver's resolved declaration to the
+      // tagged binding declaration, and only accepts top-level handler
+      // declarations.
+      writeFile(sandbox, 'src/server.ts', [
+        'import express from "express"',
+        'export const app = express()',
+        'export function handler(): void {}',
+        'function setup(): void {',
+        '  const app = { get: (_p: string, _h: () => void): void => {} }',
+        '  const handler = (): void => {}',
+        '  app.get("/x", handler)',
+        '}',
+      ].join('\n') + '\n')
+      const spi = build(sandbox)
+      const outerApp = findSymbol(spi, 'src/server.ts', 'app')
+      const outerHandler = findSymbol(spi, 'src/server.ts', 'handler')
+      // Neither the outer handler should be tagged express_route, nor
+      // should there be any route_handler edge from the outer app to
+      // the outer handler. The shadowed inner call resolves to the
+      // local `app` and `handler`, neither of which is in the SPI.
+      expect(outerHandler?.framework_role).toBeUndefined()
+      const edges = spi.edges.filter((e) =>
+        e.from === outerApp?.id && e.to === outerHandler?.id && e.kind === 'route_handler',
+      )
+      expect(edges).toHaveLength(0)
+    })
+
     it('dedupes route_handler edges when the same handler is registered on multiple paths', () => {
       writeFile(sandbox, 'src/server.ts', [
         'import express from "express"',
