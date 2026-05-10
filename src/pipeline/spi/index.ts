@@ -1,7 +1,12 @@
 // SPI v1 — public re-exports.
 //
-// Slices 1a + 1b: types + file layer + symbol layer + declares edges.
-// Call/type/test/diff/framework layers and the projection back to today's
+// Slices 1a + 1b + 2a + 2b + 3a:
+//   * types + file layer + imports/exports edges
+//   * symbol layer + declares edges
+//   * call layer + type layer (extends/implements/param_type/return_type)
+//   * diff overlay (computed on demand against a base/head ref)
+//
+// Test layer, framework (NestJS), and the projection back to today's
 // graph.json land in subsequent slices of #72.
 
 export type {
@@ -32,3 +37,9 @@ export {
   type BuildSpiOptions,
   type BuildSpiFileLayerOptions,
 } from './build.js'
+
+export {
+  computeSpiDiffOverlay,
+  type ComputeSpiDiffOverlayOptions,
+  type GitDiffRunner,
+} from './diff-overlay.js'
