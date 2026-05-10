@@ -43,3 +43,5 @@ export {
   type ComputeSpiDiffOverlayOptions,
   type GitDiffRunner,
 } from './diff-overlay.js'
+
+export { isTestFilePath } from './test-layer.js'

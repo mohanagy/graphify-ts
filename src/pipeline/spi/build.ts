@@ -46,6 +46,7 @@ import type {
   SpiSymbol,
   SpiSymbolKind,
 } from './types.js'
+import { addTestLayerEdges } from './test-layer.js'
 
 export type BuildSpiOptions = {
   root: string
@@ -93,7 +94,7 @@ export function buildSpi(opts: BuildSpiOptions): SemanticProgramIndex {
   if (!existsSync(root) || !statSync(root).isDirectory()) {
     throw new Error(`SPI build: workspace root not found or not a directory: ${root}`)
   }
-  const extractorVersion = opts.extractorVersion ?? 'spi-v1.0.0-slice-2b'
+  const extractorVersion = opts.extractorVersion ?? 'spi-v1.0.0-slice-3c'
   const now = opts.now ?? (() => new Date())
 
   const files: SpiFile[] = []
@@ -141,6 +142,11 @@ export function buildSpi(opts: BuildSpiOptions): SemanticProgramIndex {
   // Slices 2a + 2b: a second pass uses ts.Program + the type checker to
   // emit calls / extends / implements / param_type / return_type edges.
   addTypeCheckerEdges({ files, root, pathToFileId, symbols, edges, diagnostics })
+
+  // Slice 3c: heuristic test layer. Walks the imports edges produced above
+  // to emit covered_by edges from source files to the test files that
+  // import them. No type-checker dependency.
+  addTestLayerEdges({ files, edges })
 
   files.sort((a, b) => a.path.localeCompare(b.path))
   symbols.sort((a, b) => a.id.localeCompare(b.id))
