@@ -105,7 +105,10 @@ export function buildSpi(opts: BuildSpiOptions): SemanticProgramIndex {
     const rel = toPosix(relative(root, abs))
     const content = readFileSync(abs, 'utf8')
     const fileId = makeFileId(rel)
-    pathToFileId.set(abs, fileId)
+    // Always store keys as forward-slash absolute paths. TypeScript normalizes
+    // sourceFile.fileName to forward slashes on every OS, and so does the
+    // program.getSourceFile() lookup, so the map must match that convention.
+    pathToFileId.set(toPosix(abs), fileId)
     files.push({
       id: fileId,
       path: rel,
@@ -443,11 +446,11 @@ function resolveRelativeImport(
 
   for (const variant of variants) {
     for (const ext of RESOLUTION_CANDIDATE_EXTS) {
-      const id = pathToFileId.get(resolve(fromDir, variant + ext))
+      const id = pathToFileId.get(toPosix(resolve(fromDir, variant + ext)))
       if (id) return id
     }
     for (const tail of INDEX_RESOLUTION_CANDIDATES) {
-      const id = pathToFileId.get(resolve(fromDir, variant + tail))
+      const id = pathToFileId.get(toPosix(resolve(fromDir, variant + tail)))
       if (id) return id
     }
   }
@@ -546,7 +549,7 @@ type CallEdgeContext = {
 
 function addCallEdges(ctx: CallEdgeContext): void {
   const { files, root, pathToFileId, edges, diagnostics } = ctx
-  const rootNames = files.map((f) => join(root, f.path))
+  const rootNames = files.map((f) => toPosix(join(root, f.path)))
   if (rootNames.length === 0) return
 
   const compilerOptions = loadCompilerOptions(root)
@@ -568,7 +571,7 @@ function addCallEdges(ctx: CallEdgeContext): void {
   const seen = new Set<string>()
 
   for (const file of files) {
-    const abs = join(root, file.path)
+    const abs = toPosix(join(root, file.path))
     const sourceFile = program.getSourceFile(abs)
     if (!sourceFile) continue
     walkCallExpressions(sourceFile, file.id, checker, pathToFileId, edges, seen)
