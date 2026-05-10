@@ -25,6 +25,8 @@ import {
   estimateContextPackEntryTokens,
   type ContextPackNodeCandidate,
 } from './context-pack.js'
+import type { RetrievalGateDecision } from '../contracts/retrieval-gate.js'
+import { classifyRetrievalLevel } from './retrieval-gate.js'
 import { communitiesFromGraph, estimateQueryTokens } from './serve.js'
 
 const SNIPPET_HALF_WINDOW = 7
@@ -106,6 +108,7 @@ export interface RetrieveResult {
   claims?: ContextPackClaim[]
   expandable?: ContextPackExpandableRef[]
   coverage?: ContextPackCoverage
+  retrieval_gate?: RetrievalGateDecision
 }
 
 export interface CompactRetrieveMatchedNode extends Omit<RetrieveMatchedNode, 'community_label' | 'file_type' | 'framework_boost'> {
@@ -1131,6 +1134,7 @@ function buildRetrieveResultFromOrderedCandidates(
       }))
       .sort((left, right) => right.node_count - left.node_count),
     graph_signals: graphSignalLabels,
+    retrieval_gate: classifyRetrievalLevel({ prompt: options.question }),
   })
 
   return {
@@ -1144,6 +1148,7 @@ function buildRetrieveResultFromOrderedCandidates(
     claims: pack.claims,
     expandable: pack.expandable,
     coverage: pack.coverage,
+    ...(pack.retrieval_gate ? { retrieval_gate: pack.retrieval_gate } : {}),
   }
 }
 
@@ -1163,6 +1168,7 @@ export function retrieveContext(graph: KnowledgeGraph, options: RetrieveOptions)
       relationships: [],
       community_context: [],
       graph_signals: { god_nodes: [], bridge_nodes: [] },
+      retrieval_gate: classifyRetrievalLevel({ prompt: question }),
     })
 
     return {
@@ -1176,6 +1182,7 @@ export function retrieveContext(graph: KnowledgeGraph, options: RetrieveOptions)
       claims: emptyPack.claims,
       expandable: emptyPack.expandable,
       coverage: emptyPack.coverage,
+      ...(emptyPack.retrieval_gate ? { retrieval_gate: emptyPack.retrieval_gate } : {}),
     }
   }
 

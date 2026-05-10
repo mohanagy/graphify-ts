@@ -19,6 +19,8 @@ import { validateGraphPath } from '../../shared/security.js'
 import { featureMap } from '../feature-map.js'
 import { implementationChecklist } from '../implementation-checklist.js'
 import { classifyTaskContract, compileContextPack, estimateContextPackEntryTokens, type ContextPackNodeCandidate } from '../context-pack.js'
+import type { RetrievalGateDecision } from '../../contracts/retrieval-gate.js'
+import { classifyRetrievalLevel } from '../retrieval-gate.js'
 import { pickImpactTarget } from '../context-pack-target.js'
 import { analyzeImpact, callChains, compactImpactResult, type ImpactResult } from '../impact.js'
 import { analyzePrImpact, compactPrImpactResult } from '../pr-impact.js'
@@ -83,6 +85,7 @@ interface ContextPlaneMetadata {
   coverage: ContextPackCoverage
   missing_context: ContextPackEvidenceClass[]
   missing_semantic: ContextPackCoverage['missing_semantic']
+  retrieval_gate?: RetrievalGateDecision
 }
 
 interface StoredContextPackHandle {
@@ -138,6 +141,7 @@ function contextMetadata(
     claims: ContextPackClaim[]
     expandable: ContextPackExpandableRef[]
     coverage: ContextPackCoverage
+    retrieval_gate: RetrievalGateDecision
   }>,
 ): ContextPlaneMetadata {
   const coverage = payload.coverage ?? emptyCoverage()
@@ -147,6 +151,7 @@ function contextMetadata(
     coverage,
     missing_context: coverage.missing_required,
     missing_semantic: coverage.missing_semantic,
+    ...(payload.retrieval_gate ? { retrieval_gate: payload.retrieval_gate } : {}),
   }
 }
 
@@ -317,6 +322,7 @@ function impactMetadata(
     task_contract: classifyTaskContract('impact', { budget, prompt, task_intent: taskIntent }),
     nodes: candidates,
     community_context: result.affected_communities,
+    retrieval_gate: classifyRetrievalLevel({ prompt }),
   })
 
   return contextMetadata(pack)
@@ -509,6 +515,7 @@ function buildFocusedExpansionPayload(
         node_count: (communities[communityId] ?? []).length,
       }))
       .sort((left, right) => right.node_count - left.node_count),
+    retrieval_gate: classifyRetrievalLevel({ prompt: stored.prompt }),
   })
   const retrieval: RetrieveResult = {
     question: stored.prompt,
