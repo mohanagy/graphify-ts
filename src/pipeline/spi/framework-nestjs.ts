@@ -1,41 +1,47 @@
-// SPI v1 — NestJS framework layer (slice 3b base of #72).
+// SPI v1 — NestJS framework layer.
 //
-// Detects classes decorated with @Module / @Controller / @Injectable from
-// '@nestjs/common' and emits the design's framework-layer edges:
+// Slice 3b base: detects classes decorated with @Module / @Controller /
+// @Injectable from '@nestjs/common', tags SpiSymbols with framework_role
+// (nest_module / nest_controller / nest_provider / nest_route), and emits
+// `module_imports` / `module_provides` / `module_exports` /
+// `controller_route` framework edges.
 //
-//   * `framework_role` tagging on the SpiSymbol of each detected class
-//     (nest_module / nest_controller / nest_provider). Methods of a
-//     controller that carry an HTTP route decorator additionally inherit
-//     `framework_role: 'nest_route'`.
-//   * `module_imports`   — module class → other module class (resolved via
-//                          the type checker through `imports: [...]`).
-//   * `module_provides`  — module class → provider OR controller class
-//                          listed in `providers: [...]` / `controllers: [...]`.
-//                          The design's edge enum has no dedicated
-//                          `module_controllers` kind; both lists project
-//                          onto `module_provides` here, and the
-//                          provider-vs-controller distinction lives on the
-//                          target's `framework_role` once that file is
-//                          visited.
-//   * `module_exports`   — module class → re-exported provider OR module.
-//   * `controller_route` — controller class → method that carries an HTTP
-//                          route decorator (@Get/@Post/@Put/@Patch/@Delete/
-//                          @Options/@Head/@All).
+// Slice 3b-ii (this file's current shape) layers on top of that base:
 //
-// Slice 3b-ii layers @UseGuards / @UsePipes / @UseInterceptors,
-// constructor injection, @Inject('TOKEN') string tokens, and dynamic
-// Module.forRoot/forRootAsync shapes on top of this base.
+//   * `injects`     — class symbol → injected provider class symbol.
+//                     Constructor parameters typed as a class resolve
+//                     through ts.TypeChecker (high confidence). Parameters
+//                     decorated `@Inject('TOKEN')` resolve through a
+//                     workspace-wide token map built from `useClass` /
+//                     `useExisting` provider entries (medium confidence).
+//                     Unresolvable @Inject tokens emit a low-confidence
+//                     diagnostic; no edge is created.
+//   * `guards`      — class or method symbol → guard class symbol, sourced
+//                     from `@UseGuards(...)` at class level (applies to all
+//                     routes on that controller, edge emitted from class
+//                     symbol) or method level (edge emitted from method
+//                     symbol).
+//   * `intercepts`  — same as guards, sourced from `@UseInterceptors(...)`.
+//   * `pipes`       — same as guards, sourced from `@UsePipes(...)`.
+//   * Dynamic Module shapes — `@Module({ imports: [SomeModule.forRoot()] })`
+//                     and `forRootAsync` resolve to a low-confidence
+//                     `module_imports` edge to the receiver Module class
+//                     plus an info-level diagnostic recording that the
+//                     runtime providers list could not be enumerated.
 //
-// Confidence rules:
-//   * `high`   — decorator binding resolves AND target identifier resolves
+// Confidence rules (per docs/designs/2026-05-10-spi-v1.md):
+//   * `high`   — both decorator binding and target identifier resolve
 //                through ts.TypeChecker to a class declaration in a file
 //                we have indexed.
-//   * `low`    — element of a metadata array that we cannot statically
-//                resolve to a class (call expression, spread, conditional,
-//                or unresolved identifier). Emitted with a diagnostic so
-//                the gap is auditable rather than silent.
+//   * `medium` — `@Inject('TOKEN')` whose token resolves through the
+//                workspace token map (useClass / useExisting providers).
+//   * `low`    — dynamic module shape (`forRoot` / `forRootAsync`) where
+//                we can resolve the receiver module class but not its
+//                runtime contribution.
 //
-// All emitted edges carry `source: 'framework-decorator'`.
+// All emitted edges carry `source: 'framework-decorator'`. Every gap that
+// cannot be resolved produces an info-level SpiDiagnostic so the failure
+// is auditable rather than silent.
 
 import { createHash } from 'node:crypto'
 import ts from 'typescript'
@@ -43,6 +49,7 @@ import ts from 'typescript'
 import type {
   SpiDiagnostic,
   SpiEdge,
+  SpiEdgeConfidence,
   SpiFrameworkRole,
   SpiRange,
   SpiSymbol,
@@ -62,12 +69,37 @@ const ROUTE_DECORATOR_NAMES: ReadonlySet<string> = new Set([
   'All',
 ])
 
+const DYNAMIC_MODULE_FACTORY_METHODS: ReadonlySet<string> = new Set([
+  'forRoot',
+  'forRootAsync',
+  'forFeature',
+  'forFeatureAsync',
+  'register',
+  'registerAsync',
+])
+
 type NestBindings = {
   module: Set<string>
   controller: Set<string>
   injectable: Set<string>
   routeDecorators: Set<string>
+  useGuards: Set<string>
+  useInterceptors: Set<string>
+  usePipes: Set<string>
+  inject: Set<string>
 }
+
+// Workspace-wide map from a NestJS provider token (string literal) to the
+// class that backs it (via `useClass` or `useExisting`). Token uniqueness
+// is the user's responsibility; if two modules bind the same token, the
+// last one wins. Tokens whose binding is `useValue` or `useFactory` are
+// intentionally absent — those are not class references and have no
+// well-defined `injects` target.
+export type NestTokenBinding = {
+  classSymbolId: string
+  confidence: SpiEdgeConfidence
+}
+export type NestTokenMap = Map<string, NestTokenBinding>
 
 export type DetectNestFrameworkContext = {
   sourceFile: ts.SourceFile
@@ -77,6 +109,60 @@ export type DetectNestFrameworkContext = {
   diagnostics: SpiDiagnostic[]
   pathToFileId: Map<string, string>
   checker: ts.TypeChecker
+  tokenMap: NestTokenMap
+}
+
+// Workspace-level token-binding collector. Walks every source file's
+// @Module decorator and registers `{ provide: 'TOKEN', useClass: X }` /
+// `{ provide: 'TOKEN', useExisting: X }` bindings into a global map so
+// downstream @Inject('TOKEN') resolution can find them. Run once before
+// the per-file detectNestFramework pass.
+export type CollectNestTokenMapOptions = {
+  sourceFiles: readonly ts.SourceFile[]
+  pathToFileId: Map<string, string>
+  checker: ts.TypeChecker
+}
+
+export function collectNestTokenMap(opts: CollectNestTokenMapOptions): NestTokenMap {
+  const tokens: NestTokenMap = new Map()
+  for (const sourceFile of opts.sourceFiles) {
+    const bindings = collectNestBindings(sourceFile)
+    if (bindings.module.size === 0) continue
+    for (const stmt of sourceFile.statements) {
+      if (!ts.isClassDeclaration(stmt) || !stmt.name) continue
+      for (const decorator of decoratorsOf(stmt)) {
+        const name = decoratorIdentifierName(decorator)
+        if (!name || !bindings.module.has(name)) continue
+        registerProviderTokens(decorator, opts, tokens)
+      }
+    }
+  }
+  return tokens
+}
+
+function registerProviderTokens(
+  decorator: ts.Decorator,
+  opts: CollectNestTokenMapOptions,
+  tokens: NestTokenMap,
+): void {
+  if (!ts.isCallExpression(decorator.expression)) return
+  const arg = decorator.expression.arguments[0]
+  if (!arg || !ts.isObjectLiteralExpression(arg)) return
+  const providers = providerArrayFor(arg, 'providers')
+  if (!providers) return
+
+  for (const element of providers.elements) {
+    if (!ts.isObjectLiteralExpression(element)) continue
+    const tokenLiteral = stringPropertyValue(element, 'provide')
+    if (!tokenLiteral) continue
+    const useClass = identifierPropertyValue(element, 'useClass')
+    const useExisting = identifierPropertyValue(element, 'useExisting')
+    const target = useClass ?? useExisting
+    if (!target) continue
+    const classId = resolveStaticClassFromIdentifier(target, opts.checker, opts.pathToFileId)
+    if (!classId) continue
+    tokens.set(tokenLiteral, { classSymbolId: classId, confidence: 'medium' })
+  }
 }
 
 export function detectNestFramework(ctx: DetectNestFrameworkContext): void {
@@ -95,11 +181,17 @@ export function detectNestFramework(ctx: DetectNestFrameworkContext): void {
 
     if (decoratorRole.role === 'nest_module' && decoratorRole.decorator) {
       emitModuleEdges(ctx, classId, decoratorRole.decorator)
+      // A module class can itself have constructor injection (rare but legal).
+      emitConstructorInjects(ctx, classId, stmt, bindings)
     } else if (decoratorRole.role === 'nest_controller') {
+      emitClassUseEdges(ctx, classId, classDecorators, bindings)
+      emitConstructorInjects(ctx, classId, stmt, bindings)
       emitControllerRoutes(ctx, classId, stmt, bindings)
+    } else if (decoratorRole.role === 'nest_provider') {
+      // Providers (services, guards, pipes, interceptors marked @Injectable)
+      // don't have routes but absolutely have constructor injection.
+      emitConstructorInjects(ctx, classId, stmt, bindings)
     }
-    // nest_provider currently emits role only; provider-side edges
-    // (injects/uses_*) are slice 3b-ii's domain.
   }
 }
 
@@ -109,6 +201,10 @@ function collectNestBindings(sourceFile: ts.SourceFile): NestBindings {
     controller: new Set<string>(),
     injectable: new Set<string>(),
     routeDecorators: new Set<string>(),
+    useGuards: new Set<string>(),
+    useInterceptors: new Set<string>(),
+    usePipes: new Set<string>(),
+    inject: new Set<string>(),
   }
   for (const stmt of sourceFile.statements) {
     if (!ts.isImportDeclaration(stmt) || !stmt.importClause) continue
@@ -124,6 +220,10 @@ function collectNestBindings(sourceFile: ts.SourceFile): NestBindings {
       if (importedName === 'Module') bindings.module.add(localName)
       else if (importedName === 'Controller') bindings.controller.add(localName)
       else if (importedName === 'Injectable') bindings.injectable.add(localName)
+      else if (importedName === 'UseGuards') bindings.useGuards.add(localName)
+      else if (importedName === 'UseInterceptors') bindings.useInterceptors.add(localName)
+      else if (importedName === 'UsePipes') bindings.usePipes.add(localName)
+      else if (importedName === 'Inject') bindings.inject.add(localName)
       else if (ROUTE_DECORATOR_NAMES.has(importedName)) bindings.routeDecorators.add(localName)
     }
   }
@@ -131,12 +231,16 @@ function collectNestBindings(sourceFile: ts.SourceFile): NestBindings {
 }
 
 function hasAnyBinding(b: NestBindings): boolean {
-  return b.module.size > 0 || b.controller.size > 0 || b.injectable.size > 0 || b.routeDecorators.size > 0
-}
-
-type DetectedClassDecorator = {
-  role: SpiFrameworkRole
-  decorator: ts.Decorator
+  return (
+    b.module.size > 0 ||
+    b.controller.size > 0 ||
+    b.injectable.size > 0 ||
+    b.routeDecorators.size > 0 ||
+    b.useGuards.size > 0 ||
+    b.useInterceptors.size > 0 ||
+    b.usePipes.size > 0 ||
+    b.inject.size > 0
+  )
 }
 
 function classDecoratorRole(
@@ -189,9 +293,14 @@ function emitModuleEdges(
 
     const initializer = property.initializer
     if (!ts.isArrayLiteralExpression(initializer)) {
-      // e.g. `imports: someComputedArray` — not statically inspectable in
-      // slice 3b base. Record so the gap is visible to downstream layers.
-      pushDiagnostic(ctx, 'spi.nest.module-metadata.non-array', 'info', `NestJS @Module ${key}: non-array initializer cannot be enumerated statically`, ctx.sourceFile, initializer)
+      pushDiagnostic(
+        ctx,
+        'spi.nest.module-metadata.non-array',
+        'info',
+        `NestJS @Module ${key}: non-array initializer cannot be enumerated statically`,
+        ctx.sourceFile,
+        initializer,
+      )
       continue
     }
 
@@ -214,19 +323,69 @@ function emitModuleMetadataEdge(
   edgeKind: 'module_imports' | 'module_provides' | 'module_exports',
   element: ts.Expression,
 ): void {
-  const targetId = resolveStaticClassReference(element, ctx)
-  if (!targetId) {
-    pushDiagnostic(ctx, 'spi.nest.module-metadata.unresolved', 'info', `NestJS @Module ${edgeKind}: unresolved entry (likely dynamic — Module.forRoot, spread, or conditional)`, ctx.sourceFile, element)
+  // Static class reference (`UsersModule`, `users.UsersModule`).
+  const staticTarget = resolveStaticClassReference(element, ctx)
+  if (staticTarget) {
+    ctx.edges.push({
+      from: moduleClassId,
+      to: staticTarget,
+      kind: edgeKind,
+      confidence: 'high',
+      source: 'framework-decorator',
+      evidence: { file_id: ctx.fileId, range: rangeOf(element, ctx.sourceFile) },
+    })
     return
   }
-  ctx.edges.push({
-    from: moduleClassId,
-    to: targetId,
-    kind: edgeKind,
-    confidence: 'high',
-    source: 'framework-decorator',
-    evidence: { file_id: ctx.fileId, range: rangeOf(element, ctx.sourceFile) },
-  })
+
+  // Dynamic module shape: `SomeModule.forRoot(...)` /
+  // `SomeModule.forRootAsync(...)` etc. Resolve the receiver to a Module
+  // class and emit a low-confidence edge so the dependency is not
+  // invisible — the runtime contribution is what we cannot enumerate.
+  const dynamicTarget = resolveDynamicModuleReceiver(element, ctx)
+  if (dynamicTarget) {
+    ctx.edges.push({
+      from: moduleClassId,
+      to: dynamicTarget.classSymbolId,
+      kind: edgeKind,
+      confidence: 'low',
+      source: 'framework-decorator',
+      evidence: { file_id: ctx.fileId, range: rangeOf(element, ctx.sourceFile) },
+    })
+    pushDiagnostic(
+      ctx,
+      'spi.nest.module-metadata.dynamic',
+      'info',
+      `NestJS @Module ${edgeKind}: dynamic module shape via .${dynamicTarget.factoryName}() — runtime providers not resolved`,
+      ctx.sourceFile,
+      element,
+    )
+    return
+  }
+
+  pushDiagnostic(
+    ctx,
+    'spi.nest.module-metadata.unresolved',
+    'info',
+    `NestJS @Module ${edgeKind}: unresolved entry (likely spread, conditional, or computed)`,
+    ctx.sourceFile,
+    element,
+  )
+}
+
+function resolveDynamicModuleReceiver(
+  expr: ts.Expression,
+  ctx: DetectNestFrameworkContext,
+): { classSymbolId: string; factoryName: string } | null {
+  if (!ts.isCallExpression(expr)) return null
+  const callee = expr.expression
+  if (!ts.isPropertyAccessExpression(callee) || !ts.isIdentifier(callee.name)) return null
+  const factoryName = callee.name.text
+  if (!DYNAMIC_MODULE_FACTORY_METHODS.has(factoryName)) return null
+  const receiver = callee.expression
+  if (!ts.isIdentifier(receiver)) return null
+  const id = resolveStaticClassFromIdentifier(receiver, ctx.checker, ctx.pathToFileId)
+  if (!id) return null
+  return { classSymbolId: id, factoryName }
 }
 
 function emitControllerRoutes(
@@ -258,8 +417,13 @@ function emitControllerRoutes(
     const overloadIndex = overloadCounts.get(overloadKey) ?? 0
     overloadCounts.set(overloadKey, overloadIndex + 1)
 
-    const routeDecorator = findRouteDecorator(member, bindings)
-    if (!routeDecorator) continue
+    const memberDecorators = decoratorsOf(member)
+    const routeDecorator = findRouteDecorator(memberDecorators, bindings)
+    if (!routeDecorator) {
+      // Method-level @Use* on a non-route method is rare but not invalid.
+      // Skip silently — guard/pipe edges only matter for route methods.
+      continue
+    }
 
     const baseId = symbolIdFor(ctx.fileId, 'method', `${className}.${methodName}`)
     const methodId = overloadIndex === 0 ? baseId : `${baseId}#${overloadIndex}`
@@ -274,21 +438,183 @@ function emitControllerRoutes(
       source: 'framework-decorator',
       evidence: { file_id: ctx.fileId, range: rangeOf(member.name, ctx.sourceFile) },
     })
+
+    emitMethodUseEdges(ctx, methodId, memberDecorators, bindings)
   }
 }
 
-function findRouteDecorator(member: ts.MethodDeclaration, bindings: NestBindings): ts.Decorator | null {
-  for (const decorator of decoratorsOf(member)) {
+function findRouteDecorator(decorators: readonly ts.Decorator[], bindings: NestBindings): ts.Decorator | null {
+  for (const decorator of decorators) {
     const name = decoratorIdentifierName(decorator)
     if (name && bindings.routeDecorators.has(name)) return decorator
   }
   return null
 }
 
+function emitClassUseEdges(
+  ctx: DetectNestFrameworkContext,
+  classId: string,
+  decorators: readonly ts.Decorator[],
+  bindings: NestBindings,
+): void {
+  emitUseEdgesFor(ctx, classId, decorators, bindings.useGuards, 'guards')
+  emitUseEdgesFor(ctx, classId, decorators, bindings.useInterceptors, 'intercepts')
+  emitUseEdgesFor(ctx, classId, decorators, bindings.usePipes, 'pipes')
+}
+
+function emitMethodUseEdges(
+  ctx: DetectNestFrameworkContext,
+  methodId: string,
+  decorators: readonly ts.Decorator[],
+  bindings: NestBindings,
+): void {
+  emitUseEdgesFor(ctx, methodId, decorators, bindings.useGuards, 'guards')
+  emitUseEdgesFor(ctx, methodId, decorators, bindings.useInterceptors, 'intercepts')
+  emitUseEdgesFor(ctx, methodId, decorators, bindings.usePipes, 'pipes')
+}
+
+function emitUseEdgesFor(
+  ctx: DetectNestFrameworkContext,
+  fromId: string,
+  decorators: readonly ts.Decorator[],
+  bindingNames: ReadonlySet<string>,
+  edgeKind: 'guards' | 'intercepts' | 'pipes',
+): void {
+  if (bindingNames.size === 0) return
+  for (const decorator of decorators) {
+    const name = decoratorIdentifierName(decorator)
+    if (!name || !bindingNames.has(name)) continue
+    if (!ts.isCallExpression(decorator.expression)) continue
+    for (const arg of decorator.expression.arguments) {
+      const targets = flattenUseDecoratorArg(arg)
+      for (const target of targets) {
+        const targetId = resolveStaticClassReference(target, ctx)
+        if (!targetId) {
+          pushDiagnostic(
+            ctx,
+            'spi.nest.use-decorator.unresolved',
+            'info',
+            `NestJS @Use* ${edgeKind}: unresolved target (instance literal, computed expression, or untyped)`,
+            ctx.sourceFile,
+            target,
+          )
+          continue
+        }
+        ctx.edges.push({
+          from: fromId,
+          to: targetId,
+          kind: edgeKind,
+          confidence: 'high',
+          source: 'framework-decorator',
+          evidence: { file_id: ctx.fileId, range: rangeOf(target, ctx.sourceFile) },
+        })
+      }
+    }
+  }
+}
+
+// `@UseGuards(A, B)` and `@UseGuards([A, B])` are both legal. Flatten
+// arrays inline so callers can iterate over a flat list of class refs.
+function flattenUseDecoratorArg(arg: ts.Expression): ts.Expression[] {
+  if (ts.isArrayLiteralExpression(arg)) {
+    const out: ts.Expression[] = []
+    for (const element of arg.elements) {
+      if (ts.isExpression(element)) {
+        out.push(...flattenUseDecoratorArg(element))
+      }
+    }
+    return out
+  }
+  return [arg]
+}
+
+function emitConstructorInjects(
+  ctx: DetectNestFrameworkContext,
+  classId: string,
+  classDecl: ts.ClassDeclaration,
+  bindings: NestBindings,
+): void {
+  const ctor = classDecl.members.find((m): m is ts.ConstructorDeclaration => ts.isConstructorDeclaration(m))
+  if (!ctor) return
+
+  const seen = new Set<string>()
+  for (const param of ctor.parameters) {
+    const tokenName = injectTokenFromParameter(param, bindings)
+    if (tokenName !== null) {
+      const binding = ctx.tokenMap.get(tokenName)
+      if (!binding) {
+        pushDiagnostic(
+          ctx,
+          'spi.nest.inject-token.unresolved',
+          'info',
+          `NestJS @Inject('${tokenName}'): no useClass / useExisting binding found in any module`,
+          ctx.sourceFile,
+          param,
+        )
+        continue
+      }
+      const dedupeKey = `${classId}|${binding.classSymbolId}`
+      if (seen.has(dedupeKey)) continue
+      seen.add(dedupeKey)
+      ctx.edges.push({
+        from: classId,
+        to: binding.classSymbolId,
+        kind: 'injects',
+        confidence: binding.confidence,
+        source: 'framework-decorator',
+        evidence: { file_id: ctx.fileId, range: rangeOf(param, ctx.sourceFile) },
+      })
+      continue
+    }
+
+    // No @Inject on the parameter — fall through to type-based resolution.
+    if (!param.type) continue
+    const targetId = resolveTypeNodeToClass(param.type, ctx)
+    if (!targetId) continue
+    if (targetId === classId) continue // self-reference — skip
+    const dedupeKey = `${classId}|${targetId}`
+    if (seen.has(dedupeKey)) continue
+    seen.add(dedupeKey)
+    ctx.edges.push({
+      from: classId,
+      to: targetId,
+      kind: 'injects',
+      confidence: 'high',
+      source: 'framework-decorator',
+      evidence: { file_id: ctx.fileId, range: rangeOf(param, ctx.sourceFile) },
+    })
+  }
+}
+
+// Returns the string token of an `@Inject('TOKEN')` decorator on this
+// parameter, or null if the parameter has no @Inject decorator. A
+// non-string @Inject argument (e.g. `@Inject(SomeSymbol)`) returns null
+// too — those bypass the token map and rely on type-based resolution.
+function injectTokenFromParameter(param: ts.ParameterDeclaration, bindings: NestBindings): string | null {
+  if (bindings.inject.size === 0) return null
+  for (const decorator of decoratorsOf(param)) {
+    const name = decoratorIdentifierName(decorator)
+    if (!name || !bindings.inject.has(name)) continue
+    if (!ts.isCallExpression(decorator.expression)) continue
+    const arg = decorator.expression.arguments[0]
+    if (!arg) continue
+    if (ts.isStringLiteralLike(arg)) return arg.text
+  }
+  return null
+}
+
+function resolveTypeNodeToClass(typeNode: ts.TypeNode, ctx: DetectNestFrameworkContext): string | null {
+  if (!ts.isTypeReferenceNode(typeNode)) return null
+  let target: ts.Identifier | null = null
+  if (ts.isIdentifier(typeNode.typeName)) target = typeNode.typeName
+  else if (ts.isQualifiedName(typeNode.typeName)) target = typeNode.typeName.right
+  if (!target) return null
+  return resolveStaticClassFromIdentifier(target, ctx.checker, ctx.pathToFileId)
+}
+
 // Resolves an expression that names a class (e.g. `UsersModule`,
 // `users.UsersModule`) to its SPI class symbol id. Returns null for any
-// expression we cannot statically resolve (call expressions, spread,
-// conditional, etc.) — those are slice 3b-ii's responsibility.
+// expression we cannot statically resolve to a class declaration.
 function resolveStaticClassReference(
   expr: ts.Expression,
   ctx: DetectNestFrameworkContext,
@@ -301,17 +627,22 @@ function resolveStaticClassReference(
   } else {
     return null
   }
+  return resolveStaticClassFromIdentifier(target, ctx.checker, ctx.pathToFileId)
+}
 
-  const symbol = followAlias(ctx.checker.getSymbolAtLocation(target), ctx.checker)
+function resolveStaticClassFromIdentifier(
+  identifier: ts.Identifier,
+  checker: ts.TypeChecker,
+  pathToFileId: Map<string, string>,
+): string | null {
+  const symbol = followAlias(checker.getSymbolAtLocation(identifier), checker)
   const decl = symbol?.declarations?.[0]
   if (!decl) return null
   if (!ts.isClassDeclaration(decl) || !decl.name) return null
-
   const declSourceFile = decl.getSourceFile()
   if (declSourceFile.isDeclarationFile) return null
-  const targetFileId = ctx.pathToFileId.get(declSourceFile.fileName)
+  const targetFileId = pathToFileId.get(declSourceFile.fileName)
   if (!targetFileId) return null
-
   return symbolIdFor(targetFileId, 'class', decl.name.text)
 }
 
@@ -348,6 +679,37 @@ function symbolIdFor(fileId: string, kind: SpiSymbolKind, name: string): string 
 function propertyKeyText(name: ts.PropertyName): string | null {
   if (ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)) {
     return name.text
+  }
+  return null
+}
+
+function providerArrayFor(
+  metadataObject: ts.ObjectLiteralExpression,
+  key: string,
+): ts.ArrayLiteralExpression | null {
+  for (const property of metadataObject.properties) {
+    if (!ts.isPropertyAssignment(property)) continue
+    if (propertyKeyText(property.name) !== key) continue
+    return ts.isArrayLiteralExpression(property.initializer) ? property.initializer : null
+  }
+  return null
+}
+
+function stringPropertyValue(obj: ts.ObjectLiteralExpression, key: string): string | null {
+  for (const property of obj.properties) {
+    if (!ts.isPropertyAssignment(property)) continue
+    if (propertyKeyText(property.name) !== key) continue
+    if (ts.isStringLiteralLike(property.initializer)) return property.initializer.text
+    return null
+  }
+  return null
+}
+
+function identifierPropertyValue(obj: ts.ObjectLiteralExpression, key: string): ts.Identifier | null {
+  for (const property of obj.properties) {
+    if (!ts.isPropertyAssignment(property)) continue
+    if (propertyKeyText(property.name) !== key) continue
+    return ts.isIdentifier(property.initializer) ? property.initializer : null
   }
   return null
 }
