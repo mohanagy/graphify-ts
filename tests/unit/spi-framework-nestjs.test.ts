@@ -320,6 +320,40 @@ describe('buildSpi NestJS framework layer (slice 3b base of #72)', () => {
       expect(routeEdges).toHaveLength(8)
     })
 
+    it('aligns the route edge with the symbol-layer overload index when a method is overloaded', () => {
+      // A method with overload signatures + implementation produces three
+      // SpiSymbol entries (`foo`, `foo#1`, `foo#2`); the route decorator
+      // sits on the implementation, so the controller_route edge must
+      // target `foo#2` — proving the overload counter is incremented for
+      // every method declaration, not just routes.
+      writeFile(sandbox, 'src/app.controller.ts', [
+        'import { Controller, Get } from "@nestjs/common"',
+        '@Controller()',
+        'export class AppController {',
+        '  list(name: string): string',
+        '  list(id: number): string',
+        '  @Get() list(arg: string | number): string { return String(arg) }',
+        '}',
+      ].join('\n') + '\n')
+      const spi = build(sandbox)
+
+      const controllerId = classSymbol(spi, 'src/app.controller.ts', 'AppController').id
+      const routeEdges = spi.edges.filter((e) => e.from === controllerId && e.kind === 'controller_route')
+      expect(routeEdges).toHaveLength(1)
+
+      const fileId = fileIdFor(spi, 'src/app.controller.ts')
+      const overloadIds = spi.symbols
+        .filter((s) => s.file_id === fileId && s.kind === 'method' && s.name === 'AppController.list')
+        .map((s) => s.id)
+        .sort()
+      // Expect exactly three method symbols for the three declarations.
+      expect(overloadIds).toHaveLength(3)
+      // The route edge must target the last (third) declaration's id, which
+      // carries the `#2` overload suffix.
+      const expectedTarget = overloadIds.find((id) => id.endsWith('#2'))
+      expect(routeEdges[0]?.to).toBe(expectedTarget)
+    })
+
     it('does not emit controller_route for plain classes that happen to use @Get from somewhere else', () => {
       // If @Get is not imported from @nestjs/common, the binding map is empty
       // and we don't emit a route edge.
