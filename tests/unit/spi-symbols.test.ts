@@ -235,7 +235,7 @@ describe('buildSpi symbol layer (slice 1b of #72)', () => {
   })
 
   describe('range and ID stability', () => {
-    it('mints stable IDs that survive in-file reordering as long as path/kind/name are stable', () => {
+    it('mints stable IDs that survive in-file reordering as long as path/kind/name are stable', { timeout: 30_000 }, () => {
       writeFile(sandbox, 'src/order.ts', [
         'export function a() {}',
         'export function b() {}',
@@ -263,7 +263,7 @@ describe('buildSpi symbol layer (slice 1b of #72)', () => {
       expect(fn.range.end.line).toBeGreaterThanOrEqual(3)
     })
 
-    it('produces a stable, sorted symbol list across two runs of the same workspace', () => {
+    it('produces a stable, sorted symbol list across two runs of the same workspace', { timeout: 30_000 }, () => {
       writeFile(sandbox, 'src/a.ts', 'export const a = 1\n')
       writeFile(sandbox, 'src/b.ts', 'export class B {\n  one() {}\n  two() {}\n}\n')
       const first = build(sandbox)

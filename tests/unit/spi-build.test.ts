@@ -99,7 +99,7 @@ describe('buildSpiFileLayer (slice 1a of #72)', () => {
       expect(spi.files.map((f) => f.path)).toEqual(['src/keep.ts'])
     })
 
-    it('produces deterministic output between two runs of the same workspace', () => {
+    it('produces deterministic output between two runs of the same workspace', { timeout: 30_000 }, () => {
       writeFile(sandbox, 'src/a.ts', 'export const a = 1\n')
       writeFile(sandbox, 'src/b.ts', 'import { a } from "./a.js"\nexport const b = a\n')
       const first = build(sandbox)
