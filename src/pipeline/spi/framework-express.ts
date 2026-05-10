@@ -1,32 +1,32 @@
-// SPI v1 — Express framework layer (slice 1c-ii.b of #72).
+// SPI v1 — Express framework layer (slices 1c-ii.b + 1c-ii.c of #72).
 //
-// Detects Express's `app = express()` and `router = Router()` factory call
-// patterns and tags the resulting variable symbols with framework_role.
-// Slice 1c-ii.b is the SUBSTRATE layer of the Express port: it adds the
-// minimum SPI tagging the projector needs to surface 'framework: express'
-// on the produced ExtractionNode (via slice 1c-ii.a's framework_role
-// propagation).
+// Slice 1c-ii.b — substrate: detects Express's `app = express()` and
+// `router = Router()` factory call patterns and tags the resulting
+// variable symbols with framework_role.
 //
-// Future slices extend this:
+// Slice 1c-ii.c — route detection: walks `<binding>.get/post/put/patch/
+// delete/all/options/head(...)` call expressions. When the receiver
+// resolves to a previously-tagged express_app/express_router binding and
+// the LAST argument is a named identifier (function or variable symbol
+// in the same file), the handler is tagged framework_role: 'express_route'
+// and a `route_handler` SpiEdge is emitted from the binding's symbol to
+// the handler's symbol with confidence 'high'. Inline arrow handlers
+// (`app.get('/p', (req, res) => {...})`) are intentionally NOT tagged in
+// this slice — they require synthesizing route nodes from anonymous
+// callbacks, which is slice 1c-ii.e territory.
 //
-//   * 1c-ii.c — call-site route detection: walk app.get / app.post / etc.
-//     emit `controller_route`-equivalent edges from app/router symbols
-//     to the route handler.
-//   * 1c-ii.d — middleware detection: app.use(...) tags middleware
-//     functions with framework_role: 'express_middleware'.
+// Future slices:
+//
+//   * 1c-ii.d — middleware detection: app.use(...) tags handlers with
+//     framework_role: 'express_middleware'.
 //   * 1c-ii.e — full byte-equivalence with the legacy
 //     extract/frameworks/express.ts surface (~1,669 lines): synthetic
-//     route nodes with route_path, framework metadata, mounted-router
-//     resolution.
-//
-// Confidence rules: high when the factory binding resolves to the
-// 'express' module specifier; otherwise the tagging is skipped (no
-// best-effort low-confidence tags here, since Express's runtime patterns
-// are too dynamic for cheap heuristics to reliably distinguish).
+//     route nodes with route_path, mounted-router prefix resolution,
+//     dynamic compositions.
 
 import ts from 'typescript'
 
-import type { SpiFrameworkRole, SpiSymbol } from './types.js'
+import type { SpiEdge, SpiFrameworkRole, SpiSymbol } from './types.js'
 
 const EXPRESS_MODULE_SPECIFIER = 'express'
 
@@ -44,15 +44,50 @@ export type DetectExpressFrameworkContext = {
   sourceFile: ts.SourceFile
   fileId: string
   symbolsByFile: Map<string, SpiSymbol[]>
+  /** Slice 1c-ii.c writes route_handler SpiEdges into this array when a
+   *  named handler is resolved from a `<binding>.<httpMethod>(...)` call. */
+  edges: SpiEdge[]
+  /** Type checker for the program — used to resolve callee/handler
+   *  identifiers to their *declarations* so lexical shadows don't
+   *  produce false-positive route tags (CodeRabbit catch on slice
+   *  1c-ii.c). When omitted, the detector falls back to bare-name
+   *  matching, which is correct only when no inner scope shadows the
+   *  receiver or handler identifier. */
+  checker?: ts.TypeChecker
 }
+
+/** Internal record: pairs a tagged Express binding's SpiSymbol with the
+ *  ts.VariableDeclaration that produced it, so call-site resolution can
+ *  verify a `<id>.method(...)` callee resolves back to the SAME
+ *  declaration instead of any other binding that happens to share the
+ *  identifier text. */
+type ExpressBindingRecord = {
+  spiSymbol: SpiSymbol
+  declaration: ts.VariableDeclaration
+}
+
+const HTTP_ROUTE_METHODS: ReadonlySet<string> = new Set([
+  'get',
+  'post',
+  'put',
+  'patch',
+  'delete',
+  'all',
+  'options',
+  'head',
+])
 
 export function detectExpressFramework(ctx: DetectExpressFrameworkContext): void {
   const bindings = collectExpressBindings(ctx.sourceFile)
   if (!hasAnyBinding(bindings)) return
 
-  // Walk top-level variable statements looking for `const name = express()`
-  // or `const name = Router()` patterns. Tag the variable symbol with the
-  // matching framework_role.
+  // Slice 1c-ii.b — substrate: tag app/router factory variables.
+  // Slice 1c-ii.c — record (name → { spiSymbol, declaration }) so the
+  // route walker can verify call-site receivers resolve back to the
+  // SAME declaration (defends against lexical shadows where an inner
+  // `const app = { get: ... }` would otherwise hijack the outer
+  // express_app binding).
+  const expressBindings = new Map<string, ExpressBindingRecord>()
   for (const stmt of ctx.sourceFile.statements) {
     if (!ts.isVariableStatement(stmt)) continue
     const isConst = (stmt.declarationList.flags & ts.NodeFlags.Const) !== 0
@@ -61,9 +96,139 @@ export function detectExpressFramework(ctx: DetectExpressFrameworkContext): void
       if (!ts.isIdentifier(decl.name) || !decl.initializer) continue
       const role = factoryCallRole(decl.initializer, bindings)
       if (!role) continue
-      tagSymbol(ctx.symbolsByFile, ctx.fileId, symbolKind, decl.name.text, role)
+      const tagged = tagSymbol(ctx.symbolsByFile, ctx.fileId, symbolKind, decl.name.text, role)
+      if (tagged && (role === 'express_app' || role === 'express_router')) {
+        expressBindings.set(decl.name.text, { spiSymbol: tagged, declaration: decl })
+      }
     }
   }
+
+  // Slice 1c-ii.c — route detection: walk every call expression in the
+  // file. When the callee is `<binding>.<httpMethod>(...)` and `<binding>`
+  // is a tagged express_app/express_router (verified by declaration
+  // identity, not bare name), resolve the LAST argument to a named
+  // handler symbol in the same file. If found, tag the handler with
+  // framework_role: 'express_route' and emit a route_handler edge.
+  if (expressBindings.size === 0) return
+  walkRouteCalls(ctx, expressBindings)
+}
+
+function walkRouteCalls(
+  ctx: DetectExpressFrameworkContext,
+  expressBindings: Map<string, ExpressBindingRecord>,
+): void {
+  // O(1) edge-dedupe set keyed by `${from}|${to}|route_handler`. Replaces
+  // the previous O(n) linear scan over ctx.edges per candidate.
+  const seenEdgeKeys = new Set<string>()
+  for (const edge of ctx.edges) {
+    if (edge.kind === 'route_handler') {
+      seenEdgeKeys.add(`${edge.from}|${edge.to}|route_handler`)
+    }
+  }
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      const callee = node.expression
+      if (ts.isIdentifier(callee.expression) && ts.isIdentifier(callee.name)) {
+        const bindingName = callee.expression.text
+        const httpMethod = callee.name.text
+        const bindingRecord = expressBindings.get(bindingName)
+        if (bindingRecord && HTTP_ROUTE_METHODS.has(httpMethod) && receiverMatchesBinding(callee.expression, bindingRecord, ctx.checker)) {
+          emitRouteForCall(ctx, bindingRecord.spiSymbol, node, seenEdgeKeys)
+        }
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(ctx.sourceFile)
+}
+
+/** Returns true iff the call-site receiver identifier resolves to the
+ *  SAME declaration that we tagged earlier. Without a checker we fall
+ *  back to bare-name matching (the legacy behavior), which can produce
+ *  false positives in shadowed inner scopes. With a checker we walk the
+ *  resolved ts.Symbol's declarations and compare against the tagged
+ *  ts.VariableDeclaration node directly. */
+function receiverMatchesBinding(
+  identifier: ts.Identifier,
+  bindingRecord: ExpressBindingRecord,
+  checker: ts.TypeChecker | undefined,
+): boolean {
+  if (!checker) return true
+  const tsSymbol = checker.getSymbolAtLocation(identifier)
+  const declarations = tsSymbol?.declarations
+  if (!declarations || declarations.length === 0) return false
+  return declarations.some((decl) => decl === bindingRecord.declaration)
+}
+
+function emitRouteForCall(
+  ctx: DetectExpressFrameworkContext,
+  bindingSymbol: SpiSymbol,
+  callExpr: ts.CallExpression,
+  seenEdgeKeys: Set<string>,
+): void {
+  // The route handler is the last argument. Earlier args may be the path
+  // string, parameter regexes, or middleware functions.
+  const args = callExpr.arguments
+  if (args.length === 0) return
+  const handlerArg = args[args.length - 1]
+  if (!handlerArg || !ts.isIdentifier(handlerArg)) return
+
+  // Resolve the handler. With a checker, prefer declaration-identity
+  // resolution so shadowed inner handlers don't tag the outer symbol.
+  const handlerSymbol = resolveHandlerSymbol(handlerArg, ctx)
+  if (!handlerSymbol) return
+
+  handlerSymbol.framework_role = 'express_route'
+  const range = handlerSymbol.range
+  const edgeKey = `${bindingSymbol.id}|${handlerSymbol.id}|route_handler`
+  if (seenEdgeKeys.has(edgeKey)) return
+  seenEdgeKeys.add(edgeKey)
+  ctx.edges.push({
+    from: bindingSymbol.id,
+    to: handlerSymbol.id,
+    kind: 'route_handler',
+    confidence: 'high',
+    source: 'framework-decorator',
+    evidence: { file_id: ctx.fileId, range },
+  })
+}
+
+function resolveHandlerSymbol(
+  handlerIdentifier: ts.Identifier,
+  ctx: DetectExpressFrameworkContext,
+): SpiSymbol | null {
+  const symbols = ctx.symbolsByFile.get(ctx.fileId) ?? []
+  const handlerName = handlerIdentifier.text
+
+  // With a checker, resolve the identifier to its declaration and only
+  // accept top-level declarations (parent === SourceFile or a
+  // top-level VariableStatement). This rejects shadowed inner scopes.
+  if (ctx.checker) {
+    const tsSymbol = ctx.checker.getSymbolAtLocation(handlerIdentifier)
+    const declarations = tsSymbol?.declarations
+    if (!declarations || declarations.length === 0) return null
+    const isTopLevel = declarations.some((decl) => isTopLevelDeclaration(decl))
+    if (!isTopLevel) return null
+  }
+
+  return symbols.find((s) =>
+    s.name === handlerName && (s.kind === 'function' || s.kind === 'constant' || s.kind === 'variable'),
+  ) ?? null
+}
+
+function isTopLevelDeclaration(decl: ts.Declaration): boolean {
+  // Function declarations: `function foo() {}` directly under a SourceFile.
+  if (ts.isFunctionDeclaration(decl)) return ts.isSourceFile(decl.parent)
+  // Variable declarations: `const foo = ...` — parent chain is
+  // VariableDeclaration → VariableDeclarationList → VariableStatement →
+  // SourceFile.
+  if (ts.isVariableDeclaration(decl)) {
+    const list = decl.parent
+    const stmt = list.parent
+    return ts.isVariableStatement(stmt) && ts.isSourceFile(stmt.parent)
+  }
+  return false
 }
 
 function collectExpressBindings(sourceFile: ts.SourceFile): ExpressBindings {
@@ -147,13 +312,14 @@ function tagSymbol(
   kind: SpiSymbol['kind'],
   name: string,
   role: SpiFrameworkRole,
-): void {
+): SpiSymbol | null {
   const symbols = symbolsByFile.get(fileId)
-  if (!symbols) return
+  if (!symbols) return null
   for (const symbol of symbols) {
     if (symbol.kind === kind && symbol.name === name) {
       symbol.framework_role = role
-      return
+      return symbol
     }
   }
+  return null
 }
