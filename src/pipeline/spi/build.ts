@@ -64,6 +64,7 @@ import type {
 import { addTestLayerEdges } from './test-layer.js'
 import { collectNestTokenMap, detectNestFramework } from './framework-nestjs.js'
 import { detectExpressFramework } from './framework-express.js'
+import { detectNextjsFramework } from './framework-nextjs.js'
 
 export type BuildSpiOptions = {
   root: string
@@ -653,6 +654,16 @@ function addTypeCheckerEdges(ctx: TypeCheckerEdgeContext): void {
       symbols,
       edges,
       checker,
+    })
+    // Slice 1c-iv.a: convention-based Next.js detector. Tags exported
+    // symbols in app/.../page.tsx, app/.../route.ts, pages/api/...,
+    // pages/..., and root middleware.ts with the matching nextjs_*
+    // framework_role.
+    detectNextjsFramework({
+      sourceFile,
+      fileId: file.id,
+      filePath: file.path,
+      symbolsByFile,
     })
   }
 }

@@ -78,6 +78,16 @@ export type SpiFrameworkRole =
   | 'express_router'
   | 'express_route'
   | 'express_middleware'
+  // Next.js roles (slice 1c-iv.a)
+  | 'nextjs_app_page'
+  | 'nextjs_app_route'
+  | 'nextjs_app_layout'
+  | 'nextjs_app_loading'
+  | 'nextjs_app_error'
+  | 'nextjs_app_template'
+  | 'nextjs_pages_page'
+  | 'nextjs_pages_api'
+  | 'nextjs_middleware'
 
 export type SpiSymbol = {
   id: string

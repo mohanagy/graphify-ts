@@ -229,6 +229,7 @@ export function projectSpiToExtraction(
 function frameworkForRole(role: NonNullable<SpiSymbol['framework_role']>): string {
   if (role.startsWith('nest_')) return 'nestjs'
   if (role.startsWith('express_')) return 'express'
+  if (role.startsWith('nextjs_')) return 'nextjs'
   return 'unknown'
 }
 
@@ -236,6 +237,8 @@ function nodeKindForRole(role: NonNullable<SpiSymbol['framework_role']>): NonNul
   switch (role) {
     case 'nest_route':
     case 'express_route':
+    case 'nextjs_app_route':
+    case 'nextjs_pages_api':
       return 'route'
     case 'express_router':
       return 'router'
@@ -248,6 +251,13 @@ function nodeKindForRole(role: NonNullable<SpiSymbol['framework_role']>): NonNul
       return 'class'
     case 'express_app':
     case 'express_middleware':
+    case 'nextjs_middleware':
+    case 'nextjs_app_page':
+    case 'nextjs_app_layout':
+    case 'nextjs_app_loading':
+    case 'nextjs_app_error':
+    case 'nextjs_app_template':
+    case 'nextjs_pages_page':
       return 'function'
     default:
       return null

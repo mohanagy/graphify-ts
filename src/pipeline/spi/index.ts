@@ -71,3 +71,8 @@ export {
   detectExpressFramework,
   type DetectExpressFrameworkContext,
 } from './framework-express.js'
+
+export {
+  detectNextjsFramework,
+  type DetectNextjsFrameworkContext,
+} from './framework-nextjs.js'
