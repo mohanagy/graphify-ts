@@ -4,6 +4,20 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-05-11
+
+### Added
+
+- **`graphify-ts generate . --spi`** opt-in flag wires the v0.14–v0.17 SPI substrate into the CLI for the first time. When set, `generateGraph` uses `buildSpiCached` + `projectSpiToExtraction` instead of the legacy `extract()` pipeline. Default behavior is unchanged — pass `--spi` to enable. User-visible wins:
+  - `framework_role` + `framework_metadata` from all 9 framework substrates (NestJS, Express, Next.js, React Router, Redux Toolkit, Hono, Fastify, tRPC, Prisma) flow into the projected `ExtractionData`.
+  - Repeat builds on an unchanged workspace hit the on-disk SPI cache (`graphify-out/.spi-cache/`, see #77) — near-zero rebuild time.
+  - Build notes include `"SPI cache hit (N files, key XXXXXXXX)"` or `"SPI build via projector (reason=...)"` so users can see which path ran.
+
+### Notes
+
+- v0.18 is the **CLI-integration** release: the substrate work from v0.14–v0.17 is now actually reachable from `graphify-ts generate` without writing library code.
+- The default pipeline stays on legacy `extract()` for safety — the SPI parity tests pin shape parity but not strict byte-equivalence. A future release can flip the default once `--spi` has been validated against real workspaces.
+
 ## [0.17.0] - 2026-05-11
 
 ### Added
