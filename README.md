@@ -1,6 +1,6 @@
 # graphify-ts
 
-**Stop making AI agents re-read your repo.** A local context compiler for Claude Code, Codex CLI, Copilot CLI, Cursor, Windsurf, and Aider — turn your TypeScript/Node workspace and PR diffs into compact, verifiable context packs.
+**Stop making AI agents re-read your repo.** A local **context plane** and **context compiler** for Claude Code, Codex CLI, Copilot CLI, Cursor, Windsurf, and Aider — turn your TypeScript/Node workspace and PR diffs into compact, verifiable context packs.
 
 [![npm](https://img.shields.io/npm/v/@mohammednagy/graphify-ts)](https://www.npmjs.com/package/@mohammednagy/graphify-ts)
 [![node >=20](https://img.shields.io/badge/node-%E2%89%A520-3c873a)](https://nodejs.org/)
@@ -88,9 +88,9 @@ NestJS + Next.js SaaS, 1,268 files, ~860K words. Same question, same Claude Opus
 
 |                        | Without graphify-ts | With graphify-ts | Difference |
 |------------------------|---------------------|------------------|------------|
-| Tool-call turns        | 9                   | **3**            | **3× fewer** |
-| Latency                | 96 sec              | **35 sec**       | **2.8× faster** |
-| Input tokens (provider-reported) | 615,190 | **233,508**      | **2.6× fewer** |
+| **Tool-call turns**    | 9                   | **3**            | **3× fewer** |
+| **Latency**            | 96 sec              | **35 sec**       | **2.8× faster** |
+| **Input tokens** (provider-reported) | 615,190 | **233,508**      | **2.6× fewer** |
 
 PR-review proof on a real diff: prompt tokens 63,024 → **8,690** (**7.25× fewer**). Receipts: [`docs/benchmarks/2026-05-02-govalidate-pr-review/`](docs/benchmarks/2026-05-02-govalidate-pr-review/).
 
@@ -120,7 +120,7 @@ These are local installers that write the agent's own MCP config to point at the
 
 ## MCP tools
 
-The default **core** profile exposes 6 tools for the most common agent workflows. Opt into the **full** 25-tool profile via `GRAPHIFY_TOOL_PROFILE=full` or `--profile full` on install.
+These six MCP tools handle the most common agent workflows in the default **core** profile. The full surface is 25 tools, opt-in via `GRAPHIFY_TOOL_PROFILE=full` or `--profile full` on install.
 
 | Tool | When the agent uses it |
 |---|---|
@@ -131,7 +131,7 @@ The default **core** profile exposes 6 tools for the most common agent workflows
 | `community_overview` | "Show me the architecture" — communities + sizes + bridges |
 | `graph_stats` | "How big is this graph?" — node/edge counts, density, file-type mix |
 
-Full-profile additions: `context_pack`, `context_expand`, `context_prompt`, `context_session_reset`, `risk_map`, `implementation_checklist`, `relevant_files`, `feature_map`, `time_travel_compare`, `community_details`, and more. Full reference: [examples/mcp-tool-examples.md](examples/mcp-tool-examples.md).
+Full-profile additions: `context_pack`, `context_expand`, `context_prompt`, `context_session_reset`, `risk_map`, `implementation_checklist`, `relevant_files`, `feature_map`, `time_travel_compare`, `community_details`, `query_graph`, `get_node`, `get_neighbors`, `explain_node`, `shortest_path`, `graph_diff`, `god_nodes`, `semantic_anomalies`, `get_community`. Full reference: [examples/mcp-tool-examples.md](examples/mcp-tool-examples.md).
 
 ---
 
@@ -212,8 +212,10 @@ A specific shout-out to [@jamemackson](https://github.com/jamemackson) for [#54]
 
 ---
 
-## Credit & license
+## Credit
 
 graphify-ts is a Node/TypeScript implementation of the [original `graphify`](https://github.com/safishamsi/graphify) by [Safi Shamsi](https://github.com/safishamsi), adapted for local graph workflows and AI agent integration.
 
-MIT licensed. Use it, fork it, ship it.
+## License
+
+MIT. Use it, fork it, ship it.
