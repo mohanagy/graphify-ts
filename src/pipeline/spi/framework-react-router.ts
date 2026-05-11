@@ -78,10 +78,19 @@ export function detectReactRouterFramework(ctx: DetectReactRouterFrameworkContex
       if (!isFactoryCall(decl.initializer, bindings.routerFactories)) continue
 
       // Collect route assignments from the config array (first argument).
+      // Two AST shapes accepted:
+      //   1. Inline literal: createBrowserRouter([{path:...}, ...])
+      //   2. Hoisted: const routes = [{path:...}]; createBrowserRouter(routes)
+      // For (2) we walk the file's top-level VariableDeclarations to find
+      // the same-file source array. Cross-file hoisting (a const exported
+      // from another file) remains out of scope — requires the type
+      // checker and produces strictly diminishing returns; can be added
+      // later if a real codebase asks for it.
       const configArg = (decl.initializer as ts.CallExpression).arguments[0]
       const collected: RouteAssignment[] = []
-      if (configArg && ts.isArrayLiteralExpression(configArg)) {
-        collectRouteAssignments(configArg, '', collected)
+      const resolvedArray = resolveRouteConfigArray(configArg, ctx.sourceFile)
+      if (resolvedArray) {
+        collectRouteAssignments(resolvedArray, '', collected)
       }
 
       // The router symbol's route_path is the canonical roots joined; for
@@ -135,6 +144,35 @@ export function detectReactRouterFramework(ctx: DetectReactRouterFrameworkContex
       }
     }
   }
+}
+
+/** Resolve the config argument to an ArrayLiteralExpression. Accepts:
+ *   - the array literal directly (the common inline case)
+ *   - an Identifier that refers to a same-file const/let/var whose
+ *     initializer is an array literal
+ *  Returns null when neither shape matches; the detector skips route-
+ *  assignment collection but still tags the router with its role. */
+function resolveRouteConfigArray(
+  expr: ts.Expression | undefined,
+  sourceFile: ts.SourceFile,
+): ts.ArrayLiteralExpression | null {
+  if (!expr) return null
+  if (ts.isArrayLiteralExpression(expr)) return expr
+  if (!ts.isIdentifier(expr)) return null
+  const name = expr.text
+  for (const stmt of sourceFile.statements) {
+    if (!ts.isVariableStatement(stmt)) continue
+    for (const decl of stmt.declarationList.declarations) {
+      if (!ts.isIdentifier(decl.name) || decl.name.text !== name) continue
+      if (decl.initializer && ts.isArrayLiteralExpression(decl.initializer)) {
+        return decl.initializer
+      }
+      // Same-name identifier exists but isn't an array literal — bail out
+      // rather than falling through to a different declaration.
+      return null
+    }
+  }
+  return null
 }
 
 /** A flat record describing one route node in the config tree, after path

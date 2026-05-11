@@ -149,11 +149,19 @@ function pagesRoutePath(normalized: string): string {
 function segmentsToRoutePath(segments: string[]): string {
   const transformed: string[] = []
   for (const raw of segments) {
-    // Strip route groups (auth) and parallel/intercepted segments @modal —
-    // they are layout-only and produce NO URL segment.
+    // Strip route groups (auth) and parallel/intercepted parent slots
+    // @modal — they are layout-only and produce NO URL segment.
     if (raw.startsWith('(') && raw.endsWith(')')) continue
     if (raw.startsWith('@')) continue
-    transformed.push(normalizeSegment(raw))
+
+    // Strip Next.js intercepting-route prefixes from the folder name:
+    //   (.)photo    → photo   (intercept same level)
+    //   (..)photo   → photo   (intercept one level up)
+    //   (...)photo  → photo   (intercept from root)
+    // The folder name itself IS the URL segment; the prefix is metadata
+    // that only affects intercept routing, not the final route_path.
+    const stripped = raw.replace(/^\(\.{1,3}\)/, '')
+    transformed.push(normalizeSegment(stripped))
   }
   if (transformed.length === 0) return '/'
   return '/' + transformed.join('/')

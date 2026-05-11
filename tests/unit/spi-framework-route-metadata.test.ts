@@ -143,6 +143,33 @@ describe('Next.js route_path derivation (slice 1c-iv.b)', () => {
     expect(mw?.framework_metadata?.route_path).toBe('/*')
   })
 
+  it('strips intercepting-route prefixes (.) (..) (...) from folder names (CodeRabbit fix)', () => {
+    // Next.js intercepting routes: `(.)photo`, `(..)photo`, `(...)photo`
+    // are file-system markers for intercept behavior but the URL segment
+    // is still the bare folder name. Without the strip the unstripped
+    // marker would leak into route_path (e.g. `/feed/(.)photo`).
+    writeFile(sandbox, 'app/feed/(.)photo/[id]/page.tsx', [
+      'export default function InterceptedPhotoPage(): null { return null }',
+    ].join('\n') + '\n')
+    writeFile(sandbox, 'app/feed/(..)comments/page.tsx', [
+      'export default function InterceptedCommentsPage(): null { return null }',
+    ].join('\n') + '\n')
+    writeFile(sandbox, 'app/feed/(...)admin/page.tsx', [
+      'export default function InterceptedAdminPage(): null { return null }',
+    ].join('\n') + '\n')
+
+    const spi = build(sandbox)
+
+    const photo = findSymbol(spi, 'app/feed/(.)photo/[id]/page.tsx', 'InterceptedPhotoPage')
+    expect(photo?.framework_metadata?.route_path).toBe('/feed/photo/:id')
+
+    const comments = findSymbol(spi, 'app/feed/(..)comments/page.tsx', 'InterceptedCommentsPage')
+    expect(comments?.framework_metadata?.route_path).toBe('/feed/comments')
+
+    const admin = findSymbol(spi, 'app/feed/(...)admin/page.tsx', 'InterceptedAdminPage')
+    expect(admin?.framework_metadata?.route_path).toBe('/feed/admin')
+  })
+
   it('strips a leading src/ directory', () => {
     writeFile(sandbox, 'src/app/users/page.tsx', [
       'export default function UsersPage(): null { return null }',
@@ -214,6 +241,27 @@ describe('React Router route_path extraction (slice 1c-v.b)', () => {
     const spi = build(sandbox)
     const loader = findSymbol(spi, 'src/routes.tsx', 'listLoader')
     expect(loader?.framework_metadata?.route_path).toBe('/users')
+  })
+
+  it('resolves hoisted route-config arrays declared in the same file (CodeRabbit fix)', () => {
+    // Idiomatic React Router pattern: declare the route array as a const
+    // and pass it to the factory. Pre-fix only the inline-literal form
+    // was handled, so hoisted configs were silently skipped.
+    writeFile(sandbox, 'src/routes.tsx', [
+      'import { createBrowserRouter } from "react-router-dom"',
+      'export function dashboardLoader(): unknown { return null }',
+      'const routes = [',
+      '  { path: "/dashboard", loader: dashboardLoader }',
+      ']',
+      'export const router = createBrowserRouter(routes)',
+    ].join('\n') + '\n')
+    const spi = build(sandbox)
+    const loader = findSymbol(spi, 'src/routes.tsx', 'dashboardLoader')
+    expect(loader?.framework_role).toBe('react_router_loader')
+    expect(loader?.framework_metadata?.route_path).toBe('/dashboard')
+    const router = findSymbol(spi, 'src/routes.tsx', 'router')
+    expect(router?.framework_role).toBe('react_router_router')
+    expect(router?.framework_metadata?.route_path).toBe('/dashboard')
   })
 
   it('tags action with route_path too', () => {
