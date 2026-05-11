@@ -55,7 +55,11 @@ describe('SPI Express mount-prefix resolution (slice 1c-ii.g)', () => {
       ].join('\n') + '\n')
       const spi = build(sandbox)
       const handler = findSymbol(spi, 'src/server.ts', 'listUsers')
-      expect(handler?.framework_metadata?.route_path).toBe('/api/users/')
+      // Trailing-slash normalization (slice 1c-ii.i): router-root '/'
+      // collapses to the bare mount prefix, matching the legacy
+      // extractor's emission. The router's own mount_path is still
+      // recorded literally on the router symbol.
+      expect(handler?.framework_metadata?.route_path).toBe('/api/users')
     })
 
     it('works when the mount call appears BEFORE the route registration', () => {
@@ -84,7 +88,9 @@ describe('SPI Express mount-prefix resolution (slice 1c-ii.g)', () => {
       ].join('\n') + '\n')
       const spi = build(sandbox)
       const synthetic = spi.symbols.find((s) => s.framework_role === 'express_route' && s.kind === 'function')
-      expect(synthetic?.framework_metadata?.route_path).toBe('/api/users/')
+      // Trailing-slash normalization (slice 1c-ii.i): same rule as named
+      // handlers — router-root '/' collapses to the bare prefix.
+      expect(synthetic?.framework_metadata?.route_path).toBe('/api/users')
     })
 
     it('does not prefix when the router is registered without a path prefix', () => {
@@ -124,7 +130,9 @@ describe('SPI Express mount-prefix resolution (slice 1c-ii.g)', () => {
       // alias-following + pathToFileId lookup. mount_path is stamped
       // on the router's SpiSymbol; the workspace-level finalizer then
       // propagates the prefix to all routes registered on that router.
-      expect(handler?.framework_metadata?.route_path).toBe('/api/users/')
+      // Trailing-slash normalization (slice 1c-ii.i): router-root '/'
+      // collapses to the bare mount prefix.
+      expect(handler?.framework_metadata?.route_path).toBe('/api/users')
     })
 
     it('handles aliased imports across files (`import { usersRouter as users } from ...`)', () => {
@@ -142,7 +150,7 @@ describe('SPI Express mount-prefix resolution (slice 1c-ii.g)', () => {
       ].join('\n') + '\n')
       const spi = build(sandbox)
       const handler = findSymbol(spi, 'src/routes/users.ts', 'listUsers')
-      expect(handler?.framework_metadata?.route_path).toBe('/v2/')
+      expect(handler?.framework_metadata?.route_path).toBe('/v2')
     })
 
     it('handles default-import re-exported routers (`export default usersRouter`)', () => {
@@ -161,7 +169,7 @@ describe('SPI Express mount-prefix resolution (slice 1c-ii.g)', () => {
       ].join('\n') + '\n')
       const spi = build(sandbox)
       const handler = findSymbol(spi, 'src/routes/users.ts', 'listUsers')
-      expect(handler?.framework_metadata?.route_path).toBe('/api/')
+      expect(handler?.framework_metadata?.route_path).toBe('/api')
     })
 
     it('does NOT mis-tag local same-named identifiers in unrelated files', () => {
@@ -188,7 +196,7 @@ describe('SPI Express mount-prefix resolution (slice 1c-ii.g)', () => {
       expect(other?.framework_metadata?.mount_path).toBeUndefined()
       // The LOCAL router in server.ts gets the prefix.
       const handler = findSymbol(spi, 'src/server.ts', 'listUsers')
-      expect(handler?.framework_metadata?.route_path).toBe('/api/')
+      expect(handler?.framework_metadata?.route_path).toBe('/api')
     })
   })
 

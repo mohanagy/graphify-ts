@@ -1,11 +1,11 @@
-// SPI v1 — Next.js framework layer (slice 1c-iv.a of #72).
+// SPI v1 — Next.js framework layer (slices 1c-iv.a + 1c-iv.b of #72).
 //
 // Next.js is convention-based rather than call-based: routes, layouts,
 // middleware, and API handlers are identified by file path patterns, not
 // by AST shapes. This detector walks each file's path and applies the
 // matching SpiFrameworkRole to the file's exports.
 //
-// Conventions recognized in this slice:
+// Conventions recognized:
 //
 //   app/<segments>/page.tsx          → nextjs_app_page     (default export)
 //   app/<segments>/route.ts          → nextjs_app_route    (named HTTP-method exports)
@@ -17,20 +17,23 @@
 //   pages/<segments>.tsx             → nextjs_pages_page   (default export)
 //   middleware.ts (workspace root)   → nextjs_middleware   (default export)
 //
-// For app-router route.ts files the convention is **named** exports per
-// HTTP method (`export function GET() {}`, `export function POST() {}`),
-// so the detector tags every named export whose name is a recognized
-// HTTP verb. For every other convention the convention's payload lives
-// on the default export.
+// Slice 1c-iv.b adds `route_path` to framework_metadata for every tagged
+// symbol — derived deterministically from the file path:
 //
-// Out of scope for this slice (deferred to follow-ups):
+//   app/users/page.tsx              → /users
+//   app/users/[id]/page.tsx         → /users/:id
+//   app/(auth)/login/page.tsx       → /login          (route groups stripped)
+//   app/blog/[...slug]/page.tsx     → /blog/*         (catch-all)
+//   app/blog/[[...slug]]/page.tsx   → /blog/*?        (optional catch-all)
+//   app/api/users/route.ts          → /api/users
+//   pages/users/[id].tsx            → /users/:id
+//   pages/api/users/[id].ts         → /api/users/:id  (api prefix preserved)
+//   middleware.ts                   → /*              (matches all paths)
 //
-//   * route_path metadata derived from the file path
-//     (e.g. `app/users/[id]/page.tsx` → route_path: '/users/:id'). Slot
-//     in framework_metadata reserved for slice 1c-iv.b.
-//   * Dynamic segments and route groups: [id], [[...slug]], (group) —
-//     same metadata work above.
-//   * server/client component detection via the 'use client' directive.
+// The path layer is the same for both routers, modulo the file-name
+// stripping rule (app/* uses file basename as the convention key and the
+// path ends at the directory; pages/* uses the file basename minus the
+// extension as the last segment).
 
 import ts from 'typescript'
 
@@ -49,8 +52,8 @@ const ROUTE_HTTP_NAMES: ReadonlySet<string> = new Set([
 ])
 
 type NextjsConventionMatch =
-  | { kind: 'default'; role: SpiFrameworkRole }
-  | { kind: 'http_methods'; role: SpiFrameworkRole }
+  | { kind: 'default'; role: SpiFrameworkRole; routePath: string }
+  | { kind: 'http_methods'; role: SpiFrameworkRole; routePath: string }
 
 export type DetectNextjsFrameworkContext = {
   sourceFile: ts.SourceFile
@@ -65,9 +68,9 @@ export function detectNextjsFramework(ctx: DetectNextjsFrameworkContext): void {
   if (!match) return
 
   if (match.kind === 'default') {
-    tagDefaultExport(ctx, match.role)
+    tagDefaultExport(ctx, match.role, match.routePath)
   } else {
-    tagHttpMethodExports(ctx, match.role)
+    tagHttpMethodExports(ctx, match.role, match.routePath)
   }
 }
 
@@ -80,7 +83,7 @@ function matchConvention(filePath: string): NextjsConventionMatch | null {
 
   // Root middleware: `middleware.ts` or `middleware.tsx`.
   if (normalized === 'middleware.ts' || normalized === 'middleware.tsx') {
-    return { kind: 'default', role: 'nextjs_middleware' }
+    return { kind: 'default', role: 'nextjs_middleware', routePath: '/*' }
   }
 
   // App router conventions: `app/.../<basename>.tsx?` for pages/layouts/
@@ -88,10 +91,10 @@ function matchConvention(filePath: string): NextjsConventionMatch | null {
   if (normalized.startsWith('app/')) {
     const basename = stripExtension(getBasename(normalized))
     if (basename === 'route') {
-      return { kind: 'http_methods', role: 'nextjs_app_route' }
+      return { kind: 'http_methods', role: 'nextjs_app_route', routePath: appRoutePath(normalized) }
     }
     const role = APP_FILE_CONVENTIONS.get(basename)
-    if (role) return { kind: 'default', role }
+    if (role) return { kind: 'default', role, routePath: appRoutePath(normalized) }
     return null
   }
 
@@ -99,17 +102,73 @@ function matchConvention(filePath: string): NextjsConventionMatch | null {
   if (normalized.startsWith('pages/')) {
     // `pages/api/...` files are API routes (default export).
     if (normalized.startsWith('pages/api/')) {
-      return { kind: 'default', role: 'nextjs_pages_api' }
+      return { kind: 'default', role: 'nextjs_pages_api', routePath: pagesRoutePath(normalized) }
     }
     // Other pages/* files are page components, but skip Next.js'
     // special files (_app, _document, _error, _middleware) and any
     // co-located non-routable file like `_components`.
     const basename = stripExtension(getBasename(normalized))
     if (basename.startsWith('_')) return null
-    return { kind: 'default', role: 'nextjs_pages_page' }
+    return { kind: 'default', role: 'nextjs_pages_page', routePath: pagesRoutePath(normalized) }
   }
 
   return null
+}
+
+/** Derive a URL path from a Next.js app-router file path. The file's
+ *  basename (`page`, `layout`, `route`, etc.) is stripped because in the
+ *  app router the URL is determined by the *directory* containing the
+ *  convention file, not the file name. */
+function appRoutePath(normalized: string): string {
+  // Drop the leading "app/" segment and the final file name.
+  const withoutPrefix = normalized.slice('app/'.length)
+  const segments = withoutPrefix.split('/').slice(0, -1)
+  return segmentsToRoutePath(segments)
+}
+
+/** Derive a URL path from a Next.js pages-router file path. Both regular
+ *  pages and pages/api use the basename (minus extension) as the trailing
+ *  segment — except `index`, which collapses to the parent directory. */
+function pagesRoutePath(normalized: string): string {
+  const withoutPrefix = normalized.slice('pages/'.length)
+  const parts = withoutPrefix.split('/')
+  const last = parts[parts.length - 1] ?? ''
+  const lastStem = stripExtension(last)
+  const allSegments = parts.slice(0, -1)
+  if (lastStem !== 'index') allSegments.push(lastStem)
+  return segmentsToRoutePath(allSegments)
+}
+
+/** Normalise the list of route segments into a leading-`/` URL string.
+ *  Applies Next.js' three dynamic-segment transforms:
+ *    [foo]      → :foo
+ *    [...foo]   → *           (catch-all)
+ *    [[...foo]] → *?          (optional catch-all)
+ *  Route groups `(group)` and parallel routes `@group` are erased from the
+ *  URL — they exist only in the file layout. */
+function segmentsToRoutePath(segments: string[]): string {
+  const transformed: string[] = []
+  for (const raw of segments) {
+    // Strip route groups (auth) and parallel/intercepted segments @modal —
+    // they are layout-only and produce NO URL segment.
+    if (raw.startsWith('(') && raw.endsWith(')')) continue
+    if (raw.startsWith('@')) continue
+    transformed.push(normalizeSegment(raw))
+  }
+  if (transformed.length === 0) return '/'
+  return '/' + transformed.join('/')
+}
+
+function normalizeSegment(segment: string): string {
+  // Optional catch-all: [[...slug]] → *?
+  if (segment.startsWith('[[...') && segment.endsWith(']]')) return '*?'
+  // Catch-all: [...slug] → *
+  if (segment.startsWith('[...') && segment.endsWith(']')) return '*'
+  // Dynamic: [id] → :id
+  if (segment.startsWith('[') && segment.endsWith(']')) {
+    return ':' + segment.slice(1, -1)
+  }
+  return segment
 }
 
 function stripLeadingSrc(filePath: string): string {
@@ -126,7 +185,7 @@ function stripExtension(name: string): string {
   return dot === -1 ? name : name.slice(0, dot)
 }
 
-function tagDefaultExport(ctx: DetectNextjsFrameworkContext, role: SpiFrameworkRole): void {
+function tagDefaultExport(ctx: DetectNextjsFrameworkContext, role: SpiFrameworkRole, routePath: string): void {
   // A Next.js page/layout/etc. is whatever symbol the file exports as
   // its default. Two AST shapes produce a default export:
   //   1. `export default function Foo() {}` — direct on a declaration.
@@ -138,18 +197,19 @@ function tagDefaultExport(ctx: DetectNextjsFrameworkContext, role: SpiFrameworkR
   // in a follow-up slice mirroring slice 1c-ii.e's pattern.
   const defaultExportName = findDefaultExportName(ctx.sourceFile)
   if (defaultExportName === null) return
-  tagSymbolByName(ctx, defaultExportName, role)
+  tagSymbolByName(ctx, defaultExportName, role, routePath)
 }
 
-function tagHttpMethodExports(ctx: DetectNextjsFrameworkContext, role: SpiFrameworkRole): void {
+function tagHttpMethodExports(ctx: DetectNextjsFrameworkContext, role: SpiFrameworkRole, routePath: string): void {
   // App-router route handlers (`app/.../route.ts`) export one function
   // per HTTP method: `export function GET() {}`, `export function
-  // POST() {}`, etc. Tag each.
+  // POST() {}`, etc. Tag each; record the HTTP method on framework_metadata
+  // so consumers can filter by verb.
   for (const stmt of ctx.sourceFile.statements) {
     if (!ts.isFunctionDeclaration(stmt) || !stmt.name) continue
     if (!hasExportModifier(stmt)) continue
     if (!ROUTE_HTTP_NAMES.has(stmt.name.text)) continue
-    tagSymbolByName(ctx, stmt.name.text, role)
+    tagSymbolByName(ctx, stmt.name.text, role, routePath, stmt.name.text)
   }
 }
 
@@ -192,12 +252,22 @@ function hasExportModifier(node: ts.Node): boolean {
   return false
 }
 
-function tagSymbolByName(ctx: DetectNextjsFrameworkContext, name: string, role: SpiFrameworkRole): void {
+function tagSymbolByName(
+  ctx: DetectNextjsFrameworkContext,
+  name: string,
+  role: SpiFrameworkRole,
+  routePath: string,
+  httpMethod?: string,
+): void {
   const symbols = ctx.symbolsByFile.get(ctx.fileId)
   if (!symbols) return
   for (const symbol of symbols) {
     if (symbol.name === name && symbol.framework_role === undefined) {
       symbol.framework_role = role
+      const metadata: Record<string, unknown> = { ...(symbol.framework_metadata ?? {}) }
+      metadata.route_path = routePath
+      if (httpMethod) metadata.http_method = httpMethod
+      symbol.framework_metadata = metadata
       return
     }
   }

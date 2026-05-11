@@ -102,35 +102,28 @@ describe('Express projector parity (legacy extract vs SPI projector)', () => {
       const projected = projectFromSpi(sandbox)
       const legacy = legacyExtract(sandbox, ['src/server.ts', 'src/routes/users.ts'])
 
-      // SPI projector: listUsers gets framework=express, route_path=/api/users/.
+      // SPI projector: listUsers gets framework=express, route_path=/api/users
+      // (slice 1c-ii.i collapses the router-root '/' so the projector's
+      // output is byte-equivalent to the legacy extractor's emission).
       const projectedListUsers = projected.nodes.find((n) => n.label === 'listUsers()')
       expect(projectedListUsers?.framework).toBe('express')
       expect(projectedListUsers?.framework_role).toBe('express_route')
-      expect((projectedListUsers as Record<string, unknown>)?.route_path).toBe('/api/users/')
+      expect((projectedListUsers as Record<string, unknown>)?.route_path).toBe('/api/users')
 
       // Legacy: assert it produced a node for the handler function and
       // that at least one ExtractionNode in the legacy output carries
-      // the prefixed path in some form. The legacy extractor's exact
-      // shape for cross-file mounts emits a synthesized route node
-      // distinct from the handler function node.
-      // CodeRabbit catch: previous version used `void legacyHandler`
-      // which let the assertion pass vacuously.
+      // the prefixed path in the canonical form. After slice 1c-ii.i
+      // both paths agree on `/api/users` (no trailing slash).
       const legacyHandler = legacy.nodes.find((n) => n.label === 'listUsers()')
       expect(legacyHandler, 'legacy extractor must emit a node for listUsers').toBeTruthy()
 
-      // Both paths register the prefixed path SOMEWHERE; they normalize
-      // trailing slashes differently though: legacy emits `/api/users`
-      // (drops the trailing slash from the router's root-level get),
-      // while the SPI projector preserves the trailing slash from the
-      // raw concatenation (`/api/users` + `/` → `/api/users/`). Both
-      // interpretations are defensible; this assertion accepts either
-      // form so the parity test pins the actual shared behavior. The
-      // trailing-slash normalization itself is a future-slice item.
       const legacyPaths = legacy.nodes
         .map((n) => (n as Record<string, unknown>).route_path)
         .filter((p): p is string => typeof p === 'string')
-      const containsApiUsers = legacyPaths.some((p) => p === '/api/users' || p === '/api/users/')
-      expect(containsApiUsers, 'legacy extractor must register /api/users (with or without trailing slash) somewhere in its node payload').toBe(true)
+      expect(
+        legacyPaths.includes('/api/users'),
+        'legacy extractor must register /api/users somewhere in its node payload',
+      ).toBe(true)
     })
   })
 

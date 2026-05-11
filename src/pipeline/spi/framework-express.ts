@@ -295,7 +295,15 @@ function joinRoutePath(prefix: string, path: string): string {
   // literally at '/api' answers '/api/api', not '/api'. The function
   // is intentionally unconditional — caller's single-run invariant
   // prevents double-application.
+  //
+  // Slice 1c-ii.i (v0.14 finisher): normalize the router-root '/' case
+  // so it doesn't produce a redundant trailing slash. A router mounted
+  // at '/api/users' with a root route ('/') answers '/api/users' — the
+  // legacy extractor emits this form, and we match it now so the SPI
+  // projector's route_path is byte-equivalent to the legacy extractor's
+  // for the most common mounted-router shape.
   const cleanPrefix = prefix.replace(/\/+$/, '')
+  if (path === '/' || path === '') return cleanPrefix === '' ? '/' : cleanPrefix
   const cleanPath = path.startsWith('/') ? path : '/' + path
   return cleanPrefix + cleanPath
 }
