@@ -141,9 +141,11 @@ export function computeContextPackDiagnostics(
   if (
     signals.node_count >= UNDERSIZED_RETRIEVAL_THRESHOLD &&
     !Number.isNaN(signals.avg_match_score) &&
-    signals.avg_match_score > 0 &&
     signals.avg_match_score < LOW_AVG_MATCH_SCORE
   ) {
+    // CodeRabbit fix: do NOT exclude avg_match_score === 0. That is the
+    // worst-possible retrieval and must fire the warning. The NaN guard
+    // above already prevents firing on packs with no scored nodes.
     warnings.push({
       kind: 'low_avg_match_score',
       severity: 'warn',

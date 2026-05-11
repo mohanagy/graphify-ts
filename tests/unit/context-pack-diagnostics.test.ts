@@ -172,6 +172,21 @@ describe('computeContextPackDiagnostics', () => {
     expect(warning?.severity).toBe('warn')
   })
 
+  it('flags low_avg_match_score even when average is exactly 0 (CodeRabbit fix)', () => {
+    // The worst-case retrieval is 0 match-score across the board. The
+    // predicate must NOT exclude that case via a `> 0` clause — only the
+    // NaN guard protects against "no scored nodes at all".
+    const diag = computeContextPackDiagnostics(makePack({
+      nodes: [
+        makeNode({ node_id: 'a', match_score: 0 }),
+        makeNode({ node_id: 'b', match_score: 0 }),
+        makeNode({ node_id: 'c', match_score: 0 }),
+      ],
+    }))
+    expect(diag.signals.avg_match_score).toBe(0)
+    expect(diag.warnings.map((w) => w.kind)).toContain('low_avg_match_score')
+  })
+
   it('flags low_avg_match_score when average is below 0.30', () => {
     const diag = computeContextPackDiagnostics(makePack({
       nodes: [
