@@ -32,7 +32,7 @@ cd your-project
 graphify-ts generate .          # builds graphify-out/graph.json (no API key, no cloud)
 graphify-ts claude install      # wires Claude Code to use it via MCP
 
-# Or use the opt-in v0.20 SPI pipeline for framework-aware metadata + disk cache:
+# Or use the opt-in SPI pipeline for framework-aware metadata + disk cache:
 graphify-ts generate . --spi
 ```
 
@@ -139,7 +139,7 @@ Full-profile additions: `context_pack`, `context_expand`, `context_prompt`, `con
 
 ```bash
 graphify-ts generate .                          # build the graph
-graphify-ts generate . --spi                    # v0.20 SPI pipeline (framework metadata + disk cache)
+graphify-ts generate . --spi                    # opt-in SPI pipeline (framework metadata + disk cache)
 graphify-ts watch .                             # rebuild on file change
 graphify-ts pack "how does auth work?" --task explain          # compact CLI context payload
 graphify-ts prompt "how does auth work?" --provider claude     # provider-ready compiled prompt

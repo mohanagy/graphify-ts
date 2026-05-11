@@ -1,6 +1,6 @@
 # 2026-05-11 — `graphify-ts generate --spi` vs legacy `extract()`
 
-> **Tracking issues:** [#130](https://github.com/mohanagy/graphify-ts/issues/130) and the v0.20 context-compiler payoff follow-up.
+> **Tracking issues:** [#130](https://github.com/mohanagy/graphify-ts/issues/130) and the v0.21 context-compiler payoff follow-up.
 
 ## TL;DR (latest measured run: `results/2026-05-11T163843Z/`)
 
@@ -12,7 +12,7 @@
 | Node count | 29 | 30 | +1 |
 | Total explain-pack tokens (7 prompts, budget 2000) | 330 | 378 | **+14.5%** |
 
-The current v0.20 runtime changes do **not** reduce total explain-pack tokens on this bundled fixture. The benchmark still shows two concrete payoffs:
+The current v0.21 runtime changes do **not** reduce total explain-pack tokens on this bundled fixture. The benchmark still shows two concrete payoffs:
 
 1. `--spi` keeps returning the structurally correct substrate for framework-shaped prompts (`prisma_client`, `trpc_procedure_*`) while legacy still misroutes some of them.
 2. `retrieval_level` is now operational: the same prompt expands from tight seed-only packs at level 1 to materially broader cross-module packs at level 4.
