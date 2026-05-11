@@ -77,6 +77,7 @@ The runner now produces:
 1. `legacy.json`, `spi-cold.json`, `spi-warm.json`
 2. `spi-cold.analysis.json` — strategy comparison + retrieval-level sweep
 3. `summary.json` — top-level aggregate report
+4. `edge_count` in each variant JSON
 
 ### Optional: point the runner at another local repo
 
@@ -100,6 +101,29 @@ node docs/benchmarks/2026-05-11-spi-vs-legacy/probe.mjs \
 ```
 
 If GoValidate is available locally, use the template above for both the backend-only checkout and the monorepo checkout. This repo does **not** commit any private-path defaults or fake results for those runs.
+
+### Real-workspace matrix runner
+
+You can benchmark two local workspaces side by side without committing private paths or artifacts:
+
+```bash
+GRAPHIFY_BENCH_BACKEND=/absolute/path/to/backend \
+GRAPHIFY_BENCH_MONOREPO=/absolute/path/to/monorepo \
+bash docs/benchmarks/2026-05-11-spi-vs-legacy/run-real-workspace.sh
+```
+
+Defaults:
+
+- prompts file: `docs/benchmarks/2026-05-11-spi-vs-legacy/prompts.real-workspace.example.json`
+- output bundle: `docs/benchmarks/2026-05-11-spi-vs-legacy/results/real-workspaces/<timestamp>/`
+
+Artifacts:
+
+1. one normal benchmark run per workspace (`backend/summary.json`, `monorepo/summary.json`)
+2. `real-workspaces.summary.json` — side-by-side aggregate summary
+3. `REAL_WORKSPACE_REPORT_TEMPLATE.md` — sharing template with privacy disclaimer
+
+The aggregate summary keeps objective metrics separate from qualitative notes and does not claim any private-repo numbers unless you run the benchmark locally.
 
 ## Caveats / limitations
 

@@ -34,6 +34,30 @@ export interface ContextPackSelectionDiagnostics {
   ranking: ContextPackSelectionRankingEntry[]
 }
 
+export type ContextPackRetrievalStrategy = 'default' | 'slice-v1'
+
+export interface ContextPackSliceAnchor {
+  node_id?: string
+  label: string
+  reason: string
+}
+
+export interface ContextPackSlicePath {
+  from_id?: string
+  from: string
+  to_id?: string
+  to: string
+  relation: string
+  direction: 'forward' | 'backward'
+}
+
+export interface ContextPackSliceMetadata {
+  mode: 'explain' | 'debug' | 'impact' | 'review'
+  anchors: ContextPackSliceAnchor[]
+  directions: Array<'forward' | 'backward'>
+  selected_paths: ContextPackSlicePath[]
+}
+
 export type ContextRepresentationType =
   | 'detail'
   | 'summary'
@@ -179,6 +203,8 @@ export interface CompiledContextPack<
   graph_signals?: ContextPackGraphSignals
   shared_file_type?: string
   selection_diagnostics?: ContextPackSelectionDiagnostics
+  retrieval_strategy?: ContextPackRetrievalStrategy
+  slice?: ContextPackSliceMetadata
   /**
    * Retrieval-gate decision (#75) attached when the caller invoked the
    * gate before building the pack. Carries `level`, `reason`, `intent`,

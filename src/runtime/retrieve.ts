@@ -9,7 +9,9 @@ import type {
   ContextPackExpandableLineRange,
   ContextPackExpandableRef,
   ContextPackNode,
+  ContextPackRetrievalStrategy,
   ContextPackSelectionDiagnostics,
+  ContextPackSliceMetadata,
   ContextPackTaskContract,
 } from '../contracts/context-pack.js'
 import type { TaskIntentKind } from '../contracts/task-intent.js'
@@ -35,6 +37,7 @@ import {
   relationAllowedForPolicy,
   relationIsPrimaryForPolicy,
 } from './retrieve/expansion.js'
+import { sliceCandidatesForRetrieve } from './retrieve/slicing.js'
 import { communitiesFromGraph, estimateQueryTokens } from './serve.js'
 
 const SNIPPET_HALF_WINDOW = 7
@@ -75,6 +78,7 @@ export interface RetrieveOptions {
   retrievalLevel?: RetrievalLevel
   /** Internal additive override for benchmarks/tests. */
   selectionStrategy?: ContextPackSelectionStrategy
+  retrievalStrategy?: ContextPackRetrievalStrategy
 }
 
 export interface RetrieveMatchedNode {
@@ -125,6 +129,8 @@ export interface RetrieveResult {
   coverage?: ContextPackCoverage
   selection_diagnostics?: ContextPackSelectionDiagnostics
   retrieval_gate?: RetrievalGateDecision
+  retrieval_strategy?: ContextPackRetrievalStrategy
+  slice?: ContextPackSliceMetadata
 }
 
 export interface CompactRetrieveMatchedNode extends Omit<RetrieveMatchedNode, 'community_label' | 'file_type' | 'framework_boost'> {
@@ -567,6 +573,34 @@ interface ScoredNode {
   evidenceTier: 0 | 1 | 2
   score: number
   relevanceBand: 'direct' | 'related' | 'peripheral'
+}
+
+function scoredNodeFromGraph(graph: KnowledgeGraph, nodeId: string, score: number): ScoredNode {
+  const attributes = graph.nodeAttributes(nodeId)
+  const resolvedLine = resolvedLineNumber(attributes)
+  return {
+    id: nodeId,
+    label: String(attributes.label ?? ''),
+    sourceFile: String(attributes.source_file ?? ''),
+    sourceLocation: typeof attributes.source_location === 'string' && attributes.source_location.length > 0
+      ? attributes.source_location
+      : null,
+    lineNumber: resolvedLine.lineNumber,
+    lineNumberDerived: resolvedLine.derived,
+    storedSnippet: storedSnippetFromAttributes(attributes),
+    nodeKind: String(attributes.node_kind ?? ''),
+    framework: typeof attributes.framework === 'string' ? attributes.framework : undefined,
+    frameworkRole: typeof attributes.framework_role === 'string' ? attributes.framework_role : undefined,
+    fileType: String(attributes.file_type ?? '').trim().toLowerCase(),
+    fileNodeLike: isFileNodeLike(String(attributes.label ?? ''), String(attributes.source_file ?? '')),
+    community: parseCommunityId(attributes.community),
+    frameworkBoost: 0,
+    exactLabelMatch: false,
+    sourcePathMatch: false,
+    evidenceTier: 0,
+    score,
+    relevanceBand: 'related',
+  }
 }
 
 interface FrameworkQuestionProfile {
@@ -1214,6 +1248,9 @@ export function contextPackFromRetrieveResult(
     expandable: result.expandable ?? [],
     coverage: result.coverage ?? fallbackRetrieveCoverage(result),
     ...(result.selection_diagnostics ? { selection_diagnostics: result.selection_diagnostics } : {}),
+    ...(result.retrieval_strategy ? { retrieval_strategy: result.retrieval_strategy } : {}),
+    ...(result.slice ? { slice: result.slice } : {}),
+    ...(result.retrieval_gate ? { retrieval_gate: result.retrieval_gate } : {}),
   }
 }
 
@@ -1226,6 +1263,7 @@ function buildRetrieveResultFromOrderedCandidates(
   retrieveGraphSignals: RetrieveGraphSignals,
   retrievalGate: RetrievalGateDecision,
   rootPath?: string,
+  sliceMetadata?: ContextPackSliceMetadata,
 ): RetrieveResult {
   const snippetFileCache = new Map<string, string[] | null>()
   const taskContract = classifyTaskContract('explain', {
@@ -1349,6 +1387,8 @@ function buildRetrieveResultFromOrderedCandidates(
     coverage: pack.coverage,
     ...(pack.selection_diagnostics ? { selection_diagnostics: pack.selection_diagnostics } : {}),
     ...(pack.retrieval_gate ? { retrieval_gate: pack.retrieval_gate } : {}),
+    retrieval_strategy: options.retrievalStrategy ?? 'default',
+    ...(sliceMetadata ? { slice: sliceMetadata } : {}),
   }
 }
 
@@ -1392,6 +1432,7 @@ export function retrieveContext(graph: KnowledgeGraph, options: RetrieveOptions)
       expandable: emptyPack.expandable,
       coverage: emptyPack.coverage,
       ...(emptyPack.retrieval_gate ? { retrieval_gate: emptyPack.retrieval_gate } : {}),
+      retrieval_strategy: options.retrievalStrategy ?? 'default',
     }
   }
 
@@ -1421,6 +1462,7 @@ export function retrieveContext(graph: KnowledgeGraph, options: RetrieveOptions)
       expandable: emptyPack.expandable,
       coverage: emptyPack.coverage,
       ...(emptyPack.retrieval_gate ? { retrieval_gate: emptyPack.retrieval_gate } : {}),
+      retrieval_strategy: options.retrievalStrategy ?? 'default',
     }
   }
 
@@ -1790,6 +1832,40 @@ export function retrieveContext(graph: KnowledgeGraph, options: RetrieveOptions)
     ? frameworkOrderedCandidates
     : frameworkOrderedCandidates.filter((node) => node.relevanceBand !== 'peripheral')
 
+  if (options.retrievalStrategy === 'slice-v1') {
+    const sliced = sliceCandidatesForRetrieve(
+      graph,
+      scored.map((node) => ({
+        id: node.id,
+        label: node.label,
+        sourceFile: node.sourceFile,
+        exactLabelMatch: node.exactLabelMatch,
+        sourcePathMatch: node.sourcePathMatch,
+        score: node.score,
+      })),
+      retrievalGate.intent,
+    )
+
+    if (sliced) {
+      const scoredById = new Map(scored.map((node) => [node.id, node]))
+      const sliceCandidates = sliced.ordered_ids.map((nodeId, index) => (
+        scoredById.get(nodeId) ?? scoredNodeFromGraph(graph, nodeId, Math.max(0.25, 2 - (index * 0.1)))
+      ))
+
+      return buildRetrieveResultFromOrderedCandidates(
+        graph,
+        options,
+        sliceCandidates,
+        communities,
+        communityLabels,
+        retrieveGraphSignals,
+        retrievalGate,
+        rootPath,
+        sliced.metadata,
+      )
+    }
+  }
+
   return buildRetrieveResultFromOrderedCandidates(
     graph,
     options,
@@ -1942,6 +2018,9 @@ export function compactRetrieveResult(result: RetrieveResult): CompactRetrieveRe
     community_context: compactPack.community_context,
     graph_signals: compactPack.graph_signals ?? { god_nodes: [], bridge_nodes: [] },
     ...(compactPack.shared_file_type ? { shared_file_type: compactPack.shared_file_type } : {}),
+    retrieval_strategy: result.retrieval_strategy ?? 'default',
+    ...(result.slice ? { slice: result.slice } : {}),
+    ...(result.retrieval_gate ? { retrieval_gate: result.retrieval_gate } : {}),
   }
 }
 
@@ -1986,5 +2065,8 @@ export function compactRetrieveResultForStdio(result: RetrieveResult): RetrieveR
     ...(result.expandable ? { expandable: result.expandable } : {}),
     ...(result.coverage ? { coverage: result.coverage } : {}),
     ...(result.selection_diagnostics ? { selection_diagnostics: result.selection_diagnostics } : {}),
+    retrieval_strategy: result.retrieval_strategy ?? 'default',
+    ...(result.slice ? { slice: result.slice } : {}),
+    ...(result.retrieval_gate ? { retrieval_gate: result.retrieval_gate } : {}),
   }
 }

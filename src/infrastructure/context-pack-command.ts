@@ -17,7 +17,7 @@ const DEFAULT_IMPACT_DEPTH = 3
 
 export interface ContextPackCommandDependencies {
   loadGraph: (graphPath: string) => KnowledgeGraph
-  retrieveContext: (graph: KnowledgeGraph, options: Pick<import('../runtime/retrieve.js').RetrieveOptions, 'question' | 'budget' | 'taskIntent' | 'retrievalLevel'>) => RetrieveResult
+  retrieveContext: (graph: KnowledgeGraph, options: Pick<import('../runtime/retrieve.js').RetrieveOptions, 'question' | 'budget' | 'taskIntent' | 'retrievalLevel' | 'retrievalStrategy'>) => RetrieveResult
   compactRetrieveResult: typeof compactRetrieveResult
   analyzePrImpact: (graph: KnowledgeGraph, projectDir?: string, options?: { baseBranch?: string; depth?: number; budget?: number; taskIntent?: TaskContextPlan['evidence']['recipe_id'] }) => PrImpactResult
   compactPrImpactResult: typeof compactPrImpactResult
@@ -218,6 +218,7 @@ export async function runContextPackCommand(
       budget: plannerBudget,
       taskIntent: initialPlan.evidence.recipe_id,
       ...(options.retrievalLevel !== undefined ? { retrievalLevel: options.retrievalLevel } : {}),
+      ...(options.retrievalStrategy !== undefined ? { retrievalStrategy: options.retrievalStrategy } : {}),
     })
     const impactTarget = pickImpactTarget(retrieval)
     const communityLabels = buildCommunityLabels(graph, communitiesFromGraph(graph))
@@ -240,6 +241,7 @@ export async function runContextPackCommand(
     budget: plannerBudget,
     taskIntent: initialPlan.evidence.recipe_id,
     ...(options.retrievalLevel !== undefined ? { retrievalLevel: options.retrievalLevel } : {}),
+    ...(options.retrievalStrategy !== undefined ? { retrievalStrategy: options.retrievalStrategy } : {}),
   })
   const explainPack = dependencies.compactRetrieveResult(retrieval)
 

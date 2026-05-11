@@ -4,6 +4,17 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Opt-in task-conditioned slicing v1**: retrieval can now run with `retrievalStrategy: 'slice-v1'` to anchor on explicit symbols/paths, take bounded explain/debug/impact/review-oriented slices, suppress barrel-like nodes, and emit `slice` metadata (`mode`, `anchors`, `directions`, `selected_paths`) alongside the selected pack.
+- **Real-workspace benchmark flow**: `docs/benchmarks/2026-05-11-spi-vs-legacy/` now ships `run-real-workspace.sh`, `summarize-real-workspaces.mjs`, `prompts.real-workspace.example.json`, and `REAL_WORKSPACE_REPORT_TEMPLATE.md` so backend-only and monorepo workspaces can be benchmarked locally without committing private paths or artifacts.
+
+### Changed
+
+- **Sketch semantics are richer but still deterministic**: `resolution: 'sketch'` now surfaces `reads env`, config reads, and compact side-effect hints such as `external_http`, `llm_call`, and `db_write` when graph evidence exists, while preserving dependency-record output for lighter nodes.
+- **Slice-v1 is exposed safely in CLI/MCP**: CLI `pack`, MCP `retrieve`, and MCP `context_pack` now accept `retrieval_strategy: 'default' | 'slice-v1'`, validate unsupported values clearly, and keep compact output unchanged unless the caller opts in.
+- **Benchmark analysis is broader and more honest**: the SPI probe now records resolution comparisons (`detail` / `signature` / `sketch`), slice-v1 runs, retrieval-gate metadata, top files, and a value-per-token calibration summary instead of implying a token win.
+
 ## [0.21.0] - 2026-05-11
 
 ### Changed
