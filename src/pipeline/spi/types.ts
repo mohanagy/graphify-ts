@@ -92,6 +92,12 @@ export type SpiFrameworkRole =
   | 'react_router_router'
   | 'react_router_loader'
   | 'react_router_action'
+  // Redux Toolkit roles (slice 1c-vi.a)
+  | 'redux_slice'
+  | 'redux_store'
+  | 'redux_selector'
+  | 'redux_async_thunk'
+  | 'redux_rtk_query_api'
 
 export type SpiSymbol = {
   id: string
