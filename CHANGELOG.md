@@ -4,6 +4,19 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-05-11
+
+### Added
+
+- **Context-pack quality diagnostics (#78)**: new `computeContextPackDiagnostics(pack)` scorer emits a deterministic `quality_score` (0–1), severity-ordered warnings, and the raw signals used to compute them. Nine weighted rules detect bad runs: missing required evidence (error), missing required semantic categories, zero claims, undersized retrieval, budget underutilization, missing snippets, low average match_score (now firing on the worst case `avg=0`), orphan nodes (entities with no relationships), and absent architectural signals. Wired into the stdio `context_pack` response (explain branch) so callers see quality flags inline.
+- **Delta-only context packs via stdio (#81)**: new `delta_session_id` parameter on `context_pack` makes subsequent calls in the same session ship only nodes the agent hasn't seen yet, plus `referenced_ids[]` for dropped nodes and a `bytes_saved` estimate. New MCP tool `context_pack_session_reset` clears a delta session. Backed by a per-MCP-process LRU `Map<sessionId, Set<nodeId>>` (256 sessions, same bound as prompt sessions).
+- **Value-per-token budget selector (#74)**: new pure helper `selectByValuePerToken(candidates, options)` ranks candidates by `score / token_cost` density (greedy bounded-knapsack approximation) and returns the prefix that fits within budget. Deterministic tie-breaking (score desc → cost asc → id asc). Returns per-candidate ranking with rank/density/included flags for diagnostics. Available as a building block for future selection refinements in `retrieve.ts`.
+
+### Notes
+
+- v0.15.0 is the **quality-signals** release: every context_pack response now carries machine-readable feedback on its own structural quality, and per-session dedup makes multi-turn agents cheaper.
+- The three v0.15 items deferred to v0.16: PR-impact coverage calibration (#79, needs real PRs), cache-aware prompt-layout measurement (#80, sort_key bands already shipped), and multi-resolution context representations (#76, new representation layer).
+
 ## [0.14.0] - 2026-05-11
 
 ### Added

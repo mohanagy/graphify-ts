@@ -266,7 +266,9 @@ Planned:
 
 - 🔜 Better PR-impact coverage scoring on diff hotspots
 - 🔜 Cache-aware prompt layout that minimizes Claude session-cache invalidation
-- 🔜 Delta-only context packs between runs (only ship what the agent doesn't already have)
+- ✅ Delta-only context packs between runs — `delta_session_id` on `context_pack` ships only new nodes per session (#81)
+- ✅ Context-pack quality diagnostics & bad-run detection — `quality_score` + structural warnings on every pack (#78)
+- ✅ Budgeted value-per-token selection helper — density-greedy `selectByValuePerToken` (#74)
 - ✅ Tighter cold-start MCP overhead (core profile ~3,000 bytes, down from ~4,270 — 30% drop, see #82)
 - 🔜 More framework-aware passes (Prisma, tRPC, Hono, Fastify)
 - 🔜 Deeper Python / Go semantic passes beyond tree-sitter AST
