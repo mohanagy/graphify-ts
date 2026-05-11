@@ -7,7 +7,7 @@
 | Metric | Legacy | `--spi` | Δ |
 |---|---|---|---|
 | Build time (cold) | 506 ms | 710 ms | **+40%** (slower) |
-| Build time (cache-hit) | n/a | ~150-200 ms | **~70% faster than legacy** |
+| Build time (cache-hit) | n/a | **368 ms** | **−27% vs legacy, −48% vs spi-cold** |
 | `graph.json` size | 62.8 KB | 42.8 KB | **−32%** |
 | Node count | 29 | 30 | +1 |
 | **Total pack tokens (7 prompts)** | **1284** | **946** | **−26%** |
@@ -32,7 +32,7 @@ The slower cold build is the cost; everything else is the payoff. On a real repo
 - `trpc-mutations` → legacy returned Express `app`, `usersRouter`, `USE /`. **None of these are tRPC.** spi returned the 5 actual tRPC procedures.
 - `prisma-client` → legacy returned Express middleware nodes. spi returned the `prisma` client + `prisma-client.ts` file.
 
-This is the v0.19 retrieval boost paying off: framework_role-based ranking surfaces the structurally-correct nodes for substrate-shaped queries.
+This is the v0.18 SPI substrate (via the v0.19 retrieval-boost extensions for Hono / Fastify / tRPC / Prisma) paying off: framework_role-based ranking surfaces the structurally-correct nodes for substrate-shaped queries.
 
 ## How to reproduce
 

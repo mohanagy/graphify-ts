@@ -1,0 +1,5 @@
+{
+  "variant": "spi-warm",
+  "build_time_ms": 368,
+  "note": "Same fixture as spi-cold, re-run to measure cache-hit path. Prompts not re-evaluated; pack tokens match spi-cold."
+}

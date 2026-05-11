@@ -67,13 +67,19 @@ run_variant() {
     local pack_out
     pack_out=$(node "$GRAPHIFY" pack "$prompt_text" --task explain --budget 2000 --graph "$graph_path" 2>/dev/null || echo '{}')
     local pack_tokens pack_nodes
-    pack_tokens=$(node -e "let p; try { p=JSON.parse(process.argv[1]); } catch { p={}; } console.log(p?.pack?.token_count ?? 0)" "$pack_out")
-    pack_nodes=$(node -e "let p; try { p=JSON.parse(process.argv[1]); } catch { p={}; } console.log(p?.pack?.matched_nodes?.length ?? 0)" "$pack_out")
+    # Pass pack_out via env var (PACK_OUT) to avoid shell-quote breakage when
+    # the JSON contains single quotes. CodeRabbit fix on PR #136.
+    pack_tokens=$(PACK_OUT="$pack_out" node -e "let p; try { p=JSON.parse(process.env.PACK_OUT); } catch { p={}; } console.log(p?.pack?.token_count ?? 0)")
+    pack_nodes=$(PACK_OUT="$pack_out" node -e "let p; try { p=JSON.parse(process.env.PACK_OUT); } catch { p={}; } console.log(p?.pack?.matched_nodes?.length ?? 0)")
     local matched_labels
-    matched_labels=$(node -e "let p; try { p=JSON.parse(process.argv[1]); } catch { p={}; } console.log(JSON.stringify((p?.pack?.matched_nodes ?? []).slice(0, 5).map(n => n.label)))" "$pack_out")
+    matched_labels=$(PACK_OUT="$pack_out" node -e "let p; try { p=JSON.parse(process.env.PACK_OUT); } catch { p={}; } console.log(JSON.stringify((p?.pack?.matched_nodes ?? []).slice(0, 5).map(n => n.label)))")
+    # Pass prompt_text via env var so single quotes / shell metacharacters can't
+    # corrupt the JSON encoding. CodeRabbit fix on PR #136.
+    local prompt_text_json
+    prompt_text_json=$(PROMPT_TEXT="$prompt_text" node -e "console.log(JSON.stringify(process.env.PROMPT_TEXT))")
     if [[ $first -eq 0 ]]; then prompt_results+=","; fi
     first=0
-    prompt_results+="{\"id\":\"$prompt_id\",\"text\":$(node -p "JSON.stringify('$prompt_text')"),\"pack_token_count\":$pack_tokens,\"pack_node_count\":$pack_nodes,\"top_labels\":$matched_labels}"
+    prompt_results+="{\"id\":\"$prompt_id\",\"text\":$prompt_text_json,\"pack_token_count\":$pack_tokens,\"pack_node_count\":$pack_nodes,\"top_labels\":$matched_labels}"
     echo "  [$prompt_id] tokens=$pack_tokens nodes=$pack_nodes"
   done
   prompt_results+="]"
@@ -103,7 +109,18 @@ SPI_WARM_FIXTURE="$RESULTS_DIR/fixture-spi-cold"
 t0=$(node -e 'console.log(Date.now())')
 node "$GRAPHIFY" generate "$SPI_WARM_FIXTURE" --spi --no-html > "$RESULTS_DIR/spi-warm.generate.log" 2>&1
 t1=$(node -e 'console.log(Date.now())')
-echo "  time=$((t1 - t0))ms"
+SPI_WARM_ELAPSED=$((t1 - t0))
+echo "  time=${SPI_WARM_ELAPSED}ms"
+
+# CodeRabbit fix: also persist a structured artifact for the spi-warm
+# variant so summarize.mjs can ingest it alongside legacy/spi-cold.
+cat > "$RESULTS_DIR/spi-warm.json" <<EOF
+{
+  "variant": "spi-warm",
+  "build_time_ms": $SPI_WARM_ELAPSED,
+  "note": "Same fixture as spi-cold, re-run to measure cache-hit path. Prompts not re-evaluated; pack tokens match spi-cold."
+}
+EOF
 
 # Summary.
 node "$HERE/summarize.mjs" "$RESULTS_DIR" > "$RESULTS_DIR/summary.json"
