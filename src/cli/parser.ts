@@ -1,6 +1,6 @@
 import { isAbsolute, resolve } from 'node:path'
 
-import type { ContextPackTaskKind } from '../contracts/context-pack.js'
+import type { ContextPackRetrievalStrategy, ContextPackTaskKind } from '../contracts/context-pack.js'
 import { validateGraphOutputPath, validateGraphPath } from '../shared/security.js'
 import { type InstallPlatform, isInstallPlatform, type McpToolProfile, isMcpToolProfile } from '../infrastructure/install.js'
 
@@ -32,6 +32,7 @@ export interface PackCliOptions {
    *  emits a decision with reason 'manual override' at the supplied level
    *  instead of running its heuristic classifier on the prompt. */
   retrievalLevel?: 0 | 1 | 2 | 3 | 4 | 5
+  retrievalStrategy?: ContextPackRetrievalStrategy
 }
 
 export type PromptCliProvider = 'claude' | 'gemini'
@@ -403,7 +404,7 @@ export function parseQueryArgs(args: string[]): QueryCliOptions {
 }
 
 export function parsePackArgs(args: string[]): PackCliOptions {
-  const usage = 'Usage: graphify-ts pack "<prompt>" [--budget N] [--task KIND] [--graph path] [--retrieval-level 0-5]'
+  const usage = 'Usage: graphify-ts pack "<prompt>" [--budget N] [--task KIND] [--graph path] [--retrieval-level 0-5] [--retrieval-strategy default|slice-v1]'
   const prompt = args[0]?.trim()
   if (!prompt) {
     throw new UsageError(usage)
@@ -413,6 +414,7 @@ export function parsePackArgs(args: string[]): PackCliOptions {
   let task: ContextPackTaskKind = 'explain'
   let graphPath = 'graphify-out/graph.json'
   let retrievalLevel: PackCliOptions['retrievalLevel'] | undefined
+  let retrievalStrategy: PackCliOptions['retrievalStrategy'] | undefined
 
   const normalizedPrompt = validateCliQuestionText('prompt', prompt)
 
@@ -474,6 +476,18 @@ export function parsePackArgs(args: string[]): PackCliOptions {
       continue
     }
 
+    if (argument === '--retrieval-strategy') {
+      retrievalStrategy = parseRetrievalStrategy(requireOptionValue('--retrieval-strategy', args[index + 1]))
+      index += 1
+      continue
+    }
+
+    if (argument.startsWith('--retrieval-strategy=')) {
+      const [, value] = argument.split('=', 2)
+      retrievalStrategy = parseRetrievalStrategy(requireOptionValue('--retrieval-strategy', value))
+      continue
+    }
+
     throw new UsageError(`error: unknown option for pack: ${argument}`)
   }
 
@@ -483,6 +497,7 @@ export function parsePackArgs(args: string[]): PackCliOptions {
     task,
     graphPath,
     ...(retrievalLevel !== undefined ? { retrievalLevel } : {}),
+    ...(retrievalStrategy !== undefined ? { retrievalStrategy } : {}),
   }
 }
 
@@ -492,6 +507,14 @@ function parseRetrievalLevel(value: string): PackCliOptions['retrievalLevel'] {
     throw new UsageError(`error: --retrieval-level must be an integer between 0 and 5 (got ${JSON.stringify(value)})`)
   }
   return parsed as PackCliOptions['retrievalLevel']
+}
+
+function parseRetrievalStrategy(value: string): PackCliOptions['retrievalStrategy'] {
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'default' || normalized === 'slice-v1') {
+    return normalized
+  }
+  throw new UsageError(`error: --retrieval-strategy must be one of default, slice-v1 (got ${JSON.stringify(value)})`)
 }
 
 export function parsePromptArgs(args: string[]): PromptCliOptions {

@@ -152,4 +152,133 @@ describe('applyContextPackResolution sketch mode', () => {
     expect(sessionService?.representation_type).toBe('dependency_record')
     expect(sessionService?.snippet).toContain('calls: TokenService.sign')
   })
+
+  it('surfaces env/config reads in sketch mode when deterministic evidence exists', () => {
+    const result = applyContextPackResolution(
+      [
+        node({
+          node_id: 'auth_controller',
+          label: 'AuthController.callback',
+          framework_role: 'nest_controller',
+          snippet: [
+            'export class AuthController {',
+            '  callback() {',
+            '    return this.sessionService.create(process.env.AUTH_COOKIE_DOMAIN)',
+            '  }',
+            '}',
+          ].join('\n'),
+        }),
+        node({ node_id: 'session_service', label: 'SessionService.create', snippet: 'export function create() {}' }),
+        node({ node_id: 'auth_env', label: 'AUTH_COOKIE_DOMAIN', source_file: '/src/config/auth.ts', snippet: 'export const AUTH_COOKIE_DOMAIN = process.env.AUTH_COOKIE_DOMAIN' }),
+      ],
+      {
+        resolution: 'sketch',
+        relationships: [
+          relationship('auth_controller', 'session_service', 'calls'),
+          relationship('auth_controller', 'auth_env', 'reads_env'),
+          relationship('auth_controller', 'auth_env', 'uses_config'),
+        ],
+      },
+    )
+
+    const authController = result.nodes.find((entry) => entry.node_id === 'auth_controller')
+
+    expect(authController?.representation_type).toBe('behavior_sketch')
+    expect(authController?.snippet).toContain('reads env: AUTH_COOKIE_DOMAIN')
+    expect(authController?.snippet).toContain('config: AUTH_COOKIE_DOMAIN')
+  })
+
+  it('surfaces deterministic side-effect hints for http, llm, and db writes', () => {
+    const result = applyContextPackResolution(
+      [
+        node({
+          node_id: 'report_service',
+          label: 'ReportGenerationService.generate',
+          framework_role: 'nest_provider',
+          snippet: [
+            'export class ReportGenerationService {',
+            '  async generate() {',
+            '    await fetch("https://example.com")',
+            '    await this.anthropic.messages.create({})',
+            '    return prisma.report.create({ data: {} })',
+            '  }',
+            '}',
+          ].join('\n'),
+        }),
+        node({ node_id: 'http_client', label: 'fetch', snippet: 'export async function fetch() {}' }),
+        node({ node_id: 'llm_client', label: 'Anthropic.messages.create', snippet: 'export async function create() {}' }),
+        node({ node_id: 'report_repo', label: 'prisma.report.create', snippet: 'export async function create() {}' }),
+      ],
+      {
+        resolution: 'sketch',
+        relationships: [
+          relationship('report_service', 'http_client', 'calls'),
+          relationship('report_service', 'llm_client', 'calls'),
+          relationship('report_service', 'report_repo', 'calls'),
+        ],
+      },
+    )
+
+    const reportService = result.nodes.find((entry) => entry.node_id === 'report_service')
+
+    expect(reportService?.representation_type).toBe('behavior_sketch')
+    expect(reportService?.snippet).toContain('side effects: external_http, llm_call, db_write')
+    expect(reportService?.snippet).toContain('latency-sensitive: external_http, llm_call')
+  })
+
+  it('keeps framework route/procedure context in sketches', () => {
+    const result = applyContextPackResolution(
+      [
+        node({
+          node_id: 'cancel_order',
+          label: 'appRouter.cancelOrder()',
+          framework_role: 'trpc_procedure_mutation',
+          snippet: 'export const cancelOrder = protectedProcedure.mutation(() => prisma.order.update({}))',
+        }),
+        node({ node_id: 'order_repo', label: 'prisma.order.update', snippet: 'export async function update() {}' }),
+      ],
+      {
+        resolution: 'sketch',
+        relationships: [
+          relationship('cancel_order', 'order_repo', 'calls'),
+        ],
+      },
+    )
+
+    const cancelOrder = result.nodes.find((entry) => entry.node_id === 'cancel_order')
+
+    expect(cancelOrder?.representation_type).toBe('behavior_sketch')
+    expect(cancelOrder?.snippet).toContain('framework: trpc_procedure_mutation')
+    expect(cancelOrder?.snippet).toContain('side effects: db_write')
+  })
+
+  it('does not infer side effects from structural contains edges alone', () => {
+    const result = applyContextPackResolution(
+      [
+        node({
+          node_id: 'worker_module',
+          label: 'WorkerModule',
+          framework_role: 'nest_module',
+          snippet: 'export class WorkerModule {}',
+        }),
+        node({
+          node_id: 'queue_publisher',
+          label: 'QueueClient.publish',
+          snippet: 'export async function publish() {}',
+        }),
+      ],
+      {
+        resolution: 'sketch',
+        relationships: [
+          relationship('worker_module', 'queue_publisher', 'contains'),
+        ],
+      },
+    )
+
+    const workerModule = result.nodes.find((entry) => entry.node_id === 'worker_module')
+
+    expect(workerModule?.representation_type).toBe('behavior_sketch')
+    expect(workerModule?.snippet).not.toContain('side effects:')
+    expect(workerModule?.snippet).toContain('framework: nest_module')
+  })
 })

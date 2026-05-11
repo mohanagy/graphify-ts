@@ -325,17 +325,73 @@ function relationLabels(
   return labels
 }
 
+function sideEffectHints(labels: readonly string[]): {
+  sideEffects: string[]
+  latencySensitive: string[]
+} {
+  const sideEffects = new Set<string>()
+  for (const label of labels) {
+    const normalized = label.toLowerCase()
+    if (
+      normalized === 'fetch'
+      || normalized.startsWith('axios')
+      || normalized.startsWith('got')
+      || normalized.startsWith('request')
+      || normalized.startsWith('http.')
+      || normalized.startsWith('https.')
+    ) {
+      sideEffects.add('external_http')
+    }
+    if (
+      normalized.includes('anthropic')
+      || normalized.includes('openai')
+      || normalized.includes('chatcompletion')
+      || normalized.includes('messages.create')
+      || normalized.includes('responses.create')
+    ) {
+      sideEffects.add('llm_call')
+    }
+    if (
+      normalized.includes('prisma.')
+      && (normalized.endsWith('.create') || normalized.endsWith('.update') || normalized.endsWith('.delete') || normalized.endsWith('.upsert'))
+    ) {
+      sideEffects.add('db_write')
+    }
+    if (normalized.includes('redis') || normalized.includes('cache.')) {
+      sideEffects.add('cache_io')
+    }
+    if (normalized.includes('queue') || normalized.includes('publish') || normalized.includes('emit')) {
+      sideEffects.add('queue_event')
+    }
+  }
+
+  const orderedEffects = ['external_http', 'llm_call', 'db_write', 'cache_io', 'queue_event']
+  return {
+    sideEffects: orderedEffects.filter((effect) => sideEffects.has(effect)),
+    latencySensitive: ['external_http', 'llm_call'].filter((effect) => sideEffects.has(effect)),
+  }
+}
+
 function renderSketchRepresentation(
   node: ContextPackNode,
   relationIndex: RelationIndex,
 ): { type: 'behavior_sketch' | 'dependency_record'; reason: string; snippet: string } | null {
   const behaviorEdges = relationLabels(node, relationIndex, 'outgoing', ['calls', 'route_handler', 'controller_route', 'method', 'contains'])
+  const executionEdges = relationLabels(node, relationIndex, 'outgoing', ['calls'])
   const tests = relationLabels(node, relationIndex, 'outgoing', ['covered_by'])
-  const config = relationLabels(node, relationIndex, 'outgoing', ['uses_config', 'reads_env'])
+  const config = relationLabels(node, relationIndex, 'outgoing', ['uses_config'])
+  const readsEnv = relationLabels(node, relationIndex, 'outgoing', ['reads_env'])
   const outgoingDeps = relationLabels(node, relationIndex, 'outgoing', ['calls', 'injects', 'depends_on'])
   const incomingDeps = relationLabels(node, relationIndex, 'incoming', ['calls', 'injects', 'depends_on'])
+  const { sideEffects, latencySensitive } = sideEffectHints(executionEdges)
 
-  if (tests.length > 0 || config.length > 0 || behaviorEdges.length > 1 || node.framework_role) {
+  if (
+    tests.length > 0
+    || config.length > 0
+    || readsEnv.length > 0
+    || behaviorEdges.length > 1
+    || node.framework_role
+  ) {
     const lines = [node.label]
     for (const label of behaviorEdges.slice(0, 5)) {
       lines.push(`-> ${label}`)
@@ -343,8 +399,17 @@ function renderSketchRepresentation(
     if (tests.length > 0) {
       lines.push(`tests: ${tests.slice(0, 3).join(', ')}`)
     }
+    if (readsEnv.length > 0) {
+      lines.push(`reads env: ${readsEnv.slice(0, 3).join(', ')}`)
+    }
     if (config.length > 0) {
       lines.push(`config: ${config.slice(0, 3).join(', ')}`)
+    }
+    if (sideEffects.length > 0) {
+      lines.push(`side effects: ${sideEffects.join(', ')}`)
+    }
+    if (latencySensitive.length > 0) {
+      lines.push(`latency-sensitive: ${latencySensitive.join(', ')}`)
     }
     if (node.framework_role) {
       lines.push(`framework: ${node.framework_role}`)
@@ -366,6 +431,9 @@ function renderSketchRepresentation(
     }
     if (node.framework_role) {
       lines.push(`framework: ${node.framework_role}`)
+    }
+    if (sideEffects.length > 0) {
+      lines.push(`side effects: ${sideEffects.join(', ')}`)
     }
     return {
       type: 'dependency_record',

@@ -10,6 +10,7 @@ import type {
   ContextPackExpandableFollowUp,
   ContextPackExpandableRef,
   ContextPackNode,
+  ContextPackRetrievalStrategy,
   ContextPackRelationship,
   ContextRepresentationType,
 } from '../../contracts/context-pack.js'
@@ -131,6 +132,20 @@ function isStoredContextPackHandle(value: unknown): value is StoredContextPackHa
     && typeof followUp.evidence_class === 'string'
     && Array.isArray(followUp.focus_files)
     && Array.isArray(followUp.focus_ranges)
+}
+
+function parseRetrievalStrategyParam(
+  helpers: Pick<ToolHelpers, 'stringParamAlias'>,
+  toolArguments: Record<string, unknown>,
+): ContextPackRetrievalStrategy | null | 'invalid' {
+  const raw = helpers.stringParamAlias(toolArguments, ['retrieval_strategy', 'retrievalStrategy'])
+  if (raw === null) {
+    return null
+  }
+  if (raw === 'default' || raw === 'slice-v1') {
+    return raw
+  }
+  return 'invalid'
 }
 
 function emptyCoverage(): ContextPackCoverage {
@@ -770,6 +785,10 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
       if ((Object.hasOwn(toolArguments, 'retrieval_level') || Object.hasOwn(toolArguments, 'retrievalLevel')) && retrieveLevelOverride === null) {
         return helpers.failure(id, helpers.jsonrpcInvalidParams, 'retrieval_level must be an integer between 0 and 5')
       }
+      const retrieveStrategy = parseRetrievalStrategyParam(helpers, toolArguments)
+      if (retrieveStrategy === 'invalid') {
+        return helpers.failure(id, helpers.jsonrpcInvalidParams, 'retrieval_strategy must be one of default, slice-v1')
+      }
       const retrieveLevelTyped = retrieveLevelOverride === null ? null : (retrieveLevelOverride as 0 | 1 | 2 | 3 | 4 | 5)
       const retrieval = retrieveSemantic || retrieveRerank ? retrieveContextAsync(graph, {
         question,
@@ -781,12 +800,14 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
         ...(retrieveRerank ? { rerank: true } : {}),
         ...(retrieveRerankModel ? { rerankerModel: retrieveRerankModel } : {}),
         ...(retrieveLevelTyped !== null ? { retrievalLevel: retrieveLevelTyped } : {}),
+        ...(retrieveStrategy ? { retrievalStrategy: retrieveStrategy } : {}),
       }) : Promise.resolve(retrieveContext(graph, {
         question,
         budget: retrieveBudget,
         ...(retrieveCommunity !== null ? { community: retrieveCommunity } : {}),
           ...(retrieveFileType ? { fileType: retrieveFileType } : {}),
           ...(retrieveLevelTyped !== null ? { retrievalLevel: retrieveLevelTyped } : {}),
+          ...(retrieveStrategy ? { retrievalStrategy: retrieveStrategy } : {}),
         }))
       const useVerboseRetrieve = toolArguments.verbose === true || toolArguments.compact === false
       return retrieval.then((result) => helpers.ok(id, helpers.textToolResult(JSON.stringify(
@@ -835,6 +856,14 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
         )
       }
 
+      const contextPackStrategy = parseRetrievalStrategyParam(helpers, toolArguments)
+      if (contextPackStrategy === 'invalid') {
+        return helpers.failure(id, helpers.jsonrpcInvalidParams, 'retrieval_strategy must be one of default, slice-v1')
+      }
+      if (task === 'review' && contextPackStrategy) {
+        return helpers.failure(id, helpers.jsonrpcInvalidParams, 'retrieval_strategy is not supported for task=review')
+      }
+
       if (task === 'review') {
         const graphDir = dirname(validateGraphPath(graphPath))
         const projectRoot = dirname(graphDir)
@@ -870,6 +899,7 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
         budget: resolvedBudget,
         taskIntent: initialPlan.evidence.recipe_id,
         ...(contextPackLevelTyped !== null ? { retrievalLevel: contextPackLevelTyped } : {}),
+        ...(contextPackStrategy ? { retrievalStrategy: contextPackStrategy } : {}),
       })
 
       if (task === 'impact') {

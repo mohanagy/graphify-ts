@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "prompts": [
+    {
+      "id": "auth-flow",
+      "intent": "explain",
+      "text": "Explain auth flow end to end."
+    },
+    {
+      "id": "report-generation",
+      "intent": "explain",
+      "text": "Explain validation report generation end to end."
+    },
+    {
+      "id": "report-generation-slow",
+      "intent": "debug",
+      "text": "Why is validation report generation slow?"
+    },
+    {
+      "id": "research-agent-impact",
+      "intent": "impact",
+      "text": "What can break if the research agent changes?"
+    },
+    {
+      "id": "report-generation-tests",
+      "intent": "explain",
+      "text": "Which tests are relevant for report generation?"
+    },
+    {
+      "id": "controller-to-persistence",
+      "intent": "explain",
+      "text": "Find the call path from controller to final report persistence."
+    },
+    {
+      "id": "config-runtime-effect",
+      "intent": "debug",
+      "text": "Where does this env/config variable affect runtime behavior?"
+    },
+    {
+      "id": "auth-config-impact",
+      "intent": "impact",
+      "text": "What can break if session/cookie/auth config changes?"
+    },
+    {
+      "id": "review-current-diff",
+      "intent": "review",
+      "text": "Review current backend diff for risky changes."
+    },
+    {
+      "id": "onboarding-routes",
+      "intent": "explain",
+      "text": "Which routes/controllers/services are involved in onboarding?"
+    }
+  ]
+}

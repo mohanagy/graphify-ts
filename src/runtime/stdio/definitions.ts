@@ -208,7 +208,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'retrieve',
-    description: 'Graph-relevant context for a natural-language question: matched nodes + snippets, relationships, community context, structural signals.',
+    description: 'Retrieve matched nodes, snippets, relationships, and community context for a question.',
     inputSchema: {
       type: 'object',
       required: ['question', 'budget'],
@@ -223,13 +223,14 @@ export const MCP_TOOLS: McpToolDefinition[] = [
         rerank_model: { type: 'string', description: 'Override reranker model or local path' },
         verbose: { type: 'boolean', description: 'Return verbose payload (default: compact)' },
         retrieval_level: { type: 'number', description: 'Override retrieval-gate level 0-5 (#75)' },
+        retrieval_strategy: { type: 'string', enum: ['default', 'slice-v1'], description: 'Experimental retrieval strategy.' },
       },
     },
   },
   {
     name: 'context_pack',
     description:
-      'Build a compact explain/review/impact context pack for a downstream agent. Use when you need expandable refs plus coverage and missing-context signals instead of the full graph payload. Pass delta_session_id to ship only new nodes.',
+      'Build a compact explain/review/impact context pack with expandable refs and coverage signals.',
     inputSchema: {
       type: 'object',
       required: ['prompt'],
@@ -239,10 +240,11 @@ export const MCP_TOOLS: McpToolDefinition[] = [
         budget: { type: 'number', description: 'Optional: maximum token budget for the pack (default 3000)' },
         delta_session_id: { type: 'string', description: 'Optional (#81): delta-pack session key for per-session dedup.' },
         verbose: { type: 'boolean', description: 'Optional: include extended selection diagnostics.' },
+        retrieval_strategy: { type: 'string', enum: ['default', 'slice-v1'], description: 'Experimental retrieval strategy.' },
         resolution: {
           type: 'string',
           enum: ['detail', 'summary', 'mixed', 'signature', 'sketch'],
-          description: 'Optional (#76/#135): node resolution.',
+          description: 'Node resolution.',
         },
       },
     },

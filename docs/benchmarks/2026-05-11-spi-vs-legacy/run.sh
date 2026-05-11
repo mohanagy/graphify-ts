@@ -25,7 +25,7 @@ PROMPTS_FILE="${GRAPHIFY_BENCH_PROMPTS:-$HERE/prompts.json}"
 # Create a clean copy of the fixture for each variant so cache state and
 # graphify-out are independent.
 TS="$(date -u +%Y-%m-%dT%H%M%SZ)"
-RESULTS_DIR="$HERE/results/$TS"
+RESULTS_DIR="${GRAPHIFY_BENCH_RESULTS_DIR:-$HERE/results/$TS}"
 mkdir -p "$RESULTS_DIR"
 
 GRAPHIFY="$ROOT/dist/src/cli/bin.js"
@@ -56,10 +56,12 @@ run_variant() {
   local graph_path="$fixture_copy/graphify-out/graph.json"
   local graph_size
   graph_size=$(wc -c < "$graph_path" | tr -d ' ')
-  local node_count
-  node_count=$(node -e "const g=require('$graph_path'); console.log(g.nodes.length)")
+  local graph_stats node_count edge_count
+  graph_stats=$(node "$HERE/graph-stats.mjs" "$graph_path")
+  node_count=$(GRAPH_STATS="$graph_stats" node -e "const s=JSON.parse(process.env.GRAPH_STATS); console.log(s.node_count)")
+  edge_count=$(GRAPH_STATS="$graph_stats" node -e "const s=JSON.parse(process.env.GRAPH_STATS); console.log(s.edge_count)")
 
-  echo "  time=${elapsed}ms  graph_size=${graph_size}  nodes=${node_count}"
+  echo "  time=${elapsed}ms  graph_size=${graph_size}  nodes=${node_count}  edges=${edge_count}"
 
   # Per-prompt pack runs.
   local prompt_results="["
@@ -99,6 +101,7 @@ run_variant() {
   "build_time_ms": $elapsed,
   "graph_size_bytes": $graph_size,
   "node_count": $node_count,
+  "edge_count": $edge_count,
   "prompts": $prompt_results
 }
 EOF
@@ -123,8 +126,10 @@ SPI_WARM_ELAPSED=$((t1 - t0))
 # build_time_ms so spi-warm has schema parity with legacy / spi-cold.
 SPI_WARM_GRAPH_PATH="$SPI_WARM_FIXTURE/graphify-out/graph.json"
 SPI_WARM_GRAPH_SIZE=$(wc -c < "$SPI_WARM_GRAPH_PATH" | tr -d ' ')
-SPI_WARM_NODE_COUNT=$(node -e "const g=require('$SPI_WARM_GRAPH_PATH'); console.log(g.nodes.length)")
-echo "  time=${SPI_WARM_ELAPSED}ms  graph_size=${SPI_WARM_GRAPH_SIZE}  nodes=${SPI_WARM_NODE_COUNT}"
+SPI_WARM_GRAPH_STATS=$(node "$HERE/graph-stats.mjs" "$SPI_WARM_GRAPH_PATH")
+SPI_WARM_NODE_COUNT=$(GRAPH_STATS="$SPI_WARM_GRAPH_STATS" node -e "const s=JSON.parse(process.env.GRAPH_STATS); console.log(s.node_count)")
+SPI_WARM_EDGE_COUNT=$(GRAPH_STATS="$SPI_WARM_GRAPH_STATS" node -e "const s=JSON.parse(process.env.GRAPH_STATS); console.log(s.edge_count)")
+echo "  time=${SPI_WARM_ELAPSED}ms  graph_size=${SPI_WARM_GRAPH_SIZE}  nodes=${SPI_WARM_NODE_COUNT}  edges=${SPI_WARM_EDGE_COUNT}"
 
 cat > "$RESULTS_DIR/spi-warm.json" <<EOF
 {
@@ -132,6 +137,7 @@ cat > "$RESULTS_DIR/spi-warm.json" <<EOF
   "build_time_ms": $SPI_WARM_ELAPSED,
   "graph_size_bytes": $SPI_WARM_GRAPH_SIZE,
   "node_count": $SPI_WARM_NODE_COUNT,
+  "edge_count": $SPI_WARM_EDGE_COUNT,
   "note": "Same fixture as spi-cold, re-run to measure cache-hit path. Prompts not re-evaluated; pack tokens match spi-cold."
 }
 EOF
