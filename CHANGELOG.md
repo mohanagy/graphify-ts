@@ -4,6 +4,8 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-05-11
+
 ### Changed
 
 - **Context-pack value scoring and diagnostics**: `selection_strategy: 'value-per-token'` now scores optional candidates with deterministic evidence-aware signals instead of candidate order, and compiled packs can carry `selection_diagnostics` with per-candidate score, density, reasons, and penalties.

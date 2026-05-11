@@ -10,10 +10,20 @@ interface PackageManifest {
   keywords?: string[]
   license?: string
   overrides?: Record<string, string>
+  version?: string
+}
+
+interface PackageLock {
+  version?: string
+  packages?: Record<string, { version?: string }>
 }
 
 function loadPackageManifest(): PackageManifest {
   return JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as PackageManifest
+}
+
+function loadPackageLock(): PackageLock {
+  return JSON.parse(readFileSync(join(process.cwd(), 'package-lock.json'), 'utf8')) as PackageLock
 }
 
 function loadDependabotConfig(): string {
@@ -95,6 +105,14 @@ describe('package metadata', () => {
     expect(loadReadme()).toContain('## License')
     expect(loadReadme()).toContain('MIT. Use it, fork it, ship it.')
     expect(loadContributingGuide()).toContain("licensed under this project's MIT license")
+  })
+
+  it('keeps package.json and package-lock.json on the same release version', () => {
+    const manifest = loadPackageManifest()
+    const packageLock = loadPackageLock()
+
+    expect(packageLock.version).toBe(manifest.version)
+    expect(packageLock.packages?.['']?.version).toBe(manifest.version)
   })
 
   it('positions package metadata around the context plane and context compiler surface', () => {
