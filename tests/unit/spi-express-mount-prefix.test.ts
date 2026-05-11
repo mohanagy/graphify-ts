@@ -103,17 +103,8 @@ describe('SPI Express mount-prefix resolution (slice 1c-ii.g)', () => {
     })
   })
 
-  describe('cross-file mount (deferred to slice 1c-ii.h)', () => {
-    it('today: cross-file mount does NOT propagate the prefix (current limitation)', () => {
-      // The middleware detector's handler resolution is currently
-      // current-file only — an imported router identifier in server.ts
-      // doesn't resolve to the router's SpiSymbol in routes/users.ts.
-      // Adding cross-file resolution requires plumbing pathToFileId
-      // through the detector context and following the type checker
-      // across file boundaries. Slice 1c-ii.h.
-      //
-      // This test documents the current behavior so we can detect when
-      // 1c-ii.h flips it.
+  describe('cross-file mount (slice 1c-ii.h)', () => {
+    it('prefixes routes when the mount call lives in a different file from the router', () => {
       writeFile(sandbox, 'src/routes/users.ts', [
         'import { Router } from "express"',
         'export const usersRouter = Router()',
@@ -128,7 +119,76 @@ describe('SPI Express mount-prefix resolution (slice 1c-ii.g)', () => {
       ].join('\n') + '\n')
       const spi = build(sandbox)
       const handler = findSymbol(spi, 'src/routes/users.ts', 'listUsers')
-      expect(handler?.framework_metadata?.route_path).toBe('/')
+      // The detector resolves `usersRouter` in server.ts to its
+      // declaration in routes/users.ts via the type checker's
+      // alias-following + pathToFileId lookup. mount_path is stamped
+      // on the router's SpiSymbol; the workspace-level finalizer then
+      // propagates the prefix to all routes registered on that router.
+      expect(handler?.framework_metadata?.route_path).toBe('/api/users/')
+    })
+
+    it('handles aliased imports across files (`import { usersRouter as users } from ...`)', () => {
+      writeFile(sandbox, 'src/routes/users.ts', [
+        'import { Router } from "express"',
+        'export const usersRouter = Router()',
+        'export function listUsers(): void {}',
+        'usersRouter.get("/", listUsers)',
+      ].join('\n') + '\n')
+      writeFile(sandbox, 'src/server.ts', [
+        'import express from "express"',
+        'import { usersRouter as users } from "./routes/users.js"',
+        'export const app = express()',
+        'app.use("/v2", users)',
+      ].join('\n') + '\n')
+      const spi = build(sandbox)
+      const handler = findSymbol(spi, 'src/routes/users.ts', 'listUsers')
+      expect(handler?.framework_metadata?.route_path).toBe('/v2/')
+    })
+
+    it('handles default-import re-exported routers (`export default usersRouter`)', () => {
+      writeFile(sandbox, 'src/routes/users.ts', [
+        'import { Router } from "express"',
+        'export const usersRouter = Router()',
+        'export function listUsers(): void {}',
+        'usersRouter.get("/", listUsers)',
+        'export default usersRouter',
+      ].join('\n') + '\n')
+      writeFile(sandbox, 'src/server.ts', [
+        'import express from "express"',
+        'import usersRouter from "./routes/users.js"',
+        'export const app = express()',
+        'app.use("/api", usersRouter)',
+      ].join('\n') + '\n')
+      const spi = build(sandbox)
+      const handler = findSymbol(spi, 'src/routes/users.ts', 'listUsers')
+      expect(handler?.framework_metadata?.route_path).toBe('/api/')
+    })
+
+    it('does NOT mis-tag local same-named identifiers in unrelated files', () => {
+      // Sanity: a local `usersRouter` const in another file that is NOT
+      // an Express router (and NOT imported from the routes file) should
+      // not get mount_path stamped just because server.ts has a mount
+      // call with the same identifier text.
+      writeFile(sandbox, 'src/other.ts', [
+        'export const usersRouter = { foo: 1 }',
+      ].join('\n') + '\n')
+      writeFile(sandbox, 'src/server.ts', [
+        'import express, { Router } from "express"',
+        'export const app = express()',
+        'export const usersRouter = Router()',  // local router
+        'export function listUsers(): void {}',
+        'usersRouter.get("/", listUsers)',
+        'app.use("/api", usersRouter)',  // mounts the LOCAL router, not src/other.ts's
+      ].join('\n') + '\n')
+      const spi = build(sandbox)
+      const other = findSymbol(spi, 'src/other.ts', 'usersRouter')
+      // Other's usersRouter should not be tagged express_router (it's
+      // a plain object) and not pick up any mount_path.
+      expect(other?.framework_role).toBeUndefined()
+      expect(other?.framework_metadata?.mount_path).toBeUndefined()
+      // The LOCAL router in server.ts gets the prefix.
+      const handler = findSymbol(spi, 'src/server.ts', 'listUsers')
+      expect(handler?.framework_metadata?.route_path).toBe('/api/')
     })
   })
 

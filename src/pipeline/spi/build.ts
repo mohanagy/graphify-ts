@@ -649,6 +649,8 @@ function addTypeCheckerEdges(ctx: TypeCheckerEdgeContext): void {
     // synthetic route nodes land in 1c-ii.d and 1c-ii.e respectively.
     // The checker is passed through for declaration-identity resolution
     // so lexical shadows don't produce false-positive route tags.
+    // pathToFileId unlocks slice 1c-ii.h's cross-file mount resolution
+    // (imported routers mounted via app.use('/prefix', importedRouter)).
     detectExpressFramework({
       sourceFile,
       fileId: file.id,
@@ -656,6 +658,7 @@ function addTypeCheckerEdges(ctx: TypeCheckerEdgeContext): void {
       symbols,
       edges,
       checker,
+      pathToFileId,
     })
     // Slice 1c-iv.a: convention-based Next.js detector. Tags exported
     // symbols in app/.../page.tsx, app/.../route.ts, pages/api/...,
