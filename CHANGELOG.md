@@ -4,6 +4,27 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-05-11
+
+> Consolidated release covering both the v0.19-spi-payoff and v0.20-context-compiler milestones. v0.19 was never tagged in isolation — its work (#129, #130, #133) is shipped together with v0.20's items (#131, #132, #134) here.
+
+### Added — v0.19 payoff (SPI substrate becomes measurable)
+
+- **Hono / Fastify / tRPC / Prisma retrieval boost (#129)**: new framework-shaped questions ("show me hono routes", "what tRPC mutations exist", "find the Prisma client") now route to the structurally-correct substrate nodes via `framework_role` boost. Previously only Express / NestJS / Next.js / React Router / Redux had boost rules.
+- **SPI vs legacy benchmark harness (#130, closed by PR #136)**: `docs/benchmarks/2026-05-11-spi-vs-legacy/` ships a reproducible runner + fixture covering Express / Hono / tRPC / Prisma. First measured numbers on the fixture: **−26% pack tokens with `--spi`**, **−32% graph.json size**, **+40% slower cold build**, **cache-hit rebuilds 27% faster than legacy**. Critically, the legacy pipeline mis-routes substrate-shaped questions (Prisma query → Express middleware nodes; tRPC mutation query → Express routers) which `--spi` corrects.
+- **Metadata-aware framework boost (#133, closed by PR #137)**: extends the boost rules to use `route_path` / `http_method` / `mount_path` / `slice_name` / `procedure_name` / `router_name` substrings — not just the role string. Express was tagging `route_path` but not `http_method` previously; now both flow. Differentiates POST `/users` vs GET `/users`, `authSlice` vs `counterSlice`, `cancelOrder` vs `getUser` procedures. Plus: word-boundary check on http_method (no longer matches "budget"), metadata-only seeding (nodes with no label overlap can still be seeded by metadata), no double-counting of framework_boost in async retrieval.
+
+### Added — v0.20 context compiler
+
+- **Value-per-token selection_strategy (#131)**: new optional input on `compileContextPack`: `selection_strategy: 'evidence-order' | 'value-per-token'`. When `value-per-token`, required-evidence-class candidates are placed first (must-include), then remaining optional candidates compete by density (`score / token_cost`) via `selectByValuePerToken`. Default unchanged.
+- **`signature` resolution level (#132)**: `applyContextPackResolution` now accepts a fourth mode alongside `detail` / `summary` / `mixed`. Signature mode keeps the first 1–2 lines of each snippet (function signature) and drops the body — middle ground when the agent needs param types and return shape but not implementation.
+- **SPI default-readiness decision framework (#134)**: new doc `docs/decisions/2026-05-11-spi-default-readiness.md` codifies the graduation criteria for flipping `--spi` to the default pipeline, plus the post-flip fallback path. Decision framework, not code — the next code change (the actual flip) must meet this checklist.
+
+### Notes
+
+- v0.20 deliberately defers **#135 task-conditioned slicing v1** — it's a multi-PR substrate (anchor detection, slice walker, task-mode traversal) that doesn't fit a one-shot bundle.
+- The `--spi` flag remains opt-in. The default-readiness doc (#134) defines the path to flipping it.
+
 ## [0.18.0] - 2026-05-11
 
 ### Added
