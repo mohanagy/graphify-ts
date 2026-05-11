@@ -4,6 +4,8 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-05-11
+
 ### Added
 
 - **Opt-in task-conditioned slicing v1**: retrieval can now run with `retrievalStrategy: 'slice-v1'` to anchor on explicit symbols/paths, take bounded explain/debug/impact/review-oriented slices, suppress barrel-like nodes, and emit `slice` metadata (`mode`, `anchors`, `directions`, `selected_paths`) alongside the selected pack.
@@ -14,6 +16,7 @@ All notable changes to the TypeScript package will be documented in this file.
 - **Sketch semantics are richer but still deterministic**: `resolution: 'sketch'` now surfaces `reads env`, config reads, and compact side-effect hints such as `external_http`, `llm_call`, and `db_write` when graph evidence exists, while preserving dependency-record output for lighter nodes.
 - **Slice-v1 is exposed safely in CLI/MCP**: CLI `pack`, MCP `retrieve`, and MCP `context_pack` now accept `retrieval_strategy: 'default' | 'slice-v1'`, validate unsupported values clearly, and keep compact output unchanged unless the caller opts in.
 - **Benchmark analysis is broader and more honest**: the SPI probe now records resolution comparisons (`detail` / `signature` / `sketch`), slice-v1 runs, retrieval-gate metadata, top files, and a value-per-token calibration summary instead of implying a token win.
+- **Release hardening for slice-v1 and benchmarks**: async semantic/rerank retrieval now preserves slice boundaries and slice metadata, sketch side-effect hints only derive from executable `calls` edges, benchmark helpers fail clearly on malformed JSON and missing local workspace inputs, and review tasks reject unsupported `retrieval_strategy` values instead of silently ignoring them.
 
 ## [0.21.0] - 2026-05-11
 
