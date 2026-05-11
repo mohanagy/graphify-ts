@@ -252,16 +252,35 @@ function buildRelationshipIndex(
   const outgoing = new Map<string, ContextPackRelationship[]>()
   const incoming = new Map<string, ContextPackRelationship[]>()
   const labelsById = new Map<string, string>()
+  const labelIds = new Map<string, Set<string>>()
 
   for (const node of nodes) {
     if (typeof node.node_id === 'string' && node.node_id.length > 0) {
       labelsById.set(node.node_id, node.label)
+      const ids = labelIds.get(node.label) ?? new Set<string>()
+      ids.add(node.node_id)
+      labelIds.set(node.label, ids)
     }
   }
 
+  const uniqueIdsByLabel = new Map<string, string>()
+  for (const [label, ids] of labelIds) {
+    if (ids.size === 1) {
+      uniqueIdsByLabel.set(label, [...ids][0]!)
+    }
+  }
+
+  const canonicalizeRelationKeys = (id: string | undefined, label: string): string[] => {
+    if (typeof id === 'string' && id.length > 0) {
+      return [id]
+    }
+    const uniqueId = uniqueIdsByLabel.get(label)
+    return uniqueId ? [uniqueId] : [label]
+  }
+
   for (const relationship of relationships) {
-    const fromKeys = preferredRelationKeys(relationship.from_id, relationship.from)
-    const toKeys = preferredRelationKeys(relationship.to_id, relationship.to)
+    const fromKeys = canonicalizeRelationKeys(relationship.from_id, relationship.from)
+    const toKeys = canonicalizeRelationKeys(relationship.to_id, relationship.to)
 
     for (const key of fromKeys) {
       outgoing.set(key, [...(outgoing.get(key) ?? []), relationship])

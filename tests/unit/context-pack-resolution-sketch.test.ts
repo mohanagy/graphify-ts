@@ -128,4 +128,28 @@ describe('applyContextPackResolution sketch mode', () => {
     expect(workerAuth?.snippet).toContain('calls: QueueClient.publish')
     expect(workerAuth?.snippet).not.toContain('CookieService.set')
   })
+
+  it('canonicalizes unique label-only relationships onto node ids', () => {
+    const result = applyContextPackResolution(
+      [
+        node({ node_id: 'session_service', label: 'SessionService.createSession', snippet: 'export function createSession() {}' }),
+        node({ node_id: 'token_service', label: 'TokenService.sign', snippet: 'export function sign() {}' }),
+      ],
+      {
+        resolution: 'sketch',
+        relationships: [
+          {
+            from: 'SessionService.createSession',
+            to: 'TokenService.sign',
+            relation: 'calls',
+          },
+        ],
+      },
+    )
+
+    const sessionService = result.nodes.find((entry) => entry.node_id === 'session_service')
+
+    expect(sessionService?.representation_type).toBe('dependency_record')
+    expect(sessionService?.snippet).toContain('calls: TokenService.sign')
+  })
 })
