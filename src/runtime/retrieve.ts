@@ -1911,6 +1911,13 @@ export async function retrieveContextAsync(graph: KnowledgeGraph, options: Retri
       return nodeId ? [[nodeId, node.relevance_band] as const] : []
     }),
   )
+  const lexicalSliceIds = options.retrievalStrategy === 'slice-v1'
+    ? new Set(
+        lexicalResult.matched_nodes
+          .map((node) => matchedNodeId(node))
+          .filter((nodeId): nodeId is string => nodeId !== null),
+      )
+    : null
 
   const questionLower = options.question.toLowerCase()
   const candidatesById = new Map(
@@ -1937,6 +1944,9 @@ export async function retrieveContextAsync(graph: KnowledgeGraph, options: Retri
     for (const [candidateId] of [...semanticScores.entries()]
       .sort((left, right) => right[1] - left[1])
       .slice(0, 8)) {
+      if (lexicalSliceIds !== null && !lexicalSliceIds.has(candidateId)) {
+        continue
+      }
       candidateIds.add(candidateId)
     }
   }
@@ -1995,6 +2005,7 @@ export async function retrieveContextAsync(graph: KnowledgeGraph, options: Retri
       ...(options.retrievalLevel !== undefined ? { manualOverride: options.retrievalLevel } : {}),
     }),
     rootPath,
+    lexicalResult.slice,
   )
 }
 

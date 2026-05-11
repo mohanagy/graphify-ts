@@ -74,4 +74,25 @@ describe('slice-v1 context-pack command surface', () => {
     const payload = JSON.parse(output) as { pack: { retrieval_strategy?: string } }
     expect(payload.pack.retrieval_strategy).toBe('slice-v1')
   })
+
+  it('rejects retrievalStrategy for review packs instead of silently ignoring it', async () => {
+    const graph = new KnowledgeGraph()
+    const dependencies: ContextPackCommandDependencies = {
+      loadGraph: vi.fn().mockReturnValue(graph),
+      retrieveContext: vi.fn(),
+      compactRetrieveResult: vi.fn(),
+      analyzePrImpact: vi.fn(),
+      compactPrImpactResult: vi.fn(),
+      analyzeImpact: vi.fn(),
+      compactImpactResult: vi.fn(),
+    }
+
+    await expect(runContextPackCommand({
+      prompt: 'Review current diff',
+      budget: 1000,
+      task: 'review',
+      graphPath: 'graphify-out/graph.json',
+      retrievalStrategy: 'slice-v1',
+    } as never, dependencies)).rejects.toThrow(/retrievalStrategy/i)
+  })
 })

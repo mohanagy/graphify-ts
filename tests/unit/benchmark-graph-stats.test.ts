@@ -41,4 +41,22 @@ describe('benchmark graph stats helper', () => {
       expect(JSON.parse(output)).toEqual({ node_count: 2, edge_count: 0 })
     })
   })
+
+  it('prints a clear error when graph.json is malformed', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'graphify-bench-stats-bad-'))
+    const graphPath = join(dir, 'graph.json')
+    writeFileSync(graphPath, '{"nodes":[', 'utf8')
+    try {
+      expect(() => execFileSync('node', [
+        'docs/benchmarks/2026-05-11-spi-vs-legacy/graph-stats.mjs',
+        graphPath,
+      ], { cwd: process.cwd(), encoding: 'utf8', stdio: 'pipe' })).toThrowError(
+        expect.objectContaining({
+          stderr: expect.stringContaining(graphPath),
+        }),
+      )
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })

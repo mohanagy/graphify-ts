@@ -22,8 +22,18 @@ const workspaceNames = readdirSync(bundleDir, { withFileTypes: true })
     return left.localeCompare(right)
   })
 
+function readWorkspaceSummary(name) {
+  const summaryPath = join(bundleDir, name, 'summary.json')
+  try {
+    return JSON.parse(readFileSync(summaryPath, 'utf8'))
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`failed to read ${name} summary.json at ${summaryPath}: ${message}`)
+  }
+}
+
 const workspaces = Object.fromEntries(
-  workspaceNames.map((name) => [name, JSON.parse(readFileSync(join(bundleDir, name, 'summary.json'), 'utf8'))]),
+  workspaceNames.map((name) => [name, readWorkspaceSummary(name)]),
 )
 
 const objectiveMetrics = workspaceNames.flatMap((workspace) => {
@@ -42,11 +52,17 @@ const qualitativeNotes = [
   'If GoValidate is unavailable, no GoValidate-specific numbers are claimed.',
 ]
 
-console.log(JSON.stringify({
-  workspace_order: workspaceNames,
-  workspaces,
-  comparison: {
-    objective_metrics: objectiveMetrics,
-    qualitative_notes: qualitativeNotes,
-  },
-}, null, 2))
+try {
+  console.log(JSON.stringify({
+    workspace_order: workspaceNames,
+    workspaces,
+    comparison: {
+      objective_metrics: objectiveMetrics,
+      qualitative_notes: qualitativeNotes,
+    },
+  }, null, 2))
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error)
+  console.error(message)
+  process.exit(1)
+}

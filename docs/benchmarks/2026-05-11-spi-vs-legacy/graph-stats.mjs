@@ -8,7 +8,15 @@ if (!graphPath) {
   process.exit(2)
 }
 
-const graph = JSON.parse(readFileSync(graphPath, 'utf8'))
+const graphJson = readFileSync(graphPath, 'utf8')
+let graph
+try {
+  graph = JSON.parse(graphJson)
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error)
+  console.error(`failed to parse graph JSON at ${graphPath}: ${message}`)
+  process.exit(1)
+}
 const nodeCount = Array.isArray(graph.nodes) ? graph.nodes.length : 0
 const edgeCount = Array.isArray(graph.edges) ? graph.edges.length : 0
 

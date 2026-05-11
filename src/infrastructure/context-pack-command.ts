@@ -188,6 +188,9 @@ export async function runContextPackCommand(
   })
 
   if (options.task === 'review') {
+    if (options.retrievalStrategy !== undefined) {
+      throw new Error('retrievalStrategy is not supported for task=review')
+    }
     const reviewResult = dependencies.analyzePrImpact(graph, '.', {
       budget: plannerBudget,
       taskIntent: initialPlan.evidence.recipe_id,

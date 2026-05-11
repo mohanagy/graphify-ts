@@ -124,4 +124,24 @@ describe('stdio slice-v1 surface', () => {
     expect(JSON.stringify(retrieveResponse)).toContain('retrieval_strategy must be one of default, slice-v1')
     expect(JSON.stringify(contextPackResponse)).toContain('retrieval_strategy must be one of default, slice-v1')
   })
+
+  it('rejects retrieval_strategy for review context packs instead of ignoring it', async () => {
+    const graphPath = createGraphPath()
+
+    const contextPackResponse = await Promise.resolve(handleStdioRequest(graphPath, {
+      id: 3,
+      method: 'tools/call',
+      params: {
+        name: 'context_pack',
+        arguments: {
+          prompt: 'Review current diff',
+          budget: 1000,
+          task: 'review',
+          retrieval_strategy: 'slice-v1',
+        },
+      },
+    }))
+
+    expect(JSON.stringify(contextPackResponse)).toContain('retrieval_strategy is not supported for task=review')
+  })
 })

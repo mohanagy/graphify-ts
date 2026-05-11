@@ -6,6 +6,7 @@ import { basename, relative, resolve } from 'node:path'
 import { computeContextPackDiagnostics } from '../../../dist/src/runtime/context-pack-diagnostics.js'
 import { estimateContextPackEntryTokens } from '../../../dist/src/runtime/context-pack.js'
 import { applyContextPackResolution } from '../../../dist/src/runtime/context-pack-resolution.js'
+import { classifyCalibrationBucket } from '../../../dist/src/runtime/benchmark/probe-calibration.js'
 import { contextPackFromRetrieveResult, retrieveContext } from '../../../dist/src/runtime/retrieve.js'
 import { loadGraph } from '../../../dist/src/runtime/serve.js'
 
@@ -153,12 +154,16 @@ const calibration = promptAnalyses.reduce((summary, prompt) => {
     added_labels: labelDelta,
   }
 
-  if (tokenDelta < 0 && qualityDelta >= 0) {
-    summary.helps.push(note)
-  } else if (tokenDelta > 0 && qualityDelta <= 0) {
-    summary.hurts_or_expands.push(note)
-  } else {
-    summary.no_material_change.push(note)
+  switch (classifyCalibrationBucket({ tokenDelta, qualityDelta })) {
+    case 'helps':
+      summary.helps.push(note)
+      break
+    case 'hurts_or_expands':
+      summary.hurts_or_expands.push(note)
+      break
+    default:
+      summary.no_material_change.push(note)
+      break
   }
   return summary
 }, {

@@ -15,6 +15,18 @@ export interface SliceScoredNode {
   score: number
 }
 
+function sliceNodeFromGraph(graph: KnowledgeGraph, nodeId: string): SliceScoredNode {
+  const attributes = graph.nodeAttributes(nodeId)
+  return {
+    id: nodeId,
+    label: String(attributes.label ?? nodeId),
+    sourceFile: String(attributes.source_file ?? ''),
+    exactLabelMatch: false,
+    sourcePathMatch: false,
+    score: 0.25,
+  }
+}
+
 type SliceMode = ContextPackSliceMetadata['mode']
 
 interface SlicePolicy {
@@ -150,7 +162,7 @@ function recordPath(
 
 function traverseDirection(
   graph: KnowledgeGraph,
-  scoredById: ReadonlyMap<string, SliceScoredNode>,
+  scoredById: Map<string, SliceScoredNode>,
   anchorIds: readonly string[],
   selectedIds: Set<string>,
   orderedIds: string[],
@@ -179,10 +191,8 @@ function traverseDirection(
         continue
       }
 
-      const neighbor = scoredById.get(neighborId)
-      if (!neighbor) {
-        continue
-      }
+      const neighbor = scoredById.get(neighborId) ?? sliceNodeFromGraph(graph, neighborId)
+      scoredById.set(neighborId, neighbor)
       if (shouldSuppressNode(graph, neighbor, anchoredIds)) {
         continue
       }
@@ -212,7 +222,7 @@ function traverseDirection(
 
 function addHelperNeighbors(
   graph: KnowledgeGraph,
-  scoredById: ReadonlyMap<string, SliceScoredNode>,
+  scoredById: Map<string, SliceScoredNode>,
   helperRelations: ReadonlySet<string>,
   selectedIds: Set<string>,
   orderedIds: string[],
@@ -232,8 +242,9 @@ function addHelperNeighbors(
         continue
       }
 
-      const neighbor = scoredById.get(neighborId)
-      if (!neighbor || shouldSuppressNode(graph, neighbor, anchoredIds)) {
+      const neighbor = scoredById.get(neighborId) ?? sliceNodeFromGraph(graph, neighborId)
+      scoredById.set(neighborId, neighbor)
+      if (shouldSuppressNode(graph, neighbor, anchoredIds)) {
         continue
       }
 

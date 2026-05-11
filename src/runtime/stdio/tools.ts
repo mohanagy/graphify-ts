@@ -856,6 +856,14 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
         )
       }
 
+      const contextPackStrategy = parseRetrievalStrategyParam(helpers, toolArguments)
+      if (contextPackStrategy === 'invalid') {
+        return helpers.failure(id, helpers.jsonrpcInvalidParams, 'retrieval_strategy must be one of default, slice-v1')
+      }
+      if (task === 'review' && contextPackStrategy) {
+        return helpers.failure(id, helpers.jsonrpcInvalidParams, 'retrieval_strategy is not supported for task=review')
+      }
+
       if (task === 'review') {
         const graphDir = dirname(validateGraphPath(graphPath))
         const projectRoot = dirname(graphDir)
@@ -884,10 +892,6 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
       const contextPackLevelOverride = helpers.numberParamAlias(toolArguments, ['retrieval_level', 'retrievalLevel'], { min: 0, max: 5 })
       if ((Object.hasOwn(toolArguments, 'retrieval_level') || Object.hasOwn(toolArguments, 'retrievalLevel')) && contextPackLevelOverride === null) {
         return helpers.failure(id, helpers.jsonrpcInvalidParams, 'retrieval_level must be an integer between 0 and 5')
-      }
-      const contextPackStrategy = parseRetrievalStrategyParam(helpers, toolArguments)
-      if (contextPackStrategy === 'invalid') {
-        return helpers.failure(id, helpers.jsonrpcInvalidParams, 'retrieval_strategy must be one of default, slice-v1')
       }
       const contextPackLevelTyped = contextPackLevelOverride === null ? null : (contextPackLevelOverride as 0 | 1 | 2 | 3 | 4 | 5)
       const retrieval = retrieveContext(graph, {

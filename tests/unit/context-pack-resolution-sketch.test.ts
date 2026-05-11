@@ -251,4 +251,34 @@ describe('applyContextPackResolution sketch mode', () => {
     expect(cancelOrder?.snippet).toContain('framework: trpc_procedure_mutation')
     expect(cancelOrder?.snippet).toContain('side effects: db_write')
   })
+
+  it('does not infer side effects from structural contains edges alone', () => {
+    const result = applyContextPackResolution(
+      [
+        node({
+          node_id: 'worker_module',
+          label: 'WorkerModule',
+          framework_role: 'nest_module',
+          snippet: 'export class WorkerModule {}',
+        }),
+        node({
+          node_id: 'queue_publisher',
+          label: 'QueueClient.publish',
+          snippet: 'export async function publish() {}',
+        }),
+      ],
+      {
+        resolution: 'sketch',
+        relationships: [
+          relationship('worker_module', 'queue_publisher', 'contains'),
+        ],
+      },
+    )
+
+    const workerModule = result.nodes.find((entry) => entry.node_id === 'worker_module')
+
+    expect(workerModule?.representation_type).toBe('behavior_sketch')
+    expect(workerModule?.snippet).not.toContain('side effects:')
+    expect(workerModule?.snippet).toContain('framework: nest_module')
+  })
 })

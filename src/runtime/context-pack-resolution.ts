@@ -377,12 +377,13 @@ function renderSketchRepresentation(
   relationIndex: RelationIndex,
 ): { type: 'behavior_sketch' | 'dependency_record'; reason: string; snippet: string } | null {
   const behaviorEdges = relationLabels(node, relationIndex, 'outgoing', ['calls', 'route_handler', 'controller_route', 'method', 'contains'])
+  const executionEdges = relationLabels(node, relationIndex, 'outgoing', ['calls'])
   const tests = relationLabels(node, relationIndex, 'outgoing', ['covered_by'])
   const config = relationLabels(node, relationIndex, 'outgoing', ['uses_config'])
   const readsEnv = relationLabels(node, relationIndex, 'outgoing', ['reads_env'])
   const outgoingDeps = relationLabels(node, relationIndex, 'outgoing', ['calls', 'injects', 'depends_on'])
   const incomingDeps = relationLabels(node, relationIndex, 'incoming', ['calls', 'injects', 'depends_on'])
-  const { sideEffects, latencySensitive } = sideEffectHints(behaviorEdges)
+  const { sideEffects, latencySensitive } = sideEffectHints(executionEdges)
 
   if (
     tests.length > 0

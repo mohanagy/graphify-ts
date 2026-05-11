@@ -105,6 +105,21 @@ describe('retrieveContext retrievalStrategy=slice-v1', () => {
     expect((sliced as any).slice.directions).toEqual(['backward', 'forward'])
   })
 
+  it('can pull direct graph neighbors into a level-1 slice even when they do not lexically match', () => {
+    const sliced = retrieveContext(buildSliceGraph(), {
+      question: 'Explain `AuthService.login`',
+      budget: 3000,
+      retrievalLevel: 1,
+      retrievalStrategy: 'slice-v1',
+    } as never)
+
+    const labels = sliced.matched_nodes.map((node) => node.label)
+
+    expect(labels).toContain('AuthService.login')
+    expect(labels).toContain('SessionStore.createSession')
+    expect(labels).not.toContain('index.ts')
+  })
+
   it('uses an impact-oriented forward slice for breakage questions', () => {
     const sliced = retrieveContext(buildSliceGraph(), {
       question: 'What breaks if `AuthService.login` changes?',

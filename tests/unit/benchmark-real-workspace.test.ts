@@ -118,4 +118,70 @@ describe('real-workspace benchmark support', () => {
     expect(template).toContain('No private paths or artifacts are committed.')
     expect(template).toContain('If GoValidate is unavailable, no GoValidate-specific numbers are claimed.')
   })
+
+  it('fails fast when the real-workspace prompts file is missing', () => {
+    withTempDir((dir) => {
+      expect(() => execFileSync('bash', [
+        'docs/benchmarks/2026-05-11-spi-vs-legacy/run-real-workspace.sh',
+      ], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        stdio: 'pipe',
+        env: {
+          ...process.env,
+          GRAPHIFY_BENCH_BACKEND: process.cwd(),
+          GRAPHIFY_BENCH_REAL_PROMPTS: join(dir, 'missing-prompts.json'),
+        },
+      })).toThrowError(expect.objectContaining({
+        stderr: expect.stringContaining('GRAPHIFY_BENCH_REAL_PROMPTS'),
+      }))
+    })
+  })
+
+  it('fails fast when a configured workspace path is missing', () => {
+    withTempDir((dir) => {
+      const promptsPath = join(dir, 'prompts.json')
+      writeFileSync(promptsPath, JSON.stringify({
+        schema_version: 1,
+        prompts: [],
+      }, null, 2))
+
+      expect(() => execFileSync('bash', [
+        'docs/benchmarks/2026-05-11-spi-vs-legacy/run-real-workspace.sh',
+      ], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        stdio: 'pipe',
+        env: {
+          ...process.env,
+          GRAPHIFY_BENCH_BACKEND: join(dir, 'missing-backend'),
+          GRAPHIFY_BENCH_REAL_PROMPTS: promptsPath,
+        },
+      })).toThrowError(expect.objectContaining({
+        stderr: expect.stringContaining('GRAPHIFY_BENCH_BACKEND'),
+      }))
+    })
+  })
+
+  it('prints which workspace summary failed to parse', () => {
+    withTempDir((dir) => {
+      const backendDir = join(dir, 'backend')
+      const monorepoDir = join(dir, 'monorepo')
+      mkdirSync(backendDir, { recursive: true })
+      mkdirSync(monorepoDir, { recursive: true })
+      writeFileSync(join(backendDir, 'summary.json'), JSON.stringify({ variants: {} }, null, 2))
+      writeFileSync(join(monorepoDir, 'summary.json'), '{"variants":', 'utf8')
+
+      expect(() => execFileSync('node', [
+        'docs/benchmarks/2026-05-11-spi-vs-legacy/summarize-real-workspaces.mjs',
+        dir,
+      ], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        stdio: 'pipe',
+      })).toThrowError(expect.objectContaining({
+        stderr: expect.stringContaining('monorepo'),
+      }))
+    })
+  })
 })
