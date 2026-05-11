@@ -73,6 +73,12 @@ export type DetectExpressFrameworkContext = {
    *  matching, which is correct only when no inner scope shadows the
    *  receiver or handler identifier. */
   checker?: ts.TypeChecker
+  /** Map from a source file's POSIX-normalized fileName to its SpiFile
+   *  id. Used by slice 1c-ii.h's cross-file mount resolution to look up
+   *  an imported router's SpiSymbol when the mount call lives in a
+   *  different file from the router's declaration. Optional — falls
+   *  back to current-file-only resolution if absent. */
+  pathToFileId?: Map<string, string>
 }
 
 /** Internal record: pairs a tagged Express binding's SpiSymbol with the
@@ -182,6 +188,15 @@ function emitMiddlewareForCall(
     let handlerSymbol: SpiSymbol | null = null
     if (ts.isIdentifier(arg)) {
       handlerSymbol = resolveHandlerSymbol(arg, ctx)
+      // Slice 1c-ii.h — cross-file fallback. When the current-file
+      // resolution misses, the argument is likely an imported binding
+      // (commonly `import { usersRouter } from './routes/users.js'`
+      // followed by `app.use('/api', usersRouter)`). Walk through the
+      // type checker to the symbol's declaration, derive its file_id,
+      // and look up the matching SpiSymbol there.
+      if (!handlerSymbol) {
+        handlerSymbol = resolveCrossFileSymbol(arg, ctx)
+      }
     } else if (ts.isArrowFunction(arg) || ts.isFunctionExpression(arg)) {
       handlerSymbol = mintSyntheticHandlerSymbol(ctx, callExpr, arg, 'express_middleware')
     }
@@ -426,6 +441,66 @@ function rangeOfNode(node: ts.Node, sourceFile: ts.SourceFile): SpiSymbol['range
     start: { line: start.line + 1, column: start.character + 1 },
     end: { line: end.line + 1, column: end.character + 1 },
   }
+}
+
+/**
+ * Slice 1c-ii.h — cross-file symbol resolution. When an imported
+ * identifier appears as the mounted-router argument of
+ * `app.use('/prefix', importedRouter)`, this resolves the import alias
+ * through ts.TypeChecker to the symbol's *originating* declaration,
+ * derives the declaration's file_id via pathToFileId, and finds the
+ * matching SpiSymbol in that file's index.
+ *
+ * Returns null when:
+ *   * No checker or pathToFileId on the context (graceful fallback).
+ *   * The identifier doesn't resolve to a symbol with declarations.
+ *   * The declaration's file isn't in the SPI (e.g., imports from
+ *     node_modules or files outside the workspace root).
+ *   * The declared symbol exists in the SPI but isn't a tagged Express
+ *     binding (express_app or express_router).
+ */
+function resolveCrossFileSymbol(
+  identifier: ts.Identifier,
+  ctx: DetectExpressFrameworkContext,
+): SpiSymbol | null {
+  if (!ctx.checker || !ctx.pathToFileId) return null
+  const localSymbol = ctx.checker.getSymbolAtLocation(identifier)
+  if (!localSymbol) return null
+  const aliasedSymbol = (localSymbol.flags & ts.SymbolFlags.Alias) !== 0
+    ? safeGetAliasedSymbol(localSymbol, ctx.checker)
+    : localSymbol
+  if (!aliasedSymbol) return null
+  const declaration = aliasedSymbol.declarations?.[0]
+  if (!declaration) return null
+  if (!isTopLevelDeclaration(declaration)) return null
+
+  const declSourceFile = declaration.getSourceFile()
+  const declaredFileId = ctx.pathToFileId.get(declSourceFile.fileName)
+  if (!declaredFileId) return null
+
+  // Find the SpiSymbol in the declaration's file. Match by name (the
+  // declaration's identifier name). Constraint to function / constant /
+  // variable kinds matches the routes/handlers/routers we care about.
+  const declName = declaredName(declaration)
+  if (!declName) return null
+  const fileSymbols = ctx.symbolsByFile.get(declaredFileId) ?? []
+  return fileSymbols.find((s) =>
+    s.name === declName && (s.kind === 'function' || s.kind === 'constant' || s.kind === 'variable'),
+  ) ?? null
+}
+
+function safeGetAliasedSymbol(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol | null {
+  try {
+    return checker.getAliasedSymbol(symbol)
+  } catch {
+    return null
+  }
+}
+
+function declaredName(decl: ts.Declaration): string | null {
+  if (ts.isFunctionDeclaration(decl) && decl.name) return decl.name.text
+  if (ts.isVariableDeclaration(decl) && ts.isIdentifier(decl.name)) return decl.name.text
+  return null
 }
 
 function resolveHandlerSymbol(
