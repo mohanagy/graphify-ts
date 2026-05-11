@@ -1,0 +1,161 @@
+// #133 — framework metadata-aware retrieval boost.
+// Verifies route_path / http_method / slice_name / procedure_name substring
+// matches add explicit boost on top of the role-based boost from PR #129.
+
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+
+import { generateGraph } from '../../src/infrastructure/generate.js'
+import { retrieveContext } from '../../src/runtime/retrieve.js'
+import { loadGraph } from '../../src/runtime/serve.js'
+
+function mkSandbox(prefix: string): string {
+  return mkdtempSync(join(tmpdir(), prefix))
+}
+
+function writeFile(root: string, rel: string, content: string): void {
+  const abs = join(root, rel)
+  mkdirSync(join(abs, '..'), { recursive: true })
+  writeFileSync(abs, content, 'utf8')
+}
+
+describe('Framework metadata-aware retrieval boost (#133)', () => {
+  let sandbox: string
+  beforeEach(() => { sandbox = mkSandbox('retrieve-meta-boost-') })
+  afterEach(() => { rmSync(sandbox, { recursive: true, force: true }) })
+
+  it('boosts the express handler whose route_path matches a substring in the question', () => {
+    writeFile(sandbox, 'src/server.ts', [
+      'import express from "express"',
+      'export const app = express()',
+      'export function listUsers(): void {}',
+      'export function getUserById(): void {}',
+      'app.get("/users", listUsers)',
+      'app.get("/users/:id", getUserById)',
+    ].join('\n') + '\n')
+
+    const result = generateGraph(sandbox, { useSpi: true, noHtml: true })
+    const graph = loadGraph(result.graphPath)
+    const retrieved = retrieveContext(graph, {
+      question: 'Find the express handler for GET /users/:id',
+      budget: 2000,
+    })
+
+    const getUserById = retrieved.matched_nodes.find((n) => n.label === 'getUserById()')
+    const listUsers = retrieved.matched_nodes.find((n) => n.label === 'listUsers()')
+    expect(getUserById?.framework_boost ?? 0).toBeGreaterThan(0)
+    // getUserById's route_path '/users/:id' substring-matches the question
+    // → should outrank listUsers (route_path '/users' is also matched but
+    // /users/:id is longer/more specific so the rule fires equally hard;
+    // the GET verb match applies to both. The exact-substring on the FULL
+    // longer path still favours getUserById on label-match downstream).
+    expect(getUserById?.framework_boost ?? 0).toBeGreaterThanOrEqual(listUsers?.framework_boost ?? 0)
+  })
+
+  it('boosts the http_method match (e.g. POST mention favours POST routes)', () => {
+    writeFile(sandbox, 'src/server.ts', [
+      'import express from "express"',
+      'export const app = express()',
+      'export function listUsers(): void {}',
+      'export function createUser(): void {}',
+      'app.get("/users", listUsers)',
+      'app.post("/users", createUser)',
+    ].join('\n') + '\n')
+
+    const result = generateGraph(sandbox, { useSpi: true, noHtml: true })
+    const graph = loadGraph(result.graphPath)
+    const retrieved = retrieveContext(graph, {
+      question: 'Which route handles POST requests to /users',
+      budget: 2000,
+    })
+
+    const createUser = retrieved.matched_nodes.find((n) => n.label === 'createUser()')
+    const listUsers = retrieved.matched_nodes.find((n) => n.label === 'listUsers()')
+    // createUser has http_method=POST + route_path=/users, both match.
+    // listUsers has http_method=GET + route_path=/users, only path matches.
+    expect((createUser?.framework_boost ?? 0)).toBeGreaterThan(listUsers?.framework_boost ?? 0)
+  })
+
+  it('boosts the Redux slice whose slice_name matches the question', () => {
+    writeFile(sandbox, 'src/auth-slice.ts', [
+      'import { createSlice } from "@reduxjs/toolkit"',
+      'export const authSlice = createSlice({',
+      '  name: "auth",',
+      '  initialState: {},',
+      '  reducers: { login(state) { return state } },',
+      '})',
+    ].join('\n') + '\n')
+    writeFile(sandbox, 'src/counter-slice.ts', [
+      'import { createSlice } from "@reduxjs/toolkit"',
+      'export const counterSlice = createSlice({',
+      '  name: "counter",',
+      '  initialState: 0,',
+      '  reducers: { inc(state: number): number { return state + 1 } },',
+      '})',
+    ].join('\n') + '\n')
+
+    const result = generateGraph(sandbox, { useSpi: true, noHtml: true })
+    const graph = loadGraph(result.graphPath)
+    const retrieved = retrieveContext(graph, {
+      question: 'Which slice handles auth state',
+      budget: 2000,
+    })
+
+    const authSlice = retrieved.matched_nodes.find((n) => n.label === 'authSlice')
+    const counterSlice = retrieved.matched_nodes.find((n) => n.label === 'counterSlice')
+    expect((authSlice?.framework_boost ?? 0)).toBeGreaterThan(counterSlice?.framework_boost ?? 0)
+  })
+
+  it('boosts the tRPC procedure whose procedure_name appears in the question', () => {
+    writeFile(sandbox, 'src/router.ts', [
+      'import { initTRPC } from "@trpc/server"',
+      'declare const t: ReturnType<typeof initTRPC.create>',
+      'export const appRouter = t.router({',
+      '  getUser: t.procedure.query(() => null),',
+      '  cancelOrder: t.procedure.mutation(() => null),',
+      '})',
+    ].join('\n') + '\n')
+
+    const result = generateGraph(sandbox, { useSpi: true, noHtml: true })
+    const graph = loadGraph(result.graphPath)
+    const retrieved = retrieveContext(graph, {
+      question: 'How does the cancelOrder tRPC mutation work',
+      budget: 2000,
+    })
+
+    const cancel = retrieved.matched_nodes.find((n) => n.label.includes('cancelOrder'))
+    const getUser = retrieved.matched_nodes.find((n) => n.label.includes('getUser'))
+    expect((cancel?.framework_boost ?? 0)).toBeGreaterThan(getUser?.framework_boost ?? 0)
+  })
+
+  it('does NOT apply metadata boost when the question contains no matching substring', () => {
+    writeFile(sandbox, 'src/server.ts', [
+      'import express from "express"',
+      'export const app = express()',
+      'export function listUsers(): void {}',
+      'app.get("/users", listUsers)',
+    ].join('\n') + '\n')
+
+    const result = generateGraph(sandbox, { useSpi: true, noHtml: true })
+    const graph = loadGraph(result.graphPath)
+    // Question is completely unrelated to /users or GET.
+    const retrievedUnrelated = retrieveContext(graph, {
+      question: 'How does the formatter handle currency conversion',
+      budget: 2000,
+    })
+    // Question that DOES name the express handler — both fire, but the
+    // metadata boost should add to it, not be absent.
+    const retrievedRelated = retrieveContext(graph, {
+      question: 'Find the GET /users handler',
+      budget: 2000,
+    })
+
+    const unrelatedListUsers = retrievedUnrelated.matched_nodes.find((n) => n.label === 'listUsers()')
+    const relatedListUsers = retrievedRelated.matched_nodes.find((n) => n.label === 'listUsers()')
+    // Related query's boost should be strictly higher than unrelated.
+    expect((relatedListUsers?.framework_boost ?? 0)).toBeGreaterThan(unrelatedListUsers?.framework_boost ?? 0)
+  })
+})

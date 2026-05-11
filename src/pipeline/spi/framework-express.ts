@@ -160,7 +160,7 @@ function walkRouteCalls(
         const bindingRecord = expressBindings.get(bindingName)
         if (bindingRecord && receiverMatchesBinding(callee.expression, bindingRecord, ctx.checker)) {
           if (HTTP_ROUTE_METHODS.has(methodName)) {
-            emitRouteForCall(ctx, bindingRecord.spiSymbol, node, seenEdgeKeys)
+            emitRouteForCall(ctx, bindingRecord.spiSymbol, node, seenEdgeKeys, methodName)
           } else if (methodName === 'use') {
             // Slice 1c-ii.d — middleware detection.
             emitMiddlewareForCall(ctx, node)
@@ -331,6 +331,7 @@ function emitRouteForCall(
   bindingSymbol: SpiSymbol,
   callExpr: ts.CallExpression,
   seenEdgeKeys: Set<string>,
+  httpMethod: string,
 ): void {
   // The route handler is the last argument. Earlier args may be the path
   // string, parameter regexes, or middleware functions.
@@ -360,9 +361,13 @@ function emitRouteForCall(
 
   handlerSymbol.framework_role = 'express_route'
   if (routePath !== null) {
+    // #133 — co-attach http_method alongside route_path so retrieval can
+    // boost by verb. Kept gated on routePath being static so the "no
+    // metadata for dynamic paths" contract from slice 1c-ii.f is preserved.
     handlerSymbol.framework_metadata = {
       ...(handlerSymbol.framework_metadata ?? {}),
       route_path: routePath,
+      http_method: httpMethod.toUpperCase(),
     }
   }
 

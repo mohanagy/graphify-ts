@@ -531,7 +531,7 @@ describe('SPI Express framework detector (slice 1c-ii.b)', () => {
       ].join('\n') + '\n')
       const spi = build(sandbox)
       const handler = findSymbol(spi, 'src/server.ts', 'listUsers')
-      expect(handler?.framework_metadata).toEqual({ route_path: '/users/:id' })
+      expect(handler?.framework_metadata).toEqual({ route_path: '/users/:id', http_method: 'GET' })
     })
 
     it('attaches route_path to a synthesized inline route handler', () => {
@@ -542,7 +542,7 @@ describe('SPI Express framework detector (slice 1c-ii.b)', () => {
       ].join('\n') + '\n')
       const spi = build(sandbox)
       const synthetic = spi.symbols.find((s) => s.framework_role === 'express_route' && s.kind === 'function')
-      expect(synthetic?.framework_metadata).toEqual({ route_path: '/users' })
+      expect(synthetic?.framework_metadata).toEqual({ route_path: '/users', http_method: 'POST' })
     })
 
     it('extracts route_path from a no-substitution template literal', () => {

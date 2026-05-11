@@ -1,0 +1,371 @@
+{
+  "timestamp_iso": "2026-05-11T13:39:56.581Z",
+  "variants": {
+    "legacy": {
+      "variant": "legacy",
+      "build_time_ms": 512,
+      "graph_size_bytes": 62783,
+      "node_count": 29,
+      "prompts": [
+        {
+          "id": "express-route",
+          "text": "Show me the Express route that handles GET /api/users/:id",
+          "pack_token_count": 162,
+          "pack_node_count": 5,
+          "top_labels": [
+            "GET /api/users/:id",
+            "GET /api/users",
+            "GET /:id",
+            "USE /api/users",
+            "POST /api/users"
+          ]
+        },
+        {
+          "id": "hono-route",
+          "text": "Find the Hono route for listProducts",
+          "pack_token_count": 179,
+          "pack_node_count": 7,
+          "top_labels": [
+            "listProducts()",
+            "getProductById()",
+            "createProduct()",
+            "findUserById()",
+            "hono-server.ts"
+          ]
+        },
+        {
+          "id": "trpc-mutations",
+          "text": "Which tRPC mutations exist in this app and what do they do",
+          "pack_token_count": 298,
+          "pack_node_count": 11,
+          "top_labels": [
+            "app",
+            "express-server.ts",
+            "usersRouter",
+            "USE /",
+            "GET /api/users"
+          ]
+        },
+        {
+          "id": "prisma-client",
+          "text": "Where is the Prisma database client used",
+          "pack_token_count": 131,
+          "pack_node_count": 5,
+          "top_labels": [
+            "USE /",
+            "USE /api/users",
+            "findUserById()",
+            "createOrder()",
+            "express-server.ts"
+          ]
+        },
+        {
+          "id": "auth-middleware",
+          "text": "How is authentication middleware wired up",
+          "pack_token_count": 128,
+          "pack_node_count": 5,
+          "top_labels": [
+            "authMiddleware()",
+            "express-server.ts",
+            "USE /",
+            "listUsers()",
+            "getUserById()"
+          ]
+        },
+        {
+          "id": "generic-utils",
+          "text": "How does debounce work in this codebase",
+          "pack_token_count": 124,
+          "pack_node_count": 5,
+          "top_labels": [
+            "debounce()",
+            "utils.ts",
+            "parseQueryString()",
+            "formatDate()",
+            "clamp()"
+          ]
+        },
+        {
+          "id": "cross-framework",
+          "text": "What routes exist across all the HTTP frameworks in this project",
+          "pack_token_count": 138,
+          "pack_node_count": 5,
+          "top_labels": [
+            "GET /",
+            "GET /:id",
+            "POST /",
+            "USE /",
+            "express-server.ts"
+          ]
+        }
+      ]
+    },
+    "spi-cold": {
+      "variant": "spi-cold",
+      "build_time_ms": 670,
+      "graph_size_bytes": 42925,
+      "node_count": 30,
+      "prompts": [
+        {
+          "id": "express-route",
+          "text": "Show me the Express route that handles GET /api/users/:id",
+          "pack_token_count": 128,
+          "pack_node_count": 5,
+          "top_labels": [
+            "getUserById()",
+            "listUsers()",
+            "createUser()",
+            "findUserById()",
+            "usersRouter"
+          ]
+        },
+        {
+          "id": "hono-route",
+          "text": "Find the Hono route for listProducts",
+          "pack_token_count": 126,
+          "pack_node_count": 5,
+          "top_labels": [
+            "listProducts()",
+            "createProduct()",
+            "getProductById()",
+            "findUserById()",
+            "honoApp"
+          ]
+        },
+        {
+          "id": "trpc-mutations",
+          "text": "Which tRPC mutations exist in this app and what do they do",
+          "pack_token_count": 231,
+          "pack_node_count": 5,
+          "top_labels": [
+            "appRouter.cancelOrder()",
+            "appRouter.createOrder()",
+            "appRouter.getOrder()",
+            "appRouter.listOrders()",
+            "appRouter.onOrderUpdate()"
+          ]
+        },
+        {
+          "id": "prisma-client",
+          "text": "Where is the Prisma database client used",
+          "pack_token_count": 93,
+          "pack_node_count": 4,
+          "top_labels": [
+            "prisma",
+            "prisma-client.ts",
+            "createOrder()",
+            "findUserById()"
+          ]
+        },
+        {
+          "id": "auth-middleware",
+          "text": "How is authentication middleware wired up",
+          "pack_token_count": 120,
+          "pack_node_count": 5,
+          "top_labels": [
+            "authMiddleware()",
+            "express-server.ts",
+            "usersRouter",
+            "app",
+            "createUser()"
+          ]
+        },
+        {
+          "id": "generic-utils",
+          "text": "How does debounce work in this codebase",
+          "pack_token_count": 123,
+          "pack_node_count": 5,
+          "top_labels": [
+            "debounce()",
+            "utils.ts",
+            "parseQueryString()",
+            "clamp()",
+            "formatDate()"
+          ]
+        },
+        {
+          "id": "cross-framework",
+          "text": "What routes exist across all the HTTP frameworks in this project",
+          "pack_token_count": 125,
+          "pack_node_count": 5,
+          "top_labels": [
+            "createUser()",
+            "getUserById()",
+            "listUsers()",
+            "express-server.ts",
+            "parseQueryString()"
+          ]
+        }
+      ]
+    },
+    "spi-warm": {
+      "variant": "spi-warm",
+      "build_time_ms": 354,
+      "graph_size_bytes": 42925,
+      "node_count": 30,
+      "note": "Same fixture as spi-cold, re-run to measure cache-hit path. Prompts not re-evaluated; pack tokens match spi-cold."
+    }
+  },
+  "comparison": {
+    "build_time_delta_ms": 158,
+    "build_time_delta_pct": "30.9",
+    "graph_size_delta_bytes": -19858,
+    "graph_size_delta_pct": "-31.6",
+    "node_count_delta": 1,
+    "per_prompt": [
+      {
+        "id": "express-route",
+        "legacy_tokens": 162,
+        "spi_tokens": 128,
+        "token_delta": -34,
+        "legacy_nodes": 5,
+        "spi_nodes": 5,
+        "legacy_top_labels": [
+          "GET /api/users/:id",
+          "GET /api/users",
+          "GET /:id",
+          "USE /api/users",
+          "POST /api/users"
+        ],
+        "spi_top_labels": [
+          "getUserById()",
+          "listUsers()",
+          "createUser()",
+          "findUserById()",
+          "usersRouter"
+        ]
+      },
+      {
+        "id": "hono-route",
+        "legacy_tokens": 179,
+        "spi_tokens": 126,
+        "token_delta": -53,
+        "legacy_nodes": 7,
+        "spi_nodes": 5,
+        "legacy_top_labels": [
+          "listProducts()",
+          "getProductById()",
+          "createProduct()",
+          "findUserById()",
+          "hono-server.ts"
+        ],
+        "spi_top_labels": [
+          "listProducts()",
+          "createProduct()",
+          "getProductById()",
+          "findUserById()",
+          "honoApp"
+        ]
+      },
+      {
+        "id": "trpc-mutations",
+        "legacy_tokens": 298,
+        "spi_tokens": 231,
+        "token_delta": -67,
+        "legacy_nodes": 11,
+        "spi_nodes": 5,
+        "legacy_top_labels": [
+          "app",
+          "express-server.ts",
+          "usersRouter",
+          "USE /",
+          "GET /api/users"
+        ],
+        "spi_top_labels": [
+          "appRouter.cancelOrder()",
+          "appRouter.createOrder()",
+          "appRouter.getOrder()",
+          "appRouter.listOrders()",
+          "appRouter.onOrderUpdate()"
+        ]
+      },
+      {
+        "id": "prisma-client",
+        "legacy_tokens": 131,
+        "spi_tokens": 93,
+        "token_delta": -38,
+        "legacy_nodes": 5,
+        "spi_nodes": 4,
+        "legacy_top_labels": [
+          "USE /",
+          "USE /api/users",
+          "findUserById()",
+          "createOrder()",
+          "express-server.ts"
+        ],
+        "spi_top_labels": [
+          "prisma",
+          "prisma-client.ts",
+          "createOrder()",
+          "findUserById()"
+        ]
+      },
+      {
+        "id": "auth-middleware",
+        "legacy_tokens": 128,
+        "spi_tokens": 120,
+        "token_delta": -8,
+        "legacy_nodes": 5,
+        "spi_nodes": 5,
+        "legacy_top_labels": [
+          "authMiddleware()",
+          "express-server.ts",
+          "USE /",
+          "listUsers()",
+          "getUserById()"
+        ],
+        "spi_top_labels": [
+          "authMiddleware()",
+          "express-server.ts",
+          "usersRouter",
+          "app",
+          "createUser()"
+        ]
+      },
+      {
+        "id": "generic-utils",
+        "legacy_tokens": 124,
+        "spi_tokens": 123,
+        "token_delta": -1,
+        "legacy_nodes": 5,
+        "spi_nodes": 5,
+        "legacy_top_labels": [
+          "debounce()",
+          "utils.ts",
+          "parseQueryString()",
+          "formatDate()",
+          "clamp()"
+        ],
+        "spi_top_labels": [
+          "debounce()",
+          "utils.ts",
+          "parseQueryString()",
+          "clamp()",
+          "formatDate()"
+        ]
+      },
+      {
+        "id": "cross-framework",
+        "legacy_tokens": 138,
+        "spi_tokens": 125,
+        "token_delta": -13,
+        "legacy_nodes": 5,
+        "spi_nodes": 5,
+        "legacy_top_labels": [
+          "GET /",
+          "GET /:id",
+          "POST /",
+          "USE /",
+          "express-server.ts"
+        ],
+        "spi_top_labels": [
+          "createUser()",
+          "getUserById()",
+          "listUsers()",
+          "express-server.ts",
+          "parseQueryString()"
+        ]
+      }
+    ]
+  }
+}
