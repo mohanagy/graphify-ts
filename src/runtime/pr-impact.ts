@@ -1179,12 +1179,17 @@ export function analyzePrImpact(
 
   // #79 (v0.16) — severity tiers on uncovered hotspots so reviewers can
   // see at a glance which gaps need attention first.
+  // CodeRabbit nitpick fix: `uncoveredHotspots` is already pre-filtered
+  // to labels in `highImpactLabelSet`, so the 'medium' branch is
+  // unreachable. The full PrImpactResult.uncovered_hotspot_severities
+  // type still permits 'medium' for future expansion (e.g. non-high-
+  // impact changed nodes), but the construction here only produces
+  // 'critical' or 'high'.
   const uncoveredHotspotSeverities: Array<{ label: string; severity: 'critical' | 'high' | 'medium' }> =
     uncoveredHotspots.map((node) => {
       const label = node.label
-      let severity: 'critical' | 'high' | 'medium' = 'medium'
-      if (bridgeSet.has(label) || godSet.has(label)) severity = 'critical'
-      else if (highImpactLabelSet.has(label)) severity = 'high'
+      const severity: 'critical' | 'high' =
+        (bridgeSet.has(label) || godSet.has(label)) ? 'critical' : 'high'
       return { label, severity }
     })
 

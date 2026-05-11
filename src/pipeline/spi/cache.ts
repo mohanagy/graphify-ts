@@ -131,14 +131,13 @@ export function buildSpiCached(opts: BuildSpiCachedOptions): BuildSpiCachedResul
   const indexPath = join(cacheDir, CACHE_INDEX_FILE)
   const spiPath = join(cacheDir, CACHE_SPI_FILE)
 
-  const fingerprint = computeWorkspaceFingerprint(root, opts)
-  const cacheKey = fingerprint.cacheKey
-
   const finishStats = (stats: SpiCacheStats): SpiCacheStats => {
     if (opts.onCacheLookup) opts.onCacheLookup(stats)
     return stats
   }
 
+  // CodeRabbit fix: short-circuit BEFORE fingerprint computation so the
+  // noCache path skips the per-file hashing entirely.
   if (opts.noCache) {
     const spi = buildSpi(opts)
     return {
@@ -146,14 +145,22 @@ export function buildSpiCached(opts: BuildSpiCachedOptions): BuildSpiCachedResul
       cache: finishStats({
         hit: false,
         reason: 'cache-disabled',
-        file_count: fingerprint.fileCount,
-        cache_key: cacheKey,
+        file_count: 0,
+        cache_key: '',
         duration_ms: Date.now() - start,
       }),
     }
   }
 
-  // Cache lookup: load index, validate key, deserialize SPI.
+  const fingerprint = computeWorkspaceFingerprint(root, opts)
+  const cacheKey = fingerprint.cacheKey
+
+  // Cache lookup: load index, validate key, deserialize SPI. Track the
+  // miss reason explicitly so the stats payload reports why the cache
+  // didn't fire (CodeRabbit fix — the previous version threw the reason
+  // away and inferred from existsSync after writing the cache, which
+  // always reported fresh-cache).
+  let missReason: SpiCacheStats['reason'] = 'no-cache'
   if (existsSync(indexPath) && existsSync(spiPath)) {
     const cached = tryLoadCache(indexPath, spiPath, cacheKey)
     if (cached.kind === 'hit') {
@@ -168,19 +175,18 @@ export function buildSpiCached(opts: BuildSpiCachedOptions): BuildSpiCachedResul
         }),
       }
     }
-    // miss: surface the reason so callers can log it. Fall through to rebuild.
-    const reason = cached.kind === 'key-mismatch'
-      ? 'key-mismatch'
-      : cached.kind === 'format-version-mismatch'
-        ? 'format-version-mismatch'
-        : 'corrupt-cache'
+    missReason =
+      cached.kind === 'key-mismatch'
+        ? 'key-mismatch'
+        : cached.kind === 'format-version-mismatch'
+          ? 'format-version-mismatch'
+          : 'corrupt-cache'
     // Drop the stale cache so the next miss path doesn't re-read it.
     safeDelete(indexPath)
     safeDelete(spiPath)
-    void reason
   }
 
-  // Build, persist, return.
+  // Build, persist, return — propagate the actual miss reason.
   const spi = buildSpi(opts)
   saveCache(cacheDir, indexPath, spiPath, spi, cacheKey, fingerprint.fileCount, opts.extractorVersion)
 
@@ -188,7 +194,7 @@ export function buildSpiCached(opts: BuildSpiCachedOptions): BuildSpiCachedResul
     spi,
     cache: finishStats({
       hit: false,
-      reason: existsSync(indexPath) ? 'fresh-cache' : 'no-cache',
+      reason: missReason,
       file_count: fingerprint.fileCount,
       cache_key: cacheKey,
       duration_ms: Date.now() - start,

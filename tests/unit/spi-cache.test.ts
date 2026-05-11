@@ -30,6 +30,7 @@ describe('buildSpiCached (#77)', () => {
 
     const first = buildSpiCached({ root: sandbox, graphifyVersion: 'test-0.0.0', now: FROZEN_NOW })
     expect(first.cache.hit).toBe(false)
+    expect(first.cache.reason).toBe('no-cache')
     expect(first.spi.files.length).toBeGreaterThan(0)
     expect(first.spi.symbols.find((s) => s.name === 'foo')).toBeTruthy()
   })
@@ -55,7 +56,10 @@ describe('buildSpiCached (#77)', () => {
 
     const reBuild = buildSpiCached({ root: sandbox, graphifyVersion: 'test-0.0.0', now: FROZEN_NOW })
     expect(reBuild.cache.hit).toBe(false)
-    expect(reBuild.cache.reason).toBe('fresh-cache')
+    // CodeRabbit fix: the actual reason here is key-mismatch (the stale
+    // cache exists but the file fingerprint no longer matches), NOT
+    // fresh-cache. The earlier assertion was wrong.
+    expect(reBuild.cache.reason).toBe('key-mismatch')
   })
 
   it('invalidates when a new file appears', () => {

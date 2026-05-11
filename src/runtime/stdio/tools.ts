@@ -818,6 +818,21 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
         budget: plannerBudget,
       })
 
+      // CodeRabbit fix: validate resolution BEFORE the review/impact
+      // early returns so callers can't pass resolution: 'summary' or
+      // 'mixed' for review/impact tasks and get silent no-ops. The
+      // resolution feature only applies to the explain branch in this
+      // slice; review and impact branches produce different pack
+      // taxonomies that would need their own adapters.
+      const earlyResolutionParam = helpers.stringParam(toolArguments, 'resolution')
+      if (earlyResolutionParam && (task === 'review' || task === 'impact')) {
+        return helpers.failure(
+          id,
+          helpers.jsonrpcInvalidParams,
+          `resolution is only supported for task=explain (got task=${task}). Drop the parameter or switch tasks.`,
+        )
+      }
+
       if (task === 'review') {
         const graphDir = dirname(validateGraphPath(graphPath))
         const projectRoot = dirname(graphDir)
@@ -895,17 +910,36 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
           : 'detail'
       const applyResolutionToNodes = <T>(
         nodes: T[],
-      ): { nodes: T[]; bytes_saved: number } => {
-        if (resolution === 'detail') return { nodes, bytes_saved: 0 }
+      ): {
+        nodes: T[]
+        bytes_saved: number
+        resolution_map: Array<{ node_id: string | undefined; resolution: 'detail' | 'summary' }>
+      } => {
+        if (resolution === 'detail') {
+          return {
+            nodes,
+            bytes_saved: 0,
+            resolution_map: (nodes as unknown as ContextPackNode[]).map((n) => ({
+              node_id: n.node_id,
+              resolution: 'detail' as const,
+            })),
+          }
+        }
         // applyContextPackResolution preserves all fields and only
         // mutates `snippet` to null, so the shape is structurally
         // compatible with T. The exactOptionalPropertyTypes rule can't
         // see through the spread; the as-cast bridges it.
+        // CodeRabbit fix: forward resolution_map so callers know which
+        // nodes were summarized vs kept in detail.
         const result = applyContextPackResolution(
           nodes as unknown as ContextPackNode[],
           { resolution },
         )
-        return { nodes: result.nodes as unknown as T[], bytes_saved: result.bytes_saved }
+        return {
+          nodes: result.nodes as unknown as T[],
+          bytes_saved: result.bytes_saved,
+          resolution_map: result.resolution_map,
+        }
       }
 
       // Slice #81: delta-only context packs. When the caller passes a
@@ -954,7 +988,9 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
           ...compactPack,
           matched_nodes: resolvedNodes.nodes,
         },
-        ...(resolvedNodes.bytes_saved > 0 ? { bytes_saved_by_resolution: resolvedNodes.bytes_saved } : {}),
+        ...(resolvedNodes.bytes_saved > 0
+          ? { bytes_saved_by_resolution: resolvedNodes.bytes_saved, resolution_map: resolvedNodes.resolution_map }
+          : {}),
         diagnostics,
         ...metadata,
       })))
