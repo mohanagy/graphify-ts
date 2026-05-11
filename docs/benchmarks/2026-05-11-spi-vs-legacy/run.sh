@@ -110,14 +110,19 @@ t0=$(node -e 'console.log(Date.now())')
 node "$GRAPHIFY" generate "$SPI_WARM_FIXTURE" --spi --no-html > "$RESULTS_DIR/spi-warm.generate.log" 2>&1
 t1=$(node -e 'console.log(Date.now())')
 SPI_WARM_ELAPSED=$((t1 - t0))
-echo "  time=${SPI_WARM_ELAPSED}ms"
+# CodeRabbit follow-up: capture graph_size_bytes + node_count alongside
+# build_time_ms so spi-warm has schema parity with legacy / spi-cold.
+SPI_WARM_GRAPH_PATH="$SPI_WARM_FIXTURE/graphify-out/graph.json"
+SPI_WARM_GRAPH_SIZE=$(wc -c < "$SPI_WARM_GRAPH_PATH" | tr -d ' ')
+SPI_WARM_NODE_COUNT=$(node -e "const g=require('$SPI_WARM_GRAPH_PATH'); console.log(g.nodes.length)")
+echo "  time=${SPI_WARM_ELAPSED}ms  graph_size=${SPI_WARM_GRAPH_SIZE}  nodes=${SPI_WARM_NODE_COUNT}"
 
-# CodeRabbit fix: also persist a structured artifact for the spi-warm
-# variant so summarize.mjs can ingest it alongside legacy/spi-cold.
 cat > "$RESULTS_DIR/spi-warm.json" <<EOF
 {
   "variant": "spi-warm",
   "build_time_ms": $SPI_WARM_ELAPSED,
+  "graph_size_bytes": $SPI_WARM_GRAPH_SIZE,
+  "node_count": $SPI_WARM_NODE_COUNT,
   "note": "Same fixture as spi-cold, re-run to measure cache-hit path. Prompts not re-evaluated; pack tokens match spi-cold."
 }
 EOF

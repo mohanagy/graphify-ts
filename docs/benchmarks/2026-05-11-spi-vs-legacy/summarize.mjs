@@ -38,9 +38,14 @@ if (results.legacy && results['spi-cold']) {
     // is missing from one side, surface it as `missing_on: 'spi' | 'legacy'`
     // rather than silently mis-pairing the remaining entries.
     per_prompt: (() => {
-      const spiById = new Map(spi.prompts.map((p) => [p.id, p]))
-      const legacyById = new Map(legacy.prompts.map((p) => [p.id, p]))
-      const allIds = Array.from(new Set([...legacy.prompts.map((p) => p.id), ...spi.prompts.map((p) => p.id)]))
+      // CodeRabbit follow-up: guard against missing/malformed prompts
+      // arrays so summarize.mjs doesn't throw if a variant ran with no
+      // pack evaluations (e.g., legacy-only or spi-only manual runs).
+      const legacyPrompts = Array.isArray(legacy?.prompts) ? legacy.prompts : []
+      const spiPrompts = Array.isArray(spi?.prompts) ? spi.prompts : []
+      const spiById = new Map(spiPrompts.map((p) => [p.id, p]))
+      const legacyById = new Map(legacyPrompts.map((p) => [p.id, p]))
+      const allIds = Array.from(new Set([...legacyPrompts.map((p) => p.id), ...spiPrompts.map((p) => p.id)]))
       return allIds.map((id) => {
         const legacyPrompt = legacyById.get(id)
         const spiPrompt = spiById.get(id)
