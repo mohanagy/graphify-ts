@@ -4,6 +4,30 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-05-11
+
+### Added
+
+- **Semantic Program Index (SPI) v1 substrate (#72)**: complete versioned, typed, deterministic internal representation of TypeScript/Node workspaces — files, symbols (functions/classes/interfaces/types/enums/methods/constants/variables/namespaces), and edges (declares, imports, exports, calls, extends, implements, param_type, return_type, covered_by). Built once via `ts.Program` + the TypeScript type checker, with workspace fingerprinting and deterministic serialization.
+- **Framework-aware semantic substrates**: five framework detectors layered over SPI:
+  - **NestJS** — modules, controllers, providers, guards/pipes/interceptors, route methods, constructor + `@Inject('TOKEN')` injects edges, dynamic module diagnostics.
+  - **Express** — apps, routers, named/inline route handlers with `route_path` + `http_method` metadata, middleware, **cross-file mount-prefix resolution** via the type checker (alias-following + same-file router lookup), router-root trailing-slash normalization.
+  - **Next.js** — file-convention tagging for `app/*/page.tsx`, `app/*/route.ts`, `app/*/layout.tsx` (+ loading/error/template), `pages/*`, `pages/api/*`, root `middleware.ts`; `route_path` derived from file path with dynamic segments (`[id]` → `:id`), catch-alls (`[...slug]` → `*`), optional catch-alls (`[[...slug]]` → `*?`), route groups (`(auth)` stripped), parallel routes (`@modal` stripped), and intercepting-route prefixes (`(.)/(..)/( ...)` stripped); HTTP-method exports get `http_method` metadata.
+  - **React Router** — `createBrowserRouter` / `createHashRouter` / `createMemoryRouter` / `createStaticRouter` detection, in-config loader/action tagging with `route_path`, nested children path composition, index/pathless layout handling, hoisted same-file route-config arrays (`const routes = [...]; createBrowserRouter(routes)`).
+  - **Redux Toolkit** — `createSlice` (slice_name, reducer_keys, action_creators), `configureStore` (reducer_keys), `createAsyncThunk` (type_prefix), `createApi` / RTK Query (endpoint_names from both concise and block arrow-function bodies), `createSelector` / `createDraftSafeSelector` role tagging.
+- **SPI → ExtractionData projector**: `projectSpiToExtraction(spi, { root })` bridges the SPI substrate to the existing `buildFromJson → cluster → analyze → graph.json` pipeline. Propagates `framework_role` + `framework_metadata` onto every projected `ExtractionNode` so downstream consumers (retrieval, context packs, MCP) can filter by framework without re-parsing.
+- **SPI diff overlay**: `computeSpiDiffOverlay` projects PR-impact deltas through the SPI substrate (slice 3a of #72).
+
+### Changed
+
+- **Express route_path normalization**: `joinRoutePath` collapses the router-root `'/'` case (`app.use('/api/users', router)` + `router.get('/', ...)` → `/api/users`), matching the legacy extractor's emission. Non-root Express semantics preserved unchanged (`/api` + `/api` → `/api/api`).
+- **Mount-prefix resolution**: workspace-level finalizer (`finalizeExpressMountPrefixes`) runs after per-file detection so cross-file router mounts resolve regardless of file order.
+
+### Notes
+
+- The SPI substrate is **additive** — the existing `extract()` pipeline remains untouched. Consumers can adopt incrementally via `buildSpi` / `projectSpiToExtraction`.
+- Full byte-equivalence with the legacy `extract()` on `examples/demo-repo/graphify-out/graph.json` is **not** asserted in this release; the parity tests pin shape parity and the documented taxonomy divergence (legacy emits separate synthesized route nodes, SPI tags handlers directly). Strict byte-equivalence is deferred to a follow-up release.
+
 ## [0.13.3] - 2026-05-10
 
 ### Changed
