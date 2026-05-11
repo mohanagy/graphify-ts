@@ -231,6 +231,7 @@ function frameworkForRole(role: NonNullable<SpiSymbol['framework_role']>): strin
   if (role.startsWith('express_')) return 'express'
   if (role.startsWith('nextjs_')) return 'nextjs'
   if (role.startsWith('react_router_')) return 'react-router'
+  if (role.startsWith('redux_')) return 'redux'
   return 'unknown'
 }
 
@@ -264,6 +265,14 @@ function nodeKindForRole(role: NonNullable<SpiSymbol['framework_role']>): NonNul
       return 'function'
     case 'react_router_router':
       return 'router'
+    case 'redux_slice':
+      return 'slice'
+    case 'redux_store':
+      return 'store'
+    case 'redux_selector':
+    case 'redux_async_thunk':
+    case 'redux_rtk_query_api':
+      return 'function'
     default:
       return null
   }

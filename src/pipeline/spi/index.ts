@@ -81,3 +81,8 @@ export {
   detectReactRouterFramework,
   type DetectReactRouterFrameworkContext,
 } from './framework-react-router.js'
+
+export {
+  detectReduxFramework,
+  type DetectReduxFrameworkContext,
+} from './framework-redux.js'

@@ -66,6 +66,7 @@ import { collectNestTokenMap, detectNestFramework } from './framework-nestjs.js'
 import { detectExpressFramework } from './framework-express.js'
 import { detectNextjsFramework } from './framework-nextjs.js'
 import { detectReactRouterFramework } from './framework-react-router.js'
+import { detectReduxFramework } from './framework-redux.js'
 
 export type BuildSpiOptions = {
   root: string
@@ -670,6 +671,14 @@ function addTypeCheckerEdges(ctx: TypeCheckerEdgeContext): void {
     // results and named loader/action exports in files importing
     // react-router(-dom).
     detectReactRouterFramework({
+      sourceFile,
+      fileId: file.id,
+      symbolsByFile,
+    })
+    // Slice 1c-vi.a: Redux Toolkit substrate. Tags createSlice /
+    // configureStore / createSelector / createAsyncThunk / createApi
+    // factory results in files importing from a Redux module.
+    detectReduxFramework({
       sourceFile,
       fileId: file.id,
       symbolsByFile,
