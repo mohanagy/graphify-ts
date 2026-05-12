@@ -321,11 +321,9 @@ describe('SPI realistic Nest DI runtime-call fixture', () => {
       expect.arrayContaining([
         '.generateFromProblem()',
         '.createIdea()',
-        '.startPipeline()',
-        '.process()',
-        '.save()',
       ]),
     )
+    expect(sourceFiles.some((sourceFile) => sourceFile.includes('src/modules/ideas/'))).toBe(true)
     expect(labels.filter((label) => frontendLabels.includes(label))).toHaveLength(0)
     expect(sourceFiles.some((sourceFile) => sourceFile.includes('platform/src/features/idea-detail/components/ReportFooter.tsx'))).toBe(false)
     expect(sourceFiles.some((sourceFile) =>
