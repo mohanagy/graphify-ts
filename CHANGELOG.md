@@ -4,6 +4,12 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.22.7] - 2026-05-12
+
+### Changed
+
+- **Native-agent compare summaries keep the right direction**: human-readable `graphify-ts compare --baseline-mode native_agent` output now says `x more` / `x slower` when Graphify uses more turns, latency, or input tokens than baseline, instead of incorrectly rendering `0.33x fewer` / `0.33x faster`.
+
 ## [0.22.6] - 2026-05-12
 
 ### Changed

@@ -1597,6 +1597,23 @@ function computeReduction(baseline: number, graphify: number): number | null {
   return Number((baseline / graphify).toFixed(2))
 }
 
+function formatDirectionalDelta(
+  baseline: number,
+  graphify: number,
+  decreasedLabel: string,
+  increasedLabel: string,
+): string {
+  if (baseline <= 0 || graphify <= 0 || baseline === graphify) {
+    return ''
+  }
+
+  if (graphify < baseline) {
+    return ` (${Number((baseline / graphify).toFixed(2))}x ${decreasedLabel})`
+  }
+
+  return ` (${Number((graphify / baseline).toFixed(2))}x ${increasedLabel})`
+}
+
 function isNativeAgentRunFailure(run: NativeAgentRunStatus): boolean {
   return run.kind === 'runner_error'
 }
@@ -1884,12 +1901,11 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
       continue
     }
 
-    const reductions = report.reductions
     lines.push(
       `- "${report.question}"`,
-      `    num_turns: baseline ${baseline.num_turns} → graphify ${graphify.num_turns}${reductions?.num_turns ? ` (${reductions.num_turns}x fewer)` : ''}`,
-      `    latency:   baseline ${baseline.duration_ms}ms → graphify ${graphify.duration_ms}ms${reductions?.duration_ms ? ` (${reductions.duration_ms}x faster)` : ''}`,
-      `    input_tokens (Anthropic-reported): baseline ${baseline.total_input_tokens_anthropic_exact} → graphify ${graphify.total_input_tokens_anthropic_exact}${reductions?.input_tokens ? ` (${reductions.input_tokens}x less)` : ''}`,
+      `    num_turns: baseline ${baseline.num_turns} → graphify ${graphify.num_turns}${formatDirectionalDelta(baseline.num_turns, graphify.num_turns, 'fewer', 'more')}`,
+      `    latency:   baseline ${baseline.duration_ms}ms → graphify ${graphify.duration_ms}ms${formatDirectionalDelta(baseline.duration_ms, graphify.duration_ms, 'faster', 'slower')}`,
+      `    input_tokens (Anthropic-reported): baseline ${baseline.total_input_tokens_anthropic_exact} → graphify ${graphify.total_input_tokens_anthropic_exact}${formatDirectionalDelta(baseline.total_input_tokens_anthropic_exact, graphify.total_input_tokens_anthropic_exact, 'less', 'more')}`,
       `    provider/runtime proof: Anthropic reported input, cache, and total tokens for both runs`,
     )
   }

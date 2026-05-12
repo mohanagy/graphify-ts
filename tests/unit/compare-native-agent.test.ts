@@ -5,8 +5,10 @@ import { describe, expect, it } from 'vitest'
 
 import {
   executeNativeAgentCompare,
+  formatNativeAgentCompareSummary,
   parseAnthropicResultEvent,
   type CompareRunMode,
+  type NativeAgentCompareResult,
   type NativeAgentCompareReport,
   type NativeAgentRunner,
 } from '../../src/infrastructure/compare.js'
@@ -80,6 +82,89 @@ function scriptedRunner(payloads: { baseline: unknown; graphify: unknown }): Nat
     stderr: '',
     elapsedMs: input.mode === 'baseline' ? 96368 : 34744,
   })
+}
+
+function buildSummaryResult(overrides: {
+  question: string
+  baselineTurns: number
+  graphifyTurns: number
+  baselineDurationMs: number
+  graphifyDurationMs: number
+  baselineInputTokens: number
+  graphifyInputTokens: number
+  reductions: NonNullable<NativeAgentCompareReport['reductions']>
+}): NativeAgentCompareResult {
+  return {
+    graph_path: '/tmp/project/graphify-out/graph.json',
+    output_root: '/tmp/project/graphify-out/compare/2026-05-12T00-00-00Z',
+    reports: [
+      {
+        baseline_mode: 'native_agent',
+        question: overrides.question,
+        graph_path: '/tmp/project/graphify-out/graph.json',
+        exec_command: { command: null, redacted: true, placeholders: [] },
+        baseline: {
+          kind: 'succeeded',
+          model: 'claude-sonnet',
+          usage: {
+            input_tokens: overrides.baselineInputTokens,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            output_tokens: 100,
+          },
+          total_input_tokens_anthropic_exact: overrides.baselineInputTokens,
+          total_cost_usd: 1,
+          num_turns: overrides.baselineTurns,
+          duration_ms: overrides.baselineDurationMs,
+          result_path: '/tmp/project/baseline.txt',
+        },
+        graphify: {
+          kind: 'succeeded',
+          model: 'claude-sonnet',
+          usage: {
+            input_tokens: overrides.graphifyInputTokens,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            output_tokens: 100,
+          },
+          total_input_tokens_anthropic_exact: overrides.graphifyInputTokens,
+          total_cost_usd: 1,
+          num_turns: overrides.graphifyTurns,
+          duration_ms: overrides.graphifyDurationMs,
+          result_path: '/tmp/project/graphify.txt',
+        },
+        reductions: overrides.reductions,
+        prompt_token_source: {
+          baseline: 'anthropic_provider_reported',
+          graphify: 'anthropic_provider_reported',
+        },
+        provider_proof: {
+          baseline: {
+            provider: 'anthropic',
+            input_tokens_source: 'anthropic_provider_reported',
+            effective_tokens_source: 'anthropic_provider_reported',
+            total_tokens_source: 'anthropic_provider_reported',
+          },
+          graphify: {
+            provider: 'anthropic',
+            input_tokens_source: 'anthropic_provider_reported',
+            effective_tokens_source: 'anthropic_provider_reported',
+            total_tokens_source: 'anthropic_provider_reported',
+          },
+          reduction_basis: 'provider_reported',
+        },
+        started_at: '2026-05-12T00:00:00.000Z',
+        completed_at: '2026-05-12T00:00:01.000Z',
+        paths: {
+          output_dir: '/tmp/project/graphify-out/compare/2026-05-12T00-00-00Z',
+          report: '/tmp/project/graphify-out/compare/2026-05-12T00-00-00Z/report.json',
+          baseline_answer: '/tmp/project/graphify-out/compare/2026-05-12T00-00-00Z/baseline.md',
+          graphify_answer: '/tmp/project/graphify-out/compare/2026-05-12T00-00-00Z/graphify.md',
+          prompt_file: '/tmp/project/graphify-out/compare/2026-05-12T00-00-00Z/prompt.txt',
+        },
+      },
+    ],
+  }
 }
 
 describe('parseAnthropicResultEvent', () => {
@@ -359,5 +444,54 @@ describe('executeNativeAgentCompare', () => {
     } finally {
       rmSync(projectDir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('formatNativeAgentCompareSummary', () => {
+  it('describes wins as fewer, less, and faster', () => {
+    const summary = formatNativeAgentCompareSummary(buildSummaryResult({
+      question: 'win case',
+      baselineTurns: 9,
+      graphifyTurns: 3,
+      baselineDurationMs: 9000,
+      graphifyDurationMs: 3000,
+      baselineInputTokens: 900,
+      graphifyInputTokens: 300,
+      reductions: {
+        num_turns: 3,
+        duration_ms: 3,
+        input_tokens: 3,
+        cost_usd: 1,
+      },
+    }))
+
+    expect(summary).toContain('num_turns: baseline 9 → graphify 3 (3x fewer)')
+    expect(summary).toContain('latency:   baseline 9000ms → graphify 3000ms (3x faster)')
+    expect(summary).toContain('input_tokens (Anthropic-reported): baseline 900 → graphify 300 (3x less)')
+  })
+
+  it('describes regressions as more and slower instead of fewer and faster', () => {
+    const summary = formatNativeAgentCompareSummary(buildSummaryResult({
+      question: 'loss case',
+      baselineTurns: 3,
+      graphifyTurns: 9,
+      baselineDurationMs: 3000,
+      graphifyDurationMs: 9000,
+      baselineInputTokens: 300,
+      graphifyInputTokens: 900,
+      reductions: {
+        num_turns: 0.33,
+        duration_ms: 0.33,
+        input_tokens: 0.33,
+        cost_usd: 1,
+      },
+    }))
+
+    expect(summary).toContain('num_turns: baseline 3 → graphify 9 (3x more)')
+    expect(summary).toContain('latency:   baseline 3000ms → graphify 9000ms (3x slower)')
+    expect(summary).toContain('input_tokens (Anthropic-reported): baseline 300 → graphify 900 (3x more)')
+    expect(summary).not.toContain('0.33x fewer')
+    expect(summary).not.toContain('0.33x faster')
+    expect(summary).not.toContain('0.33x less')
   })
 })
