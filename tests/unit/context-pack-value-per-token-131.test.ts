@@ -254,7 +254,7 @@ describe('compileContextPack selection_strategy=value-per-token (#131)', () => {
   it('does not treat graph seed prompts as permission to include script seed files', () => {
     const pack = compileContextPack({
       task_contract: task({
-        budget: 80,
+        budget: 10,
         prompt: 'Explain how graph seed nodes affect retrieval ranking',
         required_evidence: [],
         preferred_evidence: ['supporting'],
@@ -273,11 +273,14 @@ describe('compileContextPack selection_strategy=value-per-token (#131)', () => {
       selection_strategy: 'value-per-token',
     })
 
+    expect(pack.nodes.map((node) => node.label)).toEqual(['GraphSeedNode'])
     const byLabel = new Map(pack.selection_diagnostics?.ranking.map((entry) => [entry.label, entry]) ?? [])
     expect(byLabel.get('seedOldReports')).toEqual(expect.objectContaining({
+      included: false,
       penalties: expect.arrayContaining(['script/migration penalty']),
     }))
     expect(byLabel.get('GraphSeedNode')).toEqual(expect.objectContaining({
+      included: true,
       penalties: expect.not.arrayContaining(['script/migration penalty']),
     }))
   })
