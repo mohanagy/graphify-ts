@@ -231,7 +231,7 @@ function broadRuntimeGenerationPrompt(options: SliceOptions): boolean {
 
 function promptAllowsScriptMigration(options: SliceOptions): boolean {
   const prompt = options.prompt ?? ''
-  return /\b(?:scripts?|migrat(?:e|ed|es|ing|ion)|backfill|seed|cli|one-off|repair|old pipeline)\b/i.test(prompt)
+  return /\b(?:scripts?|migrat(?:e|ed|es|ing|ion)|backfill|cli|one-off|repair|old pipeline|seed(?:ing|ers?)|seeds?\s+(?:data|db|database|scripts?|files?))\b/i.test(prompt)
 }
 
 function scriptMigrationLikeNode(node: SliceScoredNode): boolean {

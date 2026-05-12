@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common'
+import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common'
 
 import { PipelineTriggerService } from '../../../pipeline/api/pipeline-trigger.service'
 import { requireIdeasUserId, type AuthenticatedIdeasRequest } from './ideas-authenticated-request'
@@ -9,10 +9,10 @@ export class IdeaPipelineController {
 
   @Get('status')
   async getPipelineStatus(
-    @Body() dto: { ideaId: string },
+    @Query('ideaId') ideaId: string,
     @Req() req: AuthenticatedIdeasRequest,
   ): Promise<string> {
-    return `${requireIdeasUserId(req)}:${dto.ideaId}:status`
+    return `${requireIdeasUserId(req)}:${ideaId}:status`
   }
 
   @Post('retry')

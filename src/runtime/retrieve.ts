@@ -1058,7 +1058,7 @@ function runtimeGenerationSourceDomainPenalty(
 }
 
 function promptAllowsScriptMigration(question: string): boolean {
-  return /\b(?:scripts?|migrat(?:e|ed|es|ing|ion)|backfill|seed|cli|one-off|repair|old pipeline)\b/i.test(question)
+  return /\b(?:scripts?|migrat(?:e|ed|es|ing|ion)|backfill|cli|one-off|repair|old pipeline|seed(?:ing|ers?)|seeds?\s+(?:data|db|database|scripts?|files?))\b/i.test(question)
 }
 
 function scriptMigrationPathPenalty(

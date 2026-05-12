@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common'
+import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common'
 
 import { requireIdeasUserId, type AuthenticatedIdeasRequest } from './ideas-authenticated-request'
 
@@ -6,10 +6,10 @@ import { requireIdeasUserId, type AuthenticatedIdeasRequest } from './ideas-auth
 export class IdeaLifecycleController {
   @Get(':id')
   async getIdea(
-    @Body() dto: { ideaId: string },
+    @Param('id') ideaId: string,
     @Req() req: AuthenticatedIdeasRequest,
   ): Promise<string> {
-    return `${requireIdeasUserId(req)}:${dto.ideaId}`
+    return `${requireIdeasUserId(req)}:${ideaId}`
   }
 
   @Get()

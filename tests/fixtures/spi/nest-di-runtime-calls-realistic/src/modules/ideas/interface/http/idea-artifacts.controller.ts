@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Req } from '@nestjs/common'
+import { Controller, Get, Param, Query, Req } from '@nestjs/common'
 
 import { BuildPerspectiveService } from '../../infrastructure/services/build-perspective.service'
 import { requireIdeasUserId, type AuthenticatedIdeasRequest } from './ideas-authenticated-request'
@@ -9,42 +9,42 @@ export class IdeaArtifactsController {
 
   @Get('build-perspective')
   async generateBuildPerspective(
-    @Body() dto: { ideaId: string },
+    @Query('ideaId') ideaId: string,
     @Req() req: AuthenticatedIdeasRequest,
   ): Promise<string> {
     return this.buildPerspectiveService.generateBuildPerspective(
       requireIdeasUserId(req),
-      dto.ideaId,
+      ideaId,
     )
   }
 
   @Get('pdf')
   async exportIdeaToPdf(
-    @Body() dto: { ideaId: string },
+    @Query('ideaId') ideaId: string,
     @Req() req: AuthenticatedIdeasRequest,
   ): Promise<string> {
-    return `${requireIdeasUserId(req)}:${dto.ideaId}:pdf`
+    return `${requireIdeasUserId(req)}:${ideaId}:pdf`
   }
 
   @Get('lets-build')
   async generateLetsBuild(
-    @Body() dto: { ideaId: string },
+    @Query('ideaId') ideaId: string,
     @Req() req: AuthenticatedIdeasRequest,
   ): Promise<string> {
     return this.buildPerspectiveService.generateLetsBuild(
       requireIdeasUserId(req),
-      dto.ideaId,
+      ideaId,
     )
   }
 
   @Get('build-perspective/:id')
   async getBuildPerspective(
-    @Body() dto: { ideaId: string },
+    @Param('id') ideaId: string,
     @Req() req: AuthenticatedIdeasRequest,
   ): Promise<string> {
     return this.buildPerspectiveService.getBuildPerspective(
       requireIdeasUserId(req),
-      dto.ideaId,
+      ideaId,
     )
   }
 }
