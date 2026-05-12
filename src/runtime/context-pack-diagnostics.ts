@@ -468,27 +468,42 @@ function slicePathTargetsNotPromoted(
   )
   const includedLabels = new Set(pack.nodes.map((node) => node.label))
   const omitted = new Map<string, { id?: string; label: string }>()
+  const reachableIds = new Set(anchorIds)
+  const reachableLabels = new Set(anchorLabels)
+  let changed = true
 
-  for (const path of selectedPaths) {
-    if (path.direction !== 'forward' || path.relation !== 'calls') {
-      continue
+  while (changed) {
+    changed = false
+    for (const path of selectedPaths) {
+      if (path.direction !== 'forward' || path.relation !== 'calls') {
+        continue
+      }
+      const reachableFrom = typeof path.from_id === 'string' && path.from_id.length > 0
+        ? reachableIds.has(path.from_id)
+        : reachableLabels.has(path.from)
+      if (!reachableFrom || supportingPolicyOrLoggerLabel(path.to)) {
+        continue
+      }
+      const included = typeof path.to_id === 'string' && path.to_id.length > 0
+        ? includedIds.has(path.to_id)
+        : includedLabels.has(path.to)
+      if (!included) {
+        const key = typeof path.to_id === 'string' && path.to_id.length > 0 ? path.to_id : path.to
+        omitted.set(key, typeof path.to_id === 'string' && path.to_id.length > 0
+          ? { id: path.to_id, label: path.to }
+          : { label: path.to })
+      }
+
+      if (typeof path.to_id === 'string' && path.to_id.length > 0) {
+        if (!reachableIds.has(path.to_id)) {
+          reachableIds.add(path.to_id)
+          changed = true
+        }
+      } else if (!reachableLabels.has(path.to)) {
+        reachableLabels.add(path.to)
+        changed = true
+      }
     }
-    const directAnchorEdge = typeof path.from_id === 'string'
-      ? anchorIds.has(path.from_id)
-      : anchorLabels.has(path.from)
-    if (!directAnchorEdge || supportingPolicyOrLoggerLabel(path.to)) {
-      continue
-    }
-    const included = typeof path.to_id === 'string'
-      ? includedIds.has(path.to_id)
-      : includedLabels.has(path.to)
-    if (included) {
-      continue
-    }
-    const key = typeof path.to_id === 'string' && path.to_id.length > 0 ? path.to_id : path.to
-    omitted.set(key, typeof path.to_id === 'string' && path.to_id.length > 0
-      ? { id: path.to_id, label: path.to }
-      : { label: path.to })
   }
 
   return [...omitted.values()]
@@ -576,9 +591,19 @@ function runtimeSliceCallChainPresent(pack: CompiledContextPack): boolean {
     return false
   }
 
-  const nodesById = new Map(
-    pack.nodes.flatMap((node) => (typeof node.node_id === 'string' && node.node_id.length > 0 ? [[node.node_id, node] as const] : [])),
-  )
+  const nodesById = new Map<string, ContextPackNode>()
+  const nodesByLabel = new Map<string, ContextPackNode[]>()
+  for (const node of pack.nodes) {
+    if (typeof node.node_id === 'string' && node.node_id.length > 0) {
+      nodesById.set(node.node_id, node)
+    }
+    const labeled = nodesByLabel.get(node.label)
+    if (labeled) {
+      labeled.push(node)
+    } else {
+      nodesByLabel.set(node.label, [node])
+    }
+  }
   let forwardCallCount = 0
   let crossFileCount = 0
   let pipelineSemanticCount = 0
@@ -587,8 +612,16 @@ function runtimeSliceCallChainPresent(pack: CompiledContextPack): boolean {
     if (path.direction !== 'forward' || path.relation !== 'calls') {
       continue
     }
-    const fromNode = typeof path.from_id === 'string' ? nodesById.get(path.from_id) : undefined
-    const toNode = typeof path.to_id === 'string' ? nodesById.get(path.to_id) : undefined
+    const fromNode = (
+      typeof path.from_id === 'string' && path.from_id.length > 0
+        ? nodesById.get(path.from_id)
+        : undefined
+    ) ?? nodesByLabel.get(path.from)?.[0]
+    const toNode = (
+      typeof path.to_id === 'string' && path.to_id.length > 0
+        ? nodesById.get(path.to_id)
+        : undefined
+    ) ?? nodesByLabel.get(path.to)?.[0]
     if (!fromNode || !toNode) {
       continue
     }
