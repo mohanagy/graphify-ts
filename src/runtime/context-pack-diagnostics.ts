@@ -410,13 +410,15 @@ function outgoingCallTargets(
   }
 
   return pack.relationships
-    .filter((relationship) =>
-      relationship.relation === 'calls'
-      && (
-        (typeof node.node_id === 'string' && relationship.from_id === node.node_id)
-        || relationship.from === node.label
-      ),
-    )
+    .filter((relationship) => {
+      if (relationship.relation !== 'calls') {
+        return false
+      }
+      if (typeof node.node_id === 'string' && node.node_id.length > 0) {
+        return relationship.from_id === node.node_id
+      }
+      return relationship.from === node.label
+    })
     .map((relationship) => {
       if (typeof relationship.to_id === 'string' && relationship.to_id.length > 0) {
         return nodesById.get(relationship.to_id)

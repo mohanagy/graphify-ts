@@ -26,6 +26,10 @@ const FIXTURE_ROOT = pathResolve(
   '../fixtures/spi/nest-di-runtime-calls',
 )
 
+function normalizePathForAssertion(value: string): string {
+  return value.replaceAll('\\', '/')
+}
+
 function buildFixtureSpi(): SemanticProgramIndex {
   return buildSpi({
     root: FIXTURE_ROOT,
@@ -186,7 +190,7 @@ describe('SPI Nest DI runtime-call fixture', () => {
       (node) =>
         node.label === '.generateFromProblem()'
         && node.framework_role === 'nest_route'
-        && String(node.source_file).endsWith('/src/idea-generation.controller.ts'),
+        && normalizePathForAssertion(String(node.source_file)).endsWith('/src/idea-generation.controller.ts'),
     )
 
     const expectedTargets = [
@@ -246,9 +250,9 @@ describe('SPI Nest DI runtime-call fixture', () => {
     )
     expect(
       sourceFiles.some((sourceFile) =>
-        sourceFile.includes('/__tests__/')
-        || sourceFile.includes('/benchmark/')
-        || sourceFile.includes('/fixtures/'),
+        normalizePathForAssertion(sourceFile).includes('/__tests__/')
+        || normalizePathForAssertion(sourceFile).includes('/benchmark/')
+        || normalizePathForAssertion(sourceFile).includes('/fixtures/'),
       ),
     ).toBe(false)
     expect(diagnostics.warnings.map((warning) => warning.kind)).not.toEqual(
