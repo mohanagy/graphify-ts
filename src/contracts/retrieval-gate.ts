@@ -28,11 +28,23 @@ export type RetrievalExcludedDomain =
   | 'config'
   | 'build_artifact'
 
+export type RetrievalGenerationIntent =
+  | 'runtime_generation'
+  | 'display_rendering'
+  | 'unknown'
+
+export type RetrievalTargetDomainHint =
+  | 'backend_runtime'
+  | 'frontend_display'
+  | 'unknown'
+
 export interface RetrievalGateSignals {
   has_pr_diff: boolean
   has_stack_trace: boolean
   mentioned_paths: ReadonlyArray<string>
   mentioned_symbols: ReadonlyArray<string>
+  generation_intent?: RetrievalGenerationIntent
+  target_domain_hint?: RetrievalTargetDomainHint
   excluded_domains?: ReadonlyArray<RetrievalExcludedDomain>
   excluded_terms?: ReadonlyArray<string>
   excluded_path_hints?: ReadonlyArray<string>

@@ -24,16 +24,20 @@ import type {
   RetrievalGateDecision,
   RetrievalExcludedDomain,
   RetrievalGateSignals,
+  RetrievalGenerationIntent,
   RetrievalIntent,
   RetrievalLevel,
+  RetrievalTargetDomainHint,
 } from '../contracts/retrieval-gate.js'
 
 export type {
   RetrievalGateDecision,
   RetrievalExcludedDomain,
   RetrievalGateSignals,
+  RetrievalGenerationIntent,
   RetrievalIntent,
   RetrievalLevel,
+  RetrievalTargetDomainHint,
 } from '../contracts/retrieval-gate.js'
 
 export type RetrievalGateInput = {
@@ -95,12 +99,16 @@ export function classifyRetrievalLevel(input: RetrievalGateInput): RetrievalGate
   const hasStackTrace = input.hasStackTrace ?? STACK_TRACE_RE.test(prompt)
   const hasPrDiff = input.hasPrDiff === true
   const intent = input.intent ?? detectIntent(positivePrompt)
+  const generationIntent = detectGenerationIntent(positivePrompt)
+  const targetDomainHint = targetDomainHintForGenerationIntent(generationIntent)
 
   const signals: RetrievalGateSignals = {
     has_pr_diff: hasPrDiff,
     has_stack_trace: hasStackTrace,
     mentioned_paths: detectedPaths,
     mentioned_symbols: detectedSymbols,
+    generation_intent: generationIntent,
+    target_domain_hint: targetDomainHint,
     ...(exclusions.excludedDomains.length > 0 ? { excluded_domains: exclusions.excludedDomains } : {}),
     ...(exclusions.excludedTerms.length > 0 ? { excluded_terms: exclusions.excludedTerms } : {}),
     ...(exclusions.excludedPathHints.length > 0 ? { excluded_path_hints: exclusions.excludedPathHints } : {}),
@@ -188,6 +196,33 @@ function detectIntent(prompt: string): RetrievalIntent {
     if (re.test(prompt)) return intent
   }
   return 'unknown'
+}
+
+function detectGenerationIntent(prompt: string): RetrievalGenerationIntent {
+  const lower = prompt.toLowerCase()
+  const displayShaped = /\b(?:display(?:ed|ing)?|render(?:ed|ing)?|show(?:n|ing)?|visible|view|ui|frontend|front-end|component|screen|page|footer|header|label|date|timestamp)\b/i.test(lower)
+  const generationShaped = /\b(?:generat(?:e|ed|es|ing|ion)|creat(?:e|ed|es|ing|ion)|build(?:s|ing|er)?|assembl(?:e|ed|es|ing)|produc(?:e|ed|es|ing)|persist(?:ed|ing)?|sav(?:e|ed|es|ing)|pipeline|runtime|orchestrator|worker|job|repository|service)\b/i.test(lower)
+  const explanationShaped = /\b(?:explain|how|trace|walk|flow|path|lifecycle)\b/i.test(lower)
+
+  if (generationShaped && explanationShaped) {
+    return 'runtime_generation'
+  }
+  if (displayShaped) {
+    return 'display_rendering'
+  }
+  return 'unknown'
+}
+
+function targetDomainHintForGenerationIntent(intent: RetrievalGenerationIntent): RetrievalTargetDomainHint {
+  switch (intent) {
+    case 'runtime_generation':
+      return 'backend_runtime'
+    case 'display_rendering':
+      return 'frontend_display'
+    case 'unknown':
+    default:
+      return 'unknown'
+  }
 }
 
 function detectPaths(prompt: string): string[] {

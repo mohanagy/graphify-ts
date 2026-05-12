@@ -302,4 +302,49 @@ describe('SPI realistic Nest DI runtime-call fixture', () => {
       ),
     ).toBe(false)
   })
+
+  it('routes broad report-generation prompts to backend runtime nodes instead of frontend display helpers', () => {
+    const result = retrieveContext(buildFixtureGraph(), {
+      question: 'Explain how idea report is getting generated',
+      budget: 4000,
+      retrievalLevel: 4,
+      retrievalStrategy: 'slice-v1',
+    })
+
+    const labels = result.matched_nodes.map((node) => node.label)
+    const sourceFiles = result.matched_nodes.map((node) => normalizePathForAssertion(node.source_file))
+    const frontendLabels = ['ReportFooter', 'pickGeneratedAt', 'pickPipelineLabel']
+
+    expect(result.retrieval_gate?.signals.generation_intent).toBe('runtime_generation')
+    expect(result.retrieval_gate?.signals.target_domain_hint).toBe('backend_runtime')
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        '.generateFromProblem()',
+        '.createIdea()',
+        '.startPipeline()',
+        '.process()',
+        '.save()',
+      ]),
+    )
+    expect(labels.filter((label) => frontendLabels.includes(label))).toHaveLength(0)
+    expect(sourceFiles.some((sourceFile) => sourceFile.includes('platform/src/features/idea-detail/components/ReportFooter.tsx'))).toBe(false)
+    expect(result.slice?.anchors.some((anchor) => frontendLabels.includes(anchor.label))).toBe(false)
+  })
+
+  it('keeps frontend report-display prompts routed to display helpers', () => {
+    const result = retrieveContext(buildFixtureGraph(), {
+      question: 'Where is the generated date displayed in the report footer?',
+      budget: 4000,
+      retrievalLevel: 4,
+      retrievalStrategy: 'slice-v1',
+    })
+
+    const labels = result.matched_nodes.map((node) => node.label)
+    const sourceFiles = result.matched_nodes.map((node) => normalizePathForAssertion(node.source_file))
+
+    expect(result.retrieval_gate?.signals.generation_intent).toBe('display_rendering')
+    expect(result.retrieval_gate?.signals.target_domain_hint).toBe('frontend_display')
+    expect(labels).toEqual(expect.arrayContaining(['pickPipelineLabel()', 'ReportFooter()']))
+    expect(sourceFiles.some((sourceFile) => sourceFile.includes('platform/src/features/idea-detail/components/ReportFooter.tsx'))).toBe(true)
+  })
 })

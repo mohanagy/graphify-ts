@@ -4,7 +4,11 @@ import type {
   ContextPackSlicePath,
 } from '../../contracts/context-pack.js'
 import type { KnowledgeGraph } from '../../contracts/graph.js'
-import type { RetrievalIntent } from '../../contracts/retrieval-gate.js'
+import type {
+  RetrievalGenerationIntent,
+  RetrievalIntent,
+  RetrievalTargetDomainHint,
+} from '../../contracts/retrieval-gate.js'
 import { classifySourceDomain, isPollutedSourcePath } from '../../shared/source-discovery.js'
 import { relativizeSourceFile } from '../../shared/source-path.js'
 
@@ -22,6 +26,8 @@ export interface SliceScoredNode {
 
 interface SliceOptions {
   prompt?: string | undefined
+  generationIntent?: RetrievalGenerationIntent | undefined
+  targetDomainHint?: RetrievalTargetDomainHint | undefined
   mentionedSymbols?: readonly string[] | undefined
   excludedDomains?: readonly string[] | undefined
   excludedTerms?: readonly string[] | undefined
@@ -118,7 +124,7 @@ function promptWantsRuntimePipeline(prompt: string | undefined): boolean {
     return false
   }
 
-  return /\b(runtime|pipeline|service|orchestrator|job|agent|scoring|report builder|persistence|repository)\b/i.test(prompt)
+  return /\b(runtime|pipeline|service|orchestrator|job|agent|scoring|report(?: builder)?|persistence|repository|generat(?:e|ed|es|ing|ion)|create|created)\b/i.test(prompt)
 }
 
 function methodLikeNode(node: SliceScoredNode): boolean {
@@ -201,6 +207,42 @@ function isBarrelLike(label: string, sourceFile: string): boolean {
   return label.trim().toLowerCase() === 'index.ts' || /(?:^|\/)index\.ts$/i.test(sourceFile)
 }
 
+function frontendDisplayLikeNode(node: SliceScoredNode): boolean {
+  const lower = `${node.label} ${node.nodeKind ?? ''} ${node.frameworkRole ?? ''} ${node.sourceFile}`.toLowerCase()
+  return /\.(?:tsx|jsx)\b/.test(lower)
+    || /\b(?:platform|frontend|front-end|client|ui|components?|pages?|views?|display|render|footer|header|label|date|timestamp)\b/.test(lower)
+}
+
+function runtimeGenerationAnchorValue(node: SliceScoredNode): number {
+  const lower = `${node.label} ${node.nodeKind ?? ''} ${node.frameworkRole ?? ''} ${node.sourceFile}`.toLowerCase()
+  let value = 0
+
+  if (/\b(?:constructor|logger|log)\b|\.log\(/.test(lower)) {
+    return -10
+  }
+  if (methodLikeNode(node)) value += 1
+  if (/\b(?:nest_route|route|controller)\b/.test(lower)) value += 5
+  if (/\b(?:src|server|backend|api|modules)\b/.test(lower)) value += 1
+  if (/\b(?:generate|generation|create|start|pipeline|process|orchestrator|worker|job|repository|save|report|scoring|research|agent)\b/.test(lower)) value += 2
+  if (/(?:^|[.#])(?:generate|create|start|process|save|score|search|update|claim|cancel)[A-Za-z_$\w]*\(?\)?$/i.test(node.label)) value += 3
+  if (/\b(?:service|provider|repository|worker|orchestrator)\b/.test(lower)) value += 1
+  if (frontendDisplayLikeNode(node)) value -= 6
+
+  return value
+}
+
+function displayRenderingAnchorValue(node: SliceScoredNode): number {
+  const lower = `${node.label} ${node.nodeKind ?? ''} ${node.frameworkRole ?? ''} ${node.sourceFile}`.toLowerCase()
+  let value = 0
+
+  if (frontendDisplayLikeNode(node)) value += 3
+  if (methodLikeNode(node)) value += 1
+  if (/\b(?:generated|date|display|render|footer|label|component)\b/.test(lower)) value += 2
+  if ((node.nodeKind ?? '').toLowerCase() === 'interface') value -= 2
+
+  return value
+}
+
 function shouldSuppressNode(
   graph: KnowledgeGraph,
   node: SliceScoredNode,
@@ -231,14 +273,37 @@ function shouldSuppressNode(
   return graph.degree(node.id) >= 40
 }
 
-function buildAnchors(scored: readonly SliceScoredNode[]): ContextPackSliceAnchor[] {
+function buildAnchors(scored: readonly SliceScoredNode[], options: SliceOptions): ContextPackSliceAnchor[] {
   const anchors: ContextPackSliceAnchor[] = []
   const seen = new Set<string>()
   const matchedAnchors = scored.filter((node) => node.exactLabelMatch || node.sourcePathMatch)
   const exactMethodAnchors = matchedAnchors.filter((node) => node.exactLabelMatch && methodLikeNode(node))
   const nonBarrelMatchedAnchors = matchedAnchors.filter((node) => !isBarrelLike(node.label, node.sourceFile))
+  const intentAnchors = (() => {
+    if (options.generationIntent === 'runtime_generation' && options.targetDomainHint === 'backend_runtime') {
+      return matchedAnchors
+        .filter((node) => methodLikeNode(node) && !isBarrelLike(node.label, node.sourceFile) && !frontendDisplayLikeNode(node))
+        .map((node) => ({ node, value: runtimeGenerationAnchorValue(node) }))
+        .filter((entry) => entry.value > 0)
+        .sort((left, right) => right.value - left.value || right.node.score - left.node.score)
+        .map((entry) => entry.node)
+    }
+
+    if (options.generationIntent === 'display_rendering' && options.targetDomainHint === 'frontend_display') {
+      return matchedAnchors
+        .filter((node) => !isBarrelLike(node.label, node.sourceFile) && frontendDisplayLikeNode(node))
+        .map((node) => ({ node, value: displayRenderingAnchorValue(node) }))
+        .filter((entry) => entry.value > 0)
+        .sort((left, right) => right.value - left.value || right.node.score - left.node.score)
+        .map((entry) => entry.node)
+    }
+
+    return []
+  })()
   const anchorPool = exactMethodAnchors.length > 0
     ? exactMethodAnchors.slice(0, 1)
+    : intentAnchors.length > 0
+    ? intentAnchors.slice(0, 2)
     : matchedAnchors.length > 0
     ? (nonBarrelMatchedAnchors.length > 0 ? nonBarrelMatchedAnchors : matchedAnchors)
     : scored.filter((node) => !isBarrelLike(node.label, node.sourceFile)).slice(0, 1)
@@ -505,7 +570,7 @@ export function sliceCandidatesForRetrieve(
     return null
   }
 
-  const anchors = buildAnchors(scoredCandidates)
+  const anchors = buildAnchors(scoredCandidates, options)
   if (anchors.length === 0) {
     return null
   }

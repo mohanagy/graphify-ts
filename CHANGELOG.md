@@ -4,6 +4,12 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.22.5] - 2026-05-12
+
+### Changed
+
+- **Broad report-generation prompts now route to backend runtime paths**: retrieval-gate signals distinguish runtime generation from frontend display rendering, slice-v1 demotes frontend source-path-only anchors for backend-generation prompts, and realistic SPI regressions cover `ReportFooter` frontend noise without breaking report UI/display prompts.
+
 ## [0.22.4] - 2026-05-12
 
 ### Changed
