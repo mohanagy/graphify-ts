@@ -473,11 +473,15 @@ function slicePathTargetsNotPromoted(
     if (path.direction !== 'forward' || path.relation !== 'calls') {
       continue
     }
-    const directAnchorEdge = (typeof path.from_id === 'string' && anchorIds.has(path.from_id)) || anchorLabels.has(path.from)
+    const directAnchorEdge = typeof path.from_id === 'string'
+      ? anchorIds.has(path.from_id)
+      : anchorLabels.has(path.from)
     if (!directAnchorEdge || supportingPolicyOrLoggerLabel(path.to)) {
       continue
     }
-    const included = (typeof path.to_id === 'string' && includedIds.has(path.to_id)) || includedLabels.has(path.to)
+    const included = typeof path.to_id === 'string'
+      ? includedIds.has(path.to_id)
+      : includedLabels.has(path.to)
     if (included) {
       continue
     }

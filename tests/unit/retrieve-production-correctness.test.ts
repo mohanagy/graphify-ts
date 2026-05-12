@@ -200,12 +200,15 @@ describe('retrieveContext production retrieval regressions', () => {
       expect.objectContaining({ from: '.startPipeline()', to: '.addJob()', relation: 'calls', direction: 'forward' }),
     ]))
 
-    expect(result.slice?.selected_paths).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ from: '.createIdea()', to: '.generateFromProblem()', relation: 'calls' }),
-      expect.objectContaining({ from: '.exportIdeaToPdf()', to: 'requireIdeasUserId', relation: 'calls' }),
-      expect.objectContaining({ from: '.publishIdea()', to: 'requireIdeasUserId', relation: 'calls' }),
-      expect.objectContaining({ from: '.queueLetsBuild()', to: '.addJob()', relation: 'calls' }),
-      expect.objectContaining({ from: '.callLlm()', to: '.resolve()', relation: 'calls' }),
-    ]))
+    const forbiddenPaths = [
+      { from: '.createIdea()', to: '.generateFromProblem()', relation: 'calls' },
+      { from: '.exportIdeaToPdf()', to: 'requireIdeasUserId', relation: 'calls' },
+      { from: '.publishIdea()', to: 'requireIdeasUserId', relation: 'calls' },
+      { from: '.queueLetsBuild()', to: '.addJob()', relation: 'calls' },
+      { from: '.callLlm()', to: '.resolve()', relation: 'calls' },
+    ]
+    for (const path of forbiddenPaths) {
+      expect(result.slice?.selected_paths).not.toContainEqual(expect.objectContaining(path))
+    }
   })
 })
