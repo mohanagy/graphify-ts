@@ -178,6 +178,30 @@ describe('classifyRetrievalLevel — signal extraction', () => {
     const decision = classify({ prompt: 'Trace utils.parseDate through the runtime pipeline' })
     expect(decision.signals.mentioned_symbols).toContain('utils.parseDate')
   })
+
+  it('detects broad runtime-generation prompts without explicit symbols', () => {
+    const decision = classify({ prompt: 'Explain how idea report is getting generated' })
+    expect(decision.signals.generation_intent).toBe('runtime_generation')
+    expect(decision.signals.target_domain_hint).toBe('backend_runtime')
+  })
+
+  it('detects frontend display prompts separately from runtime generation prompts', () => {
+    const decision = classify({ prompt: 'Where is the generated date displayed in the report footer?' })
+    expect(decision.signals.generation_intent).toBe('display_rendering')
+    expect(decision.signals.target_domain_hint).toBe('frontend_display')
+  })
+
+  it('prefers runtime generation for explanatory prompts that also mention display terms', () => {
+    const decision = classify({ prompt: 'Explain how the idea report is generated and displayed in the footer' })
+    expect(decision.signals.generation_intent).toBe('runtime_generation')
+    expect(decision.signals.target_domain_hint).toBe('backend_runtime')
+  })
+
+  it('detects broad generation noun prompts without explanation verbs', () => {
+    const decision = classify({ prompt: 'idea report generation pipeline' })
+    expect(decision.signals.generation_intent).toBe('runtime_generation')
+    expect(decision.signals.target_domain_hint).toBe('backend_runtime')
+  })
 })
 
 describe('classifyRetrievalLevel — exclusions and negation', () => {

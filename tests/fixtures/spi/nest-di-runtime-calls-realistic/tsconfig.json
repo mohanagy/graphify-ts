@@ -11,6 +11,7 @@
   },
   "include": [
     "src/**/*.ts",
+    "platform/**/*.tsx",
     "benchmark/**/*.ts",
     "fixtures/**/*.ts"
   ]
