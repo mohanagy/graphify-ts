@@ -4,6 +4,21 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Interactive CLI update notices**: interactive `graphify-ts` runs now check npm for newer releases using a cached user-level registry lookup, print a short upgrade hint when a newer version exists, and stay silent for `--help`, `--version`, `--json`, CI, and explicitly disabled runs (`GRAPHIFY_DISABLE_UPDATE_NOTIFIER=1`).
+
+## [0.22.8] - 2026-05-13
+
+### Added
+
+- **CLI version flags for reproducible runs**: `graphify-ts --version` and `graphify-ts -v` now print the installed package version and exit cleanly without requiring graph generation.
+
+### Docs
+
+- **Conservative GoValidate report-generation benchmark note**: adds a dated benchmark artifact for one real `compare --baseline-mode native_agent` run on the prompt `"Explain how idea report is getting generated"`, including the exact Anthropic-reported token/turn/latency numbers used, the compact `pack` quality gate values, and explicit safe vs unsafe interpretations.
+- **Benchmark caveats are explicit**: the new benchmark note calls out that the result is one prompt/project, that native-agent runs are stochastic and tool-usage-sensitive, and that the measurement does not prove universal token reduction.
+
 ## [0.22.7] - 2026-05-12
 
 ### Changed

@@ -1,4 +1,4 @@
-import { mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { type CliDependencies, executeCli, formatHelp } from '../../src/cli/main.js'
@@ -39,6 +39,14 @@ function createIo() {
       },
     },
   }
+}
+
+function loadPackageVersion(): string {
+  const packageJson = JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as { version?: string }
+  if (typeof packageJson.version !== 'string' || packageJson.version.length === 0) {
+    throw new Error('package.json is missing version')
+  }
+  return packageJson.version
 }
 
 function createDependencies(): CliDependencies {
@@ -751,9 +759,74 @@ describe('cli main', () => {
     expect(logs[0]).toContain('Usage: graphify-ts <command>')
   })
 
+  it('prints the package version for --version and -v', async () => {
+    const expectedVersion = loadPackageVersion()
+    const longFlag = createIo()
+    const shortFlag = createIo()
+
+    await expect(executeCli(['--version'], longFlag.io, createDependencies())).resolves.toBe(0)
+    await expect(executeCli(['-v'], shortFlag.io, createDependencies())).resolves.toBe(0)
+
+    expect(longFlag.errors).toHaveLength(0)
+    expect(shortFlag.errors).toHaveLength(0)
+    expect(longFlag.logs).toEqual([expectedVersion])
+    expect(shortFlag.logs).toEqual([expectedVersion])
+  })
+
+  it('returns a controlled error when resolving the installed version fails', async () => {
+    const { io, logs, errors } = createIo()
+    const dependencies = createDependencies() as CliDependencies & { readInstalledVersion: () => string }
+
+    dependencies.readInstalledVersion = () => {
+      throw new Error('missing package metadata')
+    }
+
+    const exitCode = await executeCli(['--version'], io, dependencies)
+
+    expect(exitCode).toBe(1)
+    expect(logs).toEqual([])
+    expect(errors).toEqual(['error: missing package metadata'])
+  })
+
+  it('prints an available update notice before normal command output', async () => {
+    const { io, logs, errors } = createIo()
+    const dependencies = createDependencies() as CliDependencies & { notifyUpdate: () => Promise<string | null> }
+
+    dependencies.notifyUpdate = async () => 'A newer graphify-ts is available: 0.22.8 -> 0.22.9'
+
+    const exitCode = await executeCli(['query', 'how does auth work'], io, dependencies)
+
+    expect(exitCode).toBe(0)
+    expect(errors).toEqual([])
+    expect(logs[0]).toBe('A newer graphify-ts is available: 0.22.8 -> 0.22.9')
+    expect(logs[1]).toBe('how does auth work :: bfs :: 2000')
+  })
+
+  it('skips the update notifier for help, version, and --json output', async () => {
+    const help = createIo()
+    const version = createIo()
+    const json = createIo()
+    const dependencies = createDependencies() as CliDependencies & { notifyUpdate: () => Promise<string | null> }
+    let notifyCalls = 0
+
+    dependencies.notifyUpdate = async () => {
+      notifyCalls += 1
+      return 'A newer graphify-ts is available: 0.22.8 -> 0.22.9'
+    }
+
+    await expect(executeCli(['--help'], help.io, dependencies)).resolves.toBe(0)
+    await expect(executeCli(['--version'], version.io, dependencies)).resolves.toBe(0)
+    await expect(executeCli(['time-travel', 'HEAD~1', 'HEAD', '--json'], json.io, dependencies)).resolves.toBe(0)
+
+    expect(notifyCalls).toBe(0)
+    expect(help.logs[0]).toContain('Usage: graphify-ts <command>')
+    expect(version.logs).toEqual([loadPackageVersion()])
+  })
+
   it('formats help text with supported commands', () => {
     const help = formatHelp()
     expect(help).toContain('--help')
+    expect(help).toContain('--version')
     expect(help).toContain('generate [path]')
     expect(help).toContain('watch [path]')
     expect(help).toContain('serve [graph.json]')

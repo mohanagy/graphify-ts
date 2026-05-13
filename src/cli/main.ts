@@ -36,6 +36,8 @@ import { diffGraphs } from '../runtime/diff.js'
 import { serveGraphStdio } from '../runtime/stdio-server.js'
 import { getNeighbors, getNode, loadGraph, queryGraph, shortestPath } from '../runtime/serve.js'
 import { formatTimeTravelResult } from '../runtime/time-travel.js'
+import { findPackageRoot, readPackageVersion } from '../shared/package-metadata.js'
+import { getUpdateNotification } from '../shared/update-notifier.js'
 import {
   parseBenchmarkArgs,
   parseAddArgs,
@@ -140,6 +142,8 @@ export interface CliDependencies {
   claudeUninstall: typeof claudeUninstall
   agentsInstall: typeof agentsInstall
   agentsUninstall: typeof agentsUninstall
+  notifyUpdate?: () => Promise<string | null> | string | null
+  readInstalledVersion?: () => string
 }
 
 const COMPARE_WARNING_MESSAGE = 'compare will execute a baseline prompt and a graphify prompt for each question. This may consume paid model tokens.'
@@ -231,6 +235,11 @@ const DEFAULT_DEPENDENCIES: CliDependencies = {
   claudeUninstall,
   agentsInstall,
   agentsUninstall,
+  notifyUpdate: async () => await getUpdateNotification({
+    packageName: '@mohammednagy/graphify-ts',
+    currentVersion: readPackageVersion(findPackageRoot()),
+  }),
+  readInstalledVersion: () => readPackageVersion(findPackageRoot()),
 }
 
 function messageFromError(error: unknown): string {
@@ -275,7 +284,7 @@ export function formatHelp(binaryName = 'graphify-ts'): string {
   return [
     `Usage: ${binaryName} <command>`,
     '',
-    'Run with --help or -h to see this message.',
+    'Run with --help or -h to see this message, or --version / -v to print the installed version.',
     '',
     'Commands:',
     '  generate [path]       build graph artifacts for a folder (default .)',
@@ -524,6 +533,23 @@ export async function executeCli(argv: string[], io: CliIO = console, dependenci
   }
 
   try {
+    if (command === '-v' || command === '--version') {
+      const readInstalledVersion = dependencies.readInstalledVersion ?? (() => readPackageVersion(findPackageRoot()))
+      io.log(readInstalledVersion())
+      return 0
+    }
+
+    if (!args.includes('--json') && dependencies.notifyUpdate) {
+      try {
+        const updateNotice = await dependencies.notifyUpdate()
+        if (updateNotice) {
+          io.log(updateNotice)
+        }
+      } catch {
+        // Update checks are best-effort and must never block the CLI command itself.
+      }
+    }
+
     if (command === 'compare') {
       const options = parseCompareArgs(args)
       const confirm = async (message: string) => await dependencies.confirm(message)
