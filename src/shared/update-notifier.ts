@@ -207,13 +207,15 @@ export async function getUpdateNotification(options: UpdateNotificationOptions):
   const cached = loadCache(cacheFile)
 
   let latestVersion = cached?.latest_version ?? null
+  let checkedAt = cached?.checked_at ?? currentTime
   if (!cached || currentTime - cached.checked_at >= ttlMs) {
     const fetchText = options.fetchText ?? safeFetchText
     const latestUrl = `https://registry.npmjs.org/${encodeURIComponent(options.packageName)}/latest`
     const latest = JSON.parse(await fetchText(latestUrl, undefined, REGISTRY_TIMEOUT_MS)) as { version?: unknown }
     latestVersion = typeof latest.version === 'string' && latest.version.trim().length > 0 ? latest.version : null
+    checkedAt = currentTime
     saveCache(cacheFile, {
-      checked_at: currentTime,
+      checked_at: checkedAt,
       latest_version: latestVersion,
       ...(latestVersion && compareVersions(latestVersion, options.currentVersion) > 0 ? { notified_at: currentTime } : {}),
     })
@@ -228,7 +230,7 @@ export async function getUpdateNotification(options: UpdateNotificationOptions):
   }
 
   saveCache(cacheFile, {
-    checked_at: cached?.checked_at ?? currentTime,
+    checked_at: checkedAt,
     latest_version: latestVersion,
     notified_at: currentTime,
   })

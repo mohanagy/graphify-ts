@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -70,6 +70,39 @@ describe('update notifier', () => {
       expect(firstNotice).toContain('0.22.9')
       expect(secondNotice).toContain('0.22.9')
       expect(fetchCalls).toBe(1)
+    } finally {
+      rmSync(cacheRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves the refreshed checked_at timestamp when a stale cache is re-notified', async () => {
+    const cacheRoot = mkdtempSync(join(tmpdir(), 'graphify-update-notifier-'))
+    const cacheFile = join(cacheRoot, 'graphify-ts', 'update-check.json')
+
+    try {
+      mkdirSync(join(cacheRoot, 'graphify-ts'), { recursive: true })
+      writeFileSync(cacheFile, JSON.stringify({
+        checked_at: 1_700_000_000_000,
+        latest_version: '0.22.9',
+        notified_at: 1_700_000_000_000,
+      }))
+
+      const notice = await getUpdateNotification({
+        packageName: '@mohammednagy/graphify-ts',
+        currentVersion: '0.22.8',
+        cacheRoot,
+        stdoutIsTTY: true,
+        env: {},
+        now: () => 1_700_000_000_000 + 2 * 24 * 60 * 60 * 1000,
+        fetchText: async () => JSON.stringify({ version: '0.22.9' }),
+      })
+
+      expect(notice).toContain('0.22.9')
+      expect(JSON.parse(readFileSync(cacheFile, 'utf8'))).toEqual({
+        checked_at: 1_700_000_000_000 + 2 * 24 * 60 * 60 * 1000,
+        latest_version: '0.22.9',
+        notified_at: 1_700_000_000_000 + 2 * 24 * 60 * 60 * 1000,
+      })
     } finally {
       rmSync(cacheRoot, { recursive: true, force: true })
     }
