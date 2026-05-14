@@ -6,6 +6,7 @@ import { evaluateRetrievalQuality, formatQualityReport } from '../infrastructure
 import { runCompareCommand } from '../infrastructure/compare.js'
 import { runContextPackCommand } from '../infrastructure/context-pack-command.js'
 import { runContextPromptCommand } from '../infrastructure/context-prompt-command.js'
+import { runDoctorCommand, runStatusCommand } from '../infrastructure/doctor.js'
 import { runReviewCompareCommand } from '../infrastructure/review-compare.js'
 import { compareRefs } from '../infrastructure/time-travel.js'
 import { federate } from '../pipeline/federate.js'
@@ -43,6 +44,7 @@ import {
   parseAddArgs,
   type BenchmarkCliOptions,
   parseCompareArgs,
+  parseDoctorArgs,
   parsePackArgs,
   parseDiffArgs,
   parseExplainArgs,
@@ -120,6 +122,8 @@ export interface CliDependencies {
   runTimeTravel: (context: TimeTravelCommandContext) => Promise<string | void> | string | void
   runContextPack: (context: ContextPackCommandContext) => Promise<string | void> | string | void
   runContextPrompt: (context: ContextPromptCommandContext) => Promise<string | void> | string | void
+  runDoctor: (graphPath: string) => string
+  runStatus: (graphPath: string) => string
   confirm: (message: string) => Promise<boolean>
   printBenchmark: (result: BenchmarkResult) => void
   installHooks: typeof installHooks
@@ -199,6 +203,8 @@ const DEFAULT_DEPENDENCIES: CliDependencies = {
   runContextPrompt: async ({ options }) => {
     return await runContextPromptCommand(options)
   },
+  runDoctor: (graphPath) => runDoctorCommand({ graphPath }),
+  runStatus: (graphPath) => runStatusCommand({ graphPath }),
   confirm: async (message) => {
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
       throw new UsageError('error: compare requires --yes in non-interactive mode.')
@@ -379,6 +385,10 @@ export function formatHelp(binaryName = 'graphify-ts'): string {
     '    --json               emit machine-readable JSON',
     '    --refresh            rebuild snapshots instead of using cache',
     '    --limit N            cap view items (default 10)',
+    '  doctor [graph.json]   check graph freshness, agent config, and MCP wiring',
+    '    --graph <path>      path to graph.json to validate (default graphify-out/graph.json)',
+    '  status [graph.json]   compact readiness summary with next commands',
+    '    --graph <path>      path to graph.json to validate (default graphify-out/graph.json)',
     '  install [--platform P] install the platform skill or local graphify config',
     '    platforms            claude|windows|gemini|cursor|codex|opencode|aider|claw|droid|trae|trae-cn|copilot',
     '  hook <action>          manage git hooks for graphify rebuild reminders',
@@ -601,6 +611,18 @@ export async function executeCli(argv: string[], io: CliIO = console, dependenci
       if (output !== undefined) {
         io.log(output)
       }
+      return 0
+    }
+
+    if (command === 'doctor') {
+      const options = parseDoctorArgs(args, 'doctor')
+      io.log(dependencies.runDoctor(options.graphPath))
+      return 0
+    }
+
+    if (command === 'status') {
+      const options = parseDoctorArgs(args, 'status')
+      io.log(dependencies.runStatus(options.graphPath))
       return 0
     }
 

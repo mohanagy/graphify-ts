@@ -17,6 +17,7 @@ All notable changes to the TypeScript package will be documented in this file.
 - **Release checklist page**: adds `docs/release.md` with a repeatable maintainer checklist covering version bumps, changelog updates, verification commands, package dry-runs, CLI smoke checks, and post-release verification.
 - **Public roadmap page**: adds `docs/roadmap.md` with contributor-facing P0/P1/P2 tracks, issue links, label explanations, and a README pointer back to the main roadmap tracker.
 - **End-to-end getting started tutorial**: adds `docs/tutorials/getting-started.md` with a local-first sample-workspace walkthrough covering install, graph generation, `pack`, `prompt`, and a safe `compare` smoke check without requiring paid model usage.
+- **Doctor and status health checks**: added `graphify-ts doctor` and `graphify-ts status` commands to report installed version, graph freshness, local agent wiring (Claude/Cursor/Gemini/Copilot), MCP config validity, and actionable next commands when setup is missing or stale.
 
 ### Changed
 

@@ -31,6 +31,8 @@ npm install -g @mohammednagy/graphify-ts
 cd your-project
 graphify-ts generate .          # builds graphify-out/graph.json (no API key, no cloud)
 graphify-ts claude install      # wires Claude Code to use it via MCP
+graphify-ts doctor              # checks graph freshness + agent/MCP wiring
+graphify-ts status              # compact readiness summary + next commands
 
 # Or use the opt-in SPI pipeline for framework-aware metadata + disk cache:
 graphify-ts generate . --spi

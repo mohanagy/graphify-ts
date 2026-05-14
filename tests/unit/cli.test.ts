@@ -6,6 +6,7 @@ import {
   parseAddArgs,
   parseBenchmarkArgs,
   parseCompareArgs,
+  parseDoctorArgs,
   parsePackArgs,
   parseDiffArgs,
   parseExplainArgs,
@@ -115,6 +116,8 @@ function createDependencies(): CliDependencies {
     runTimeTravel: async () => 'time-travel command is not implemented yet',
     runContextPack: async () => 'context pack command is not implemented yet',
     runContextPrompt: async () => 'context prompt command is not implemented yet',
+    runDoctor: (graphPath) => `doctor check for ${graphPath}`,
+    runStatus: (graphPath) => `status check for ${graphPath}`,
     confirm: async () => true,
     printBenchmark: () => {},
     installHooks: () => 'hooks installed',
@@ -718,6 +721,15 @@ describe('cli parser', () => {
     expect(() => parseServeArgs(['--transport', 'socket'])).toThrow('error: --transport must be one of http, stdio')
   })
 
+  it('parses doctor and status args', () => {
+    expect(parseDoctorArgs([])).toEqual({ graphPath: 'graphify-out/graph.json' })
+    expect(parseDoctorArgs(['graphify-out/custom.json'])).toEqual({ graphPath: 'graphify-out/custom.json' })
+    expect(parseDoctorArgs(['--graph', 'graphify-out/runtime.json'])).toEqual({ graphPath: 'graphify-out/runtime.json' })
+    expect(parseDoctorArgs(['--graph=graphify-out/runtime.json'], 'status')).toEqual({ graphPath: 'graphify-out/runtime.json' })
+    expect(() => parseDoctorArgs(['--wat'])).toThrow('error: unknown option for doctor: --wat')
+    expect(() => parseDoctorArgs(['--wat'], 'status')).toThrow('error: unknown option for status: --wat')
+  })
+
   it('parses hook args', () => {
     expect(parseHookArgs(['install'])).toEqual({ action: 'install' })
     expect(parseHookArgs(['uninstall'])).toEqual({ action: 'uninstall' })
@@ -873,6 +885,9 @@ describe('cli main', () => {
     expect(help).toContain('    --json               emit machine-readable JSON')
     expect(help).toContain('    --refresh            rebuild snapshots instead of using cache')
     expect(help).toContain('    --limit N            cap view items (default 10)')
+    expect(help).toContain('doctor [graph.json]')
+    expect(help).toContain('status [graph.json]')
+    expect(help).toContain('check graph freshness, agent config, and MCP wiring')
     expect(help).toContain('question coverage')
     expect(help).toContain('hook <action>')
     expect(help).toContain('install [--platform P]')
@@ -1181,6 +1196,28 @@ describe('cli main', () => {
     })
     expect(logs).toEqual(['time-travel result'])
     expect(errors).toEqual([])
+  })
+
+  it('routes doctor and status through injected dependencies', async () => {
+    const doctor = createIo()
+    const status = createIo()
+    const runDoctor = vi.fn<NonNullable<CliDependencies['runDoctor']>>().mockReturnValue('doctor summary')
+    const runStatus = vi.fn<NonNullable<CliDependencies['runStatus']>>().mockReturnValue('status summary')
+    const dependencies: CliDependencies = {
+      ...createDependencies(),
+      runDoctor,
+      runStatus,
+    }
+
+    await expect(executeCli(['doctor', '--graph', 'graphify-out/custom.json'], doctor.io, dependencies)).resolves.toBe(0)
+    await expect(executeCli(['status'], status.io, dependencies)).resolves.toBe(0)
+
+    expect(runDoctor).toHaveBeenCalledWith('graphify-out/custom.json')
+    expect(runStatus).toHaveBeenCalledWith('graphify-out/graph.json')
+    expect(doctor.logs).toEqual(['doctor summary'])
+    expect(status.logs).toEqual(['status summary'])
+    expect(doctor.errors).toEqual([])
+    expect(status.errors).toEqual([])
   })
 
   it('routes pack through the injected dependency after parsing args', async () => {

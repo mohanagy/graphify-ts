@@ -155,6 +155,10 @@ export interface ServeCliOptions {
   transport: 'http' | 'stdio'
 }
 
+export interface DoctorCliOptions {
+  graphPath: string
+}
+
 export interface HookCliOptions {
   action: 'install' | 'uninstall' | 'status'
 }
@@ -1519,6 +1523,42 @@ export function parseServeArgs(args: string[]): ServeCliOptions {
   }
 
   return { graphPath, host, port, transport }
+}
+
+export function parseDoctorArgs(args: string[], commandName: 'doctor' | 'status' = 'doctor'): DoctorCliOptions {
+  const usage = `Usage: graphify-ts ${commandName} [graph.json] [--graph path]`
+  let graphPath = 'graphify-out/graph.json'
+
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]
+    if (!argument) {
+      continue
+    }
+
+    if (!argument.startsWith('--')) {
+      if (graphPath !== 'graphify-out/graph.json') {
+        throw new UsageError(usage)
+      }
+      graphPath = argument
+      continue
+    }
+
+    if (argument === '--graph') {
+      graphPath = requireOptionValue('--graph', args[index + 1])
+      index += 1
+      continue
+    }
+
+    if (argument.startsWith('--graph=')) {
+      const [, value] = argument.split('=', 2)
+      graphPath = requireOptionValue('--graph', value)
+      continue
+    }
+
+    throw new UsageError(`error: unknown option for ${commandName}: ${argument}`)
+  }
+
+  return { graphPath }
 }
 
 export function parseHookArgs(args: string[]): HookCliOptions {
