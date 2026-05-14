@@ -15,7 +15,7 @@
 
 - [ ] I updated docs for any user-visible change
 - [ ] I added or updated tests when behavior changed
-- [ ] I did not commit secrets, private corpora, or accidental generated artifacts
+- [ ] This PR does not include private corpora, secrets, credentials, proprietary prompts, sensitive raw logs, or accidental generated artifacts
 - [ ] I kept this PR focused on a single change or tightly related set of changes
 
 ## Related issues
