@@ -597,6 +597,54 @@ describe('install helpers', () => {
     })
   })
 
+  it('updates existing Codex graphify hooks during reinstall', () => {
+    withTempDir((projectDir) => {
+      const stalePayload = JSON.stringify({
+        systemMessage: 'Legacy graphify-out retrieve-first guidance',
+      })
+      const stalePayloadB64 = Buffer.from(stalePayload).toString('base64')
+
+      mkdirSync(join(projectDir, '.codex'), { recursive: true })
+      writeFileSync(
+        join(projectDir, '.codex', 'hooks.json'),
+        JSON.stringify(
+          {
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: 'Bash',
+                  hooks: [
+                    {
+                      type: 'command',
+                      command: `node -e "require('fs').accessSync('graphify-out/graph.json');process.stdout.write(Buffer.from('${stalePayloadB64}','base64').toString())"`,
+                    },
+                  ],
+                },
+                {
+                  matcher: 'Read',
+                  hooks: [{ type: 'command', command: 'echo keep-me' }],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        ),
+        'utf8',
+      )
+
+      const installMessage = agentsInstall(projectDir, 'codex')
+      const codexHooks = readFileSync(join(projectDir, '.codex', 'hooks.json'), 'utf8')
+      const decodedHookPayload = decodeHookPayloads(codexHooks)
+
+      expect(installMessage).toContain('.codex/hooks.json -> hook updated')
+      expect(codexHooks).toContain('keep-me')
+      expect(decodedHookPayload).toContain('context-pack-first')
+      expect(decodedHookPayload).toContain('graphify-ts pack')
+      expect(decodedHookPayload).not.toContain('Legacy graphify-out retrieve-first guidance')
+    })
+  })
+
   it('preserves unrelated OpenCode config while updating graphify MCP', () => {
     withTempDir((projectDir) => {
       writeFileSync(

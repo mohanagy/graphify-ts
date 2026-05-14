@@ -1363,11 +1363,14 @@ function installCodexHook(projectDir: string): string {
   const hooks = ensureRecord(hooksConfig, 'hooks')
   const preToolUse = ensureArray(hooks, 'PreToolUse')
 
-  if (preToolUse.some((hook) => JSON.stringify(hook).includes('graphify-out'))) {
-    return '.codex/hooks.json -> hook already registered (no change)'
+  const additions = CODEX_HOOK.hooks.PreToolUse as unknown[]
+  const filtered = preToolUse.filter((hook) => !JSON.stringify(hook).includes('graphify-out'))
+  if (filtered.length !== preToolUse.length) {
+    hooks.PreToolUse = [...filtered, ...additions]
+    writeJson(hooksPath, hooksConfig)
+    return '.codex/hooks.json -> hook updated'
   }
 
-  const additions = CODEX_HOOK.hooks.PreToolUse as unknown[]
   preToolUse.push(...additions)
   writeJson(hooksPath, hooksConfig)
   return '.codex/hooks.json -> PreToolUse hook registered'
