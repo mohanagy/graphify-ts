@@ -2,7 +2,7 @@ import { isAbsolute, resolve } from 'node:path'
 
 import type { ContextPackRetrievalStrategy, ContextPackTaskKind } from '../contracts/context-pack.js'
 import { validateGraphOutputPath, validateGraphPath } from '../shared/security.js'
-import { type InstallPlatform, isInstallPlatform, type McpToolProfile, isMcpToolProfile } from '../infrastructure/install.js'
+import { type InstallPlatform, isInstallPlatform, type InstallProfile, isInstallProfile } from '../infrastructure/install.js'
 
 export class UsageError extends Error {
   constructor(message: string) {
@@ -165,10 +165,10 @@ export interface InstallCliOptions {
 
 export interface PlatformActionCliOptions {
   action: 'install' | 'uninstall'
-  profile?: McpToolProfile
+  profile?: InstallProfile
 }
 
-const PROFILE_AWARE_PLATFORM_COMMANDS = new Set(['claude', 'cursor', 'copilot'])
+const PROFILE_AWARE_PLATFORM_COMMANDS = new Set(['claude', 'cursor', 'copilot', 'gemini'])
 
 const MAX_CLI_SOURCE_NODES = 50
 const MAX_CLI_LABEL_LENGTH = 512
@@ -1572,7 +1572,7 @@ export function parsePlatformActionArgs(command: string, args: string[]): Platfo
   const action = args[0]
   const profileAware = PROFILE_AWARE_PLATFORM_COMMANDS.has(command)
   const usage = profileAware
-    ? `Usage: graphify-ts ${command} <install|uninstall> [--profile core|full]`
+    ? `Usage: graphify-ts ${command} <install|uninstall> [--profile core|full|strict]`
     : `Usage: graphify-ts ${command} <install|uninstall>`
   if (action !== 'install' && action !== 'uninstall') {
     throw new UsageError(usage)
@@ -1585,7 +1585,7 @@ export function parsePlatformActionArgs(command: string, args: string[]): Platfo
     throw new UsageError(usage)
   }
 
-  let profile: McpToolProfile | undefined
+  let profile: InstallProfile | undefined
   for (let index = 1; index < args.length; index += 1) {
     const argument = args[index]
     if (!argument) {
@@ -1597,8 +1597,8 @@ export function parsePlatformActionArgs(command: string, args: string[]): Platfo
 
     if (argument === '--profile') {
       const value = requireNonEmptyValue('--profile', args[index + 1])
-      if (!isMcpToolProfile(value)) {
-        throw new UsageError('error: --profile must be one of core, full')
+      if (!isInstallProfile(value)) {
+        throw new UsageError('error: --profile must be one of core, full, strict')
       }
       profile = value
       index += 1
@@ -1608,8 +1608,8 @@ export function parsePlatformActionArgs(command: string, args: string[]): Platfo
     if (argument.startsWith('--profile=')) {
       const [, value] = argument.split('=', 2)
       const normalizedValue = requireNonEmptyValue('--profile', value)
-      if (!isMcpToolProfile(normalizedValue)) {
-        throw new UsageError('error: --profile must be one of core, full')
+      if (!isInstallProfile(normalizedValue)) {
+        throw new UsageError('error: --profile must be one of core, full, strict')
       }
       profile = normalizedValue
       continue

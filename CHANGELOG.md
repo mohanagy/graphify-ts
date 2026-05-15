@@ -19,6 +19,7 @@ All notable changes to the TypeScript package will be documented in this file.
 ### Changed
 
 - **MCP context-pack duplicate suppression**: identical `context_pack` explain calls within one MCP stdio session now reuse the prior payload when graph version and relevant options match, expose cache hit/miss metadata, and automatically miss again after `graph.json` changes.
+- **Strict MCP install profile**: `claude`, `cursor`, `copilot`, and `gemini` installs now accept `--profile strict`, keep the lean core MCP tool surface, and rewrite generated guidance toward one `context_pack` first with diagnostics-driven expansion instead of broad exploration.
 
 ## [0.22.8] - 2026-05-13
 

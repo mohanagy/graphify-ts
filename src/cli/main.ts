@@ -386,10 +386,10 @@ export function formatHelp(binaryName = 'graphify-ts'): string {
     '    uninstall            remove graphify hook sections',
     '    status               show whether graphify hooks are installed',
     '  aider <install|uninstall>   manage local AGENTS.md rules',
-    '  claude <install|uninstall> [--profile core|full]  manage local CLAUDE.md graphify rules',
-    '  cursor <install|uninstall> [--profile core|full]  manage local Cursor graphify rules',
-    '  gemini <install|uninstall>  manage local GEMINI.md rules and Gemini CLI hook config',
-    '  copilot <install|uninstall> [--profile core|full] install or remove the GitHub Copilot skill',
+    '  claude <install|uninstall> [--profile core|full|strict]  manage local CLAUDE.md graphify rules',
+    '  cursor <install|uninstall> [--profile core|full|strict]  manage local Cursor graphify rules',
+    '  gemini <install|uninstall> [--profile core|full|strict]  manage local GEMINI.md rules and Gemini CLI hook config',
+    '  copilot <install|uninstall> [--profile core|full|strict] install or remove the GitHub Copilot skill',
     '  codex <install|uninstall>   manage local AGENTS.md + Codex hook rules',
     '  opencode <install|uninstall> manage local AGENTS.md + OpenCode plugin/MCP rules',
     '  claw <install|uninstall>    manage local AGENTS.md rules',
@@ -876,7 +876,7 @@ export async function executeCli(argv: string[], io: CliIO = console, dependenci
       if (options.action === 'install' && !existsSync('graphify-out/graph.json')) {
         io.log("Warning: graphify-out/graph.json not found. Run 'graphify-ts generate .' first, then re-run this command.")
       }
-      io.log(options.action === 'install' ? dependencies.geminiInstall('.') : dependencies.geminiUninstall('.'))
+      io.log(options.action === 'install' ? dependencies.geminiInstall('.', options.profile ? { profile: options.profile } : {}) : dependencies.geminiUninstall('.'))
       return 0
     }
 

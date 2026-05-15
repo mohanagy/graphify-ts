@@ -19,6 +19,8 @@ export type AgentPlatform = (typeof AGENT_PLATFORMS)[number]
 export const MCP_TOOL_PROFILES = ['core', 'full'] as const
 
 export type McpToolProfile = (typeof MCP_TOOL_PROFILES)[number]
+export const INSTALL_PROFILES = [...MCP_TOOL_PROFILES, 'strict'] as const
+export type InstallProfile = (typeof INSTALL_PROFILES)[number]
 
 interface InstallPlatformConfig {
   skillFile: string
@@ -33,8 +35,10 @@ interface InstallSkillOptions {
 }
 
 interface McpInstallOptions {
-  profile?: McpToolProfile
+  profile?: InstallProfile
 }
+
+type GeminiInstallOptions = InstallSkillOptions & McpInstallOptions
 
 const SKILL_SLUG = 'graphify-ts'
 const SKILL_COMMAND = '/graphify-ts'
@@ -158,6 +162,9 @@ const MCP_ROUTING_GUIDANCE =
 const RETRIEVE_FIRST_MESSAGE =
   `STOP. This project has a graphify-ts knowledge graph. ${MCP_ROUTING_GUIDANCE} Graphify answers most codebase questions in 1 focused MCP call instead of 5–10 sequential file reads (3x fewer turns, ~2.8x faster on a real production codebase). Do not use Glob, Grep, Bash, Read, or Agent tools first. Only fall back to raw file tools if the graph tools cannot answer the question or the MCP server is unavailable.`
 
+const STRICT_CONTEXT_PACK_MESSAGE =
+  'STOP. This project has a graphify-ts knowledge graph. Use strict compact MCP mode: call context_pack once for the task before broader exploration, answer from the pack when coverage is complete, only expand with context_expand or focused graph tools when diagnostics show missing evidence, and avoid raw file search unless the pack is insufficient.'
+
 const CODEX_CONTEXT_PACK_FIRST_MESSAGE =
   `STOP. This project has a graphify-ts knowledge graph. Follow the Codex context-pack-first workflow: run graphify-ts pack "<task or question>" --task explain before broad Bash search, raw file reads, or spawning workers. Use --task review, --task debug, or --task impact when that better matches the work. If MCP graph tools are available, use retrieve, relevant_files, feature_map, risk_map, implementation_checklist, or impact to refine the pack. Only fall back to raw file tools when the context pack or graph tools are missing, stale, or insufficient; read graphify-out/GRAPH_REPORT.md before expanding manually.`
 
@@ -240,6 +247,16 @@ IMPORTANT: This project has a graphify-ts knowledge graph. You MUST follow these
 2. **Do NOT use Glob, Grep, Bash, Read, or dispatch Agent/Explore subagents first** for codebase questions.
 3. **Only fall back to raw file tools** if the graph tools cannot answer the question or the MCP server is unavailable. In that case, read graphify-out/GRAPH_REPORT.md first.
 4. **Do NOT dispatch Explore or research agents** for codebase questions — the knowledge graph already has the structural context they would spend tokens discovering.
+`
+
+const STRICT_CLAUDE_MD_SECTION = `${SECTION_MARKER}
+
+IMPORTANT: This project has a graphify-ts knowledge graph. You MUST follow these strict compact MCP rules:
+
+1. **Call \`context_pack\` once for the task before broader exploration.**
+2. **Answer from the pack when coverage is complete.**
+3. **Only expand with graph/search tools when diagnostics show missing evidence.** Use \`context_expand\` first, then focused graph tools such as \`retrieve\`, \`relevant_files\`, \`feature_map\`, \`risk_map\`, \`implementation_checklist\`, or \`impact\` only when the pack is insufficient.
+4. **Avoid raw file search unless the pack is insufficient.** If manual expansion is still required, read \`graphify-out/GRAPH_REPORT.md\` first.
 `
 
 const AGENTS_MD_SECTION = `${SECTION_MARKER}
@@ -359,6 +376,16 @@ IMPORTANT: This project has a graphify-ts knowledge graph. You MUST follow these
 3. **Only fall back to raw file tools** if the graph tools cannot answer the question or the MCP server is unavailable. In that case, read graphify-out/GRAPH_REPORT.md first.
 `
 
+const STRICT_GEMINI_MD_SECTION = `${SECTION_MARKER}
+
+IMPORTANT: This project has a graphify-ts knowledge graph. Use strict compact MCP guidance:
+
+1. **Call \`context_pack\` once for the task before broader exploration.**
+2. **Answer from the pack when coverage is complete.**
+3. **Only expand with graph/search tools when diagnostics show missing evidence.** Use \`context_expand\` first, then focused graph tools such as \`retrieve\`, \`relevant_files\`, \`feature_map\`, \`risk_map\`, \`implementation_checklist\`, or \`impact\` only when the pack is insufficient.
+4. **Avoid raw file search unless the pack is insufficient.** If manual expansion is still required, read \`graphify-out/GRAPH_REPORT.md\` first.
+`
+
 const SKILL_REGISTRATION_MARKER = '- **graphify-ts**'
 const LOCAL_SKILL_ASSET_DIRECTORY = join('assets', 'skills')
 const CLI_BIN_NAME = 'graphify-ts'
@@ -408,6 +435,68 @@ IMPORTANT: This project has a graphify-ts knowledge graph.
 2. **Do NOT search the codebase with other tools first** for codebase questions.
 3. **Only fall back to raw file tools** if the graph tools cannot answer the question or the MCP server is unavailable. In that case, read graphify-out/GRAPH_REPORT.md first.
 `
+
+const STRICT_CURSOR_RULE = `---
+description: graphify-ts strict compact MCP mode — use one context pack before broader exploration
+alwaysApply: true
+---
+
+IMPORTANT: This project has a graphify-ts knowledge graph. Use strict compact MCP guidance:
+
+1. **Call \`context_pack\` once for the task before broader exploration.**
+2. **Answer from the pack when coverage is complete.**
+3. **Only expand with graph/search tools when diagnostics show missing evidence.** Use \`context_expand\` first, then focused graph tools such as \`retrieve\`, \`relevant_files\`, \`feature_map\`, \`risk_map\`, \`implementation_checklist\`, or \`impact\` only when the pack is insufficient.
+4. **Avoid raw file search unless the pack is insufficient.** If manual expansion is still required, read \`graphify-out/GRAPH_REPORT.md\` first.
+`
+
+function claudeMdSection(profile?: InstallProfile): string {
+  return profile === 'strict' ? STRICT_CLAUDE_MD_SECTION : CLAUDE_MD_SECTION
+}
+
+function geminiMdSection(profile?: InstallProfile): string {
+  return profile === 'strict' ? STRICT_GEMINI_MD_SECTION : GEMINI_MD_SECTION
+}
+
+function cursorRule(profile?: InstallProfile): string {
+  return profile === 'strict' ? STRICT_CURSOR_RULE : CURSOR_RULE
+}
+
+function settingsHook(profile?: InstallProfile): Record<string, unknown> {
+  return {
+    matcher: 'Glob|Grep|Bash|Agent|Read',
+    hooks: [
+      {
+        type: 'command',
+        command: hookCommand(
+          JSON.stringify({
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse',
+              additionalContext: profile === 'strict' ? STRICT_CONTEXT_PACK_MESSAGE : RETRIEVE_FIRST_MESSAGE,
+            },
+          }),
+        ),
+      },
+    ],
+  }
+}
+
+function geminiHook(profile?: InstallProfile): Record<string, unknown> {
+  return {
+    matcher: 'read_file|list_directory|search_for_pattern',
+    hooks: [
+      {
+        type: 'command',
+        command: hookCommandWithFallback(
+          JSON.stringify({
+            decision: 'allow',
+            additionalContext: profile === 'strict' ? STRICT_CONTEXT_PACK_MESSAGE : RETRIEVE_FIRST_MESSAGE,
+          }),
+          JSON.stringify({ decision: 'allow' }),
+        ),
+      },
+    ],
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -1337,8 +1426,9 @@ function installMcpServer(
   // defaults first, then the existing entry on top so user values win.
   const existingServer = existed ? (mcpServers[SKILL_SLUG] as Record<string, unknown>) : null
   const existingEnv = existingServer && isRecord(existingServer.env) ? (existingServer.env as Record<string, string>) : {}
+  const envProfile: McpToolProfile = options.profile === 'full' ? 'full' : 'core'
   const env: Record<string, string> = options.profile
-    ? { ...existingEnv, GRAPHIFY_TOOL_PROFILE: options.profile }
+    ? { ...existingEnv, GRAPHIFY_TOOL_PROFILE: envProfile }
     : { GRAPHIFY_TOOL_PROFILE: 'core', ...existingEnv }
   const serverConfig = isVscode
     ? { type: 'stdio', command: npxCommand, args: npxArgs, env }
@@ -1381,7 +1471,7 @@ function uninstallMcpServer(projectDir: string, target: McpConfigTarget): string
   return `${MCP_CONFIG_PATHS[target]} -> MCP server removed`
 }
 
-function installClaudeHook(projectDir: string): string {
+function installClaudeHook(projectDir: string, profile?: InstallProfile): string {
   const settingsPath = join(projectDir, '.claude', 'settings.json')
   const settings = readJsonObject(settingsPath)
   const hooks = ensureRecord(settings, 'hooks')
@@ -1389,12 +1479,12 @@ function installClaudeHook(projectDir: string): string {
 
   const existingIndex = preToolUse.findIndex((hook) => isRecord(hook) && JSON.stringify(hook).includes('graphify-out'))
   if (existingIndex >= 0) {
-    preToolUse[existingIndex] = SETTINGS_HOOK
+    preToolUse[existingIndex] = settingsHook(profile)
     writeJson(settingsPath, settings)
     return '.claude/settings.json -> hook updated'
   }
 
-  preToolUse.push(SETTINGS_HOOK)
+  preToolUse.push(settingsHook(profile))
   writeJson(settingsPath, settings)
   return '.claude/settings.json -> PreToolUse hook registered'
 }
@@ -1419,17 +1509,25 @@ function uninstallClaudeHook(projectDir: string): string | undefined {
   return '.claude/settings.json -> PreToolUse hook removed'
 }
 
-function installGeminiHook(projectDir: string): string {
+function installGeminiHook(projectDir: string, profile?: InstallProfile): string {
   const settingsPath = join(projectDir, '.gemini', 'settings.json')
   const settings = readJsonObject(settingsPath)
   const hooks = ensureRecord(settings, 'hooks')
   const beforeTool = ensureArray(hooks, 'BeforeTool')
+  const nextHook = geminiHook(profile)
+  const existingIndex = beforeTool.findIndex((hook) => JSON.stringify(hook).includes('graphify-out'))
 
-  if (beforeTool.some((hook) => JSON.stringify(hook).includes('graphify-out'))) {
-    return '.gemini/settings.json -> BeforeTool hook already registered (no change)'
+  if (existingIndex >= 0) {
+    if (JSON.stringify(beforeTool[existingIndex]) === JSON.stringify(nextHook)) {
+      return '.gemini/settings.json -> BeforeTool hook already registered (no change)'
+    }
+
+    beforeTool[existingIndex] = nextHook
+    writeJson(settingsPath, settings)
+    return '.gemini/settings.json -> BeforeTool hook updated'
   }
 
-  beforeTool.push(GEMINI_HOOK)
+  beforeTool.push(nextHook)
   writeJson(settingsPath, settings)
   return '.gemini/settings.json -> BeforeTool hook registered'
 }
@@ -1667,6 +1765,10 @@ export function isMcpToolProfile(value: string): value is McpToolProfile {
   return MCP_TOOL_PROFILES.includes(value as McpToolProfile)
 }
 
+export function isInstallProfile(value: string): value is InstallProfile {
+  return INSTALL_PROFILES.includes(value as InstallProfile)
+}
+
 export function installSkill(platform: SkillInstallPlatform, options: InstallSkillOptions = {}): string {
   const homeDir = resolve(options.homeDir ?? homedir())
   const packageRoot = resolve(options.packageRoot ?? findPackageRoot())
@@ -1703,10 +1805,14 @@ export function uninstallSkill(platform: SkillInstallPlatform, options: Pick<Ins
   return messages.join('\n')
 }
 
-export function geminiInstall(projectDir = '.', options: InstallSkillOptions = {}): string {
+export function geminiInstall(projectDir = '.', options: GeminiInstallOptions = {}): string {
   const resolvedProjectDir = resolve(projectDir)
-  const messages = [installSkill('gemini', options), writeSection(join(resolvedProjectDir, 'GEMINI.md'), GEMINI_MD_SECTION), installGeminiHook(resolvedProjectDir)]
-  messages.push('', 'Gemini CLI will now check the knowledge graph before answering', 'codebase questions and rebuild it after code changes.')
+  const messages = [installSkill('gemini', options), writeSection(join(resolvedProjectDir, 'GEMINI.md'), geminiMdSection(options.profile)), installGeminiHook(resolvedProjectDir, options.profile)]
+  if (options.profile === 'strict') {
+    messages.push('', 'Gemini CLI will now use the graphify strict compact MCP profile:', 'call context_pack once, answer from the pack when coverage is complete, and expand only when diagnostics show missing evidence.')
+  } else {
+    messages.push('', 'Gemini CLI will now check the knowledge graph before answering', 'codebase questions and rebuild it after code changes.')
+  }
   return messages.join('\n')
 }
 
@@ -1726,7 +1832,11 @@ export function geminiUninstall(projectDir = '.', options: Pick<InstallSkillOpti
 }
 
 export function installCopilotMcp(projectDir = '.', options: McpInstallOptions = {}): string {
-  return installMcpServer(resolve(projectDir), 'copilot', process.platform, options)
+  const message = installMcpServer(resolve(projectDir), 'copilot', process.platform, options)
+  if (options.profile === 'strict') {
+    return `${message}\n\nGitHub Copilot will now use the graphify strict compact MCP profile: call context_pack once, answer from the pack when coverage is complete, and expand only when diagnostics show missing evidence.`
+  }
+  return message
 }
 
 export function uninstallCopilotMcp(projectDir = '.'): string {
@@ -1739,15 +1849,24 @@ export function cursorInstall(projectDir = '.', options: McpInstallOptions = {})
   ensureParentDirectory(rulePath)
 
   const messages: string[] = []
+  const ruleContent = cursorRule(options.profile)
 
   if (existsSync(rulePath)) {
-    messages.push(`graphify-ts Cursor rule already exists at ${rulePath} (no change)`)
+    if (readFileSync(rulePath, 'utf8') === ruleContent) {
+      messages.push(`graphify-ts Cursor rule already exists at ${rulePath} (no change)`)
+    } else {
+      writeFileSync(rulePath, ruleContent, 'utf8')
+      messages.push(`graphify-ts Cursor rule updated at ${rulePath}`)
+    }
   } else {
-    writeFileSync(rulePath, CURSOR_RULE, 'utf8')
+    writeFileSync(rulePath, ruleContent, 'utf8')
     messages.push(`graphify-ts Cursor rule written to ${rulePath}`)
   }
 
   messages.push(installMcpServer(resolvedProjectDir, 'cursor', process.platform, options))
+  if (options.profile === 'strict') {
+    messages.push('', 'Cursor will now use the graphify strict compact MCP profile before broader exploration.')
+  }
   return messages.join('\n')
 }
 
@@ -1774,11 +1893,15 @@ export function cursorUninstall(projectDir = '.'): string {
 export function claudeInstall(projectDir = '.', options: McpInstallOptions = {}): string {
   const resolvedProjectDir = resolve(projectDir)
   const messages = [
-    writeSection(join(resolvedProjectDir, 'CLAUDE.md'), CLAUDE_MD_SECTION),
-    installClaudeHook(resolvedProjectDir),
+    writeSection(join(resolvedProjectDir, 'CLAUDE.md'), claudeMdSection(options.profile)),
+    installClaudeHook(resolvedProjectDir, options.profile),
     installMcpServer(resolvedProjectDir, 'claude', process.platform, options),
   ]
-  messages.push('', 'Claude Code will now start with the matching graphify MCP tool', 'BEFORE searching raw files for any codebase question.')
+  if (options.profile === 'strict') {
+    messages.push('', 'Claude Code will now use the graphify strict compact MCP profile:', 'call context_pack once, answer from the pack when coverage is complete, and expand only when diagnostics show missing evidence.')
+  } else {
+    messages.push('', 'Claude Code will now start with the matching graphify MCP tool', 'BEFORE searching raw files for any codebase question.')
+  }
   return messages.join('\n')
 }
 

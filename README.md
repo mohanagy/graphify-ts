@@ -115,16 +115,18 @@ graphify-ts produces local context packs that any modern coding agent can consum
 
 | Agent | Connection | Install command |
 |---|---|---|
-| Claude Code | MCP via `.mcp.json` | `graphify-ts claude install` |
-| Cursor | MCP via `.cursor/mcp.json` | `graphify-ts cursor install` |
-| GitHub Copilot CLI | MCP via `.vscode/mcp.json` | `graphify-ts copilot install` |
-| Gemini CLI | MCP server | `graphify-ts gemini install` |
+| Claude Code | MCP via `.mcp.json` | `graphify-ts claude <install|uninstall> [--profile core|full|strict]` |
+| Cursor | MCP via `.cursor/mcp.json` | `graphify-ts cursor <install|uninstall> [--profile core|full|strict]` |
+| GitHub Copilot CLI | MCP via `.vscode/mcp.json` | `graphify-ts copilot <install|uninstall> [--profile core|full|strict]` |
+| Gemini CLI | MCP server | `graphify-ts gemini <install|uninstall> [--profile core|full|strict]` |
 | Aider | AGENTS.md context-pack-first profile | `graphify-ts aider install` |
 | OpenCode | AGENTS.md + `.opencode/plugins/graphify-ts.js` + MCP via `opencode.json` / `opencode.jsonc` | `graphify-ts opencode install` |
 | Codex CLI | AGENTS.md + `.codex/hooks.json` context-pack-first profile | `graphify-ts codex install` |
 | Windsurf / others | Pipe `graphify-ts prompt` output | `graphify-ts prompt "..." --provider claude` |
 
 These are local installers that write project instructions and, when the platform supports it, local MCP config or plugin files that point at the graphify-ts subprocess. No code is uploaded.
+
+For Claude, Cursor, Copilot, and Gemini, `--profile strict` keeps the lean core MCP tool surface but rewrites the generated guidance into a compact flow: call `context_pack` once for the task before broader exploration, answer from the pack when coverage is complete, expand only when diagnostics show missing evidence, and avoid raw file search unless the pack is insufficient.
 
 Aider and OpenCode are intentionally context-pack-first: run `graphify-ts generate .`, install the profile, and start broad codebase work with `graphify-ts pack "<task>" --task explain` before raw file search. `graphify-ts aider install` writes an AGENTS.md profile only; remove it with `graphify-ts aider uninstall`. `graphify-ts opencode install` writes the AGENTS.md profile, `.opencode/plugins/graphify-ts.js`, and the graphify MCP entry in `opencode.json` or `opencode.jsonc`; remove only graphify-ts-owned content with `graphify-ts opencode uninstall`. Manual verification does not require either agent binary: inspect the generated files after install, then confirm uninstall removes only the graphify-ts entries.
 
@@ -136,7 +138,7 @@ For practical multi-agent workflows across Claude Code, Codex, Copilot, Cursor, 
 
 ## MCP tools
 
-These six MCP tools handle the most common agent workflows in the default **core** profile. The full surface is 25 tools, opt-in via `GRAPHIFY_TOOL_PROFILE=full` or `--profile full` on install.
+These six MCP tools handle the most common agent workflows in the default **core** profile. The full surface is 25 tools, opt-in via `GRAPHIFY_TOOL_PROFILE=full` or `--profile full` on install. `--profile strict` still uses the lean core tool surface, but changes the installed guidance so the agent starts with one `context_pack` call and expands only when the pack diagnostics say evidence is missing.
 
 | Tool | When the agent uses it |
 |---|---|

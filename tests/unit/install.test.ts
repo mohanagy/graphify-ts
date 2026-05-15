@@ -310,6 +310,21 @@ describe('install helpers', () => {
     })
   })
 
+  it('writes strict Gemini guidance for compact context-pack-first usage', () => {
+    withTempDir((projectDir) => {
+      const installGeminiWithProfile = geminiInstall as (projectDir?: string, options?: { profile?: 'core' | 'full' | 'strict' }) => string
+      const installMessage = installGeminiWithProfile(projectDir, { profile: 'strict' })
+
+      const geminiMd = readFileSync(join(projectDir, 'GEMINI.md'), 'utf8')
+
+      expect(geminiMd).toContain('Call `context_pack` once for the task before broader exploration.')
+      expect(geminiMd).toContain('Answer from the pack when coverage is complete.')
+      expect(geminiMd).toContain('Only expand with graph/search tools when diagnostics show missing evidence.')
+      expect(geminiMd).toContain('Avoid raw file search unless the pack is insufficient.')
+      expect(installMessage).toContain('strict compact MCP profile')
+    })
+  })
+
   it('keeps Gemini project instructions and hooks idempotent across repeated installs', () => {
     withBundledPackageRoot((packageRoot) => {
       withTempDir((homeDir) => {
@@ -326,6 +341,22 @@ describe('install helpers', () => {
           expect(countOccurrences(firstSettings, 'graphify-out')).toBeGreaterThan(0)
         })
       })
+    })
+  })
+
+  it('updates an existing Gemini hook when switching to the strict profile', () => {
+    withTempDir((projectDir) => {
+      geminiInstall(projectDir)
+
+      const installGeminiWithProfile = geminiInstall as (projectDir?: string, options?: { profile?: 'core' | 'full' | 'strict' }) => string
+      installGeminiWithProfile(projectDir, { profile: 'strict' })
+
+      const settings = readFileSync(join(projectDir, '.gemini', 'settings.json'), 'utf8')
+      const decodedHookPayload = decodeHookPayloads(settings)
+
+      expect(decodedHookPayload).toContain('strict compact MCP mode')
+      expect(decodedHookPayload).toContain('call context_pack once for the task before broader exploration')
+      expect(decodedHookPayload).not.toContain('Graphify answers most codebase questions in 1 focused MCP call')
     })
   })
 
@@ -423,6 +454,29 @@ describe('install helpers', () => {
     })
   })
 
+  it('writes strict Claude guidance while keeping the MCP env on the lean core tool profile', () => {
+    withTempDir((projectDir) => {
+      const installClaudeWithProfile = claudeInstall as (projectDir?: string, options?: { profile?: 'core' | 'full' | 'strict' }) => string
+      const installMessage = installClaudeWithProfile(projectDir, { profile: 'strict' })
+
+      const claudeMd = readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')
+      const mcpConfig = JSON.parse(readFileSync(join(projectDir, '.mcp.json'), 'utf8')) as {
+        mcpServers?: {
+          'graphify-ts'?: {
+            env?: Record<string, string>
+          }
+        }
+      }
+
+      expect(mcpConfig.mcpServers?.['graphify-ts']?.env?.GRAPHIFY_TOOL_PROFILE).toBe('core')
+      expect(claudeMd).toContain('Call `context_pack` once for the task before broader exploration.')
+      expect(claudeMd).toContain('Answer from the pack when coverage is complete.')
+      expect(claudeMd).toContain('Only expand with graph/search tools when diagnostics show missing evidence.')
+      expect(claudeMd).toContain('Avoid raw file search unless the pack is insufficient.')
+      expect(installMessage).toContain('strict compact MCP profile')
+    })
+  })
+
   it('writes GRAPHIFY_TOOL_PROFILE=core in the generated Cursor .cursor/mcp.json env block', () => {
     withTempDir((projectDir) => {
       cursorInstall(projectDir)
@@ -436,6 +490,42 @@ describe('install helpers', () => {
       }
 
       expect(mcpConfig.mcpServers?.['graphify-ts']?.env?.GRAPHIFY_TOOL_PROFILE).toBe('core')
+    })
+  })
+
+  it('writes strict Cursor guidance while keeping the MCP env on the lean core tool profile', () => {
+    withTempDir((projectDir) => {
+      const installCursorWithProfile = cursorInstall as (projectDir?: string, options?: { profile?: 'core' | 'full' | 'strict' }) => string
+      const installMessage = installCursorWithProfile(projectDir, { profile: 'strict' })
+
+      const rule = readFileSync(join(projectDir, '.cursor', 'rules', 'graphify-ts.mdc'), 'utf8')
+      const mcpConfig = JSON.parse(readFileSync(join(projectDir, '.cursor', 'mcp.json'), 'utf8')) as {
+        mcpServers?: {
+          'graphify-ts'?: {
+            env?: Record<string, string>
+          }
+        }
+      }
+
+      expect(mcpConfig.mcpServers?.['graphify-ts']?.env?.GRAPHIFY_TOOL_PROFILE).toBe('core')
+      expect(rule).toContain('Call `context_pack` once for the task before broader exploration.')
+      expect(rule).toContain('Answer from the pack when coverage is complete.')
+      expect(rule).toContain('Only expand with graph/search tools when diagnostics show missing evidence.')
+      expect(rule).toContain('Avoid raw file search unless the pack is insufficient.')
+      expect(installMessage).toContain('strict compact MCP profile')
+    })
+  })
+
+  it('updates an existing Cursor rule when switching to the strict profile', () => {
+    withTempDir((projectDir) => {
+      cursorInstall(projectDir)
+
+      const installCursorWithProfile = cursorInstall as (projectDir?: string, options?: { profile?: 'core' | 'full' | 'strict' }) => string
+      installCursorWithProfile(projectDir, { profile: 'strict' })
+
+      const rule = readFileSync(join(projectDir, '.cursor', 'rules', 'graphify-ts.mdc'), 'utf8')
+      expect(rule).toContain('Call `context_pack` once for the task before broader exploration.')
+      expect(rule).not.toContain('start with the graph tool that matches the question')
     })
   })
 
@@ -491,6 +581,26 @@ describe('install helpers', () => {
       }
 
       expect(mcpConfig.servers?.['graphify-ts']?.env?.GRAPHIFY_TOOL_PROFILE).toBe('full')
+    })
+  })
+
+  it('writes strict Copilot guidance while keeping the MCP env on the lean core tool profile', () => {
+    withTempDir((projectDir) => {
+      const installCopilotWithProfile = installCopilotMcp as (projectDir?: string, options?: { profile?: 'core' | 'full' | 'strict' }) => string
+      const installMessage = installCopilotWithProfile(projectDir, { profile: 'strict' })
+
+      const mcpConfig = JSON.parse(readFileSync(join(projectDir, '.vscode', 'mcp.json'), 'utf8')) as {
+        servers?: {
+          'graphify-ts'?: {
+            env?: Record<string, string>
+          }
+        }
+      }
+
+      expect(mcpConfig.servers?.['graphify-ts']?.env?.GRAPHIFY_TOOL_PROFILE).toBe('core')
+      expect(installMessage).toContain('strict compact MCP profile')
+      expect(installMessage).toContain('call context_pack once')
+      expect(installMessage).toContain('expand only when diagnostics show missing evidence')
     })
   })
 
