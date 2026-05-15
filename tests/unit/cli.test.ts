@@ -737,13 +737,15 @@ describe('cli parser', () => {
 
     expect(parsePlatformActionArgs('claude', ['install'])).toEqual({ action: 'install' })
     expect(parsePlatformActionArgs('claude', ['install', '--profile', 'full'])).toEqual({ action: 'install', profile: 'full' })
+    expect(parsePlatformActionArgs('claude', ['install', '--profile', 'strict'])).toEqual({ action: 'install', profile: 'strict' })
     expect(parsePlatformActionArgs('aider', ['install'])).toEqual({ action: 'install' })
     expect(parsePlatformActionArgs('gemini', ['install'])).toEqual({ action: 'install' })
+    expect(parsePlatformActionArgs('gemini', ['install', '--profile', 'strict'])).toEqual({ action: 'install', profile: 'strict' })
     expect(parsePlatformActionArgs('copilot', ['uninstall'])).toEqual({ action: 'uninstall' })
     expect(parsePlatformActionArgs('cursor', ['uninstall'])).toEqual({ action: 'uninstall' })
     expect(parsePlatformActionArgs('codex', ['uninstall'])).toEqual({ action: 'uninstall' })
-    expect(() => parsePlatformActionArgs('claude', ['install', '--profile', 'wide'])).toThrow('error: --profile must be one of core, full')
-    expect(() => parsePlatformActionArgs('claude', ['uninstall', '--profile', 'full'])).toThrow('Usage: graphify-ts claude <install|uninstall> [--profile core|full]')
+    expect(() => parsePlatformActionArgs('claude', ['install', '--profile', 'wide'])).toThrow('error: --profile must be one of core, full, strict')
+    expect(() => parsePlatformActionArgs('claude', ['uninstall', '--profile', 'full'])).toThrow('Usage: graphify-ts claude <install|uninstall> [--profile core|full|strict]')
     expect(() => parsePlatformActionArgs('trae', [])).toThrow('Usage: graphify-ts trae <install|uninstall>')
   })
 })
@@ -875,10 +877,10 @@ describe('cli main', () => {
     expect(help).toContain('hook <action>')
     expect(help).toContain('install [--platform P]')
     expect(help).toContain('aider <install|uninstall>')
-    expect(help).toContain('claude <install|uninstall> [--profile core|full]')
-    expect(help).toContain('cursor <install|uninstall> [--profile core|full]')
-    expect(help).toContain('gemini <install|uninstall>')
-    expect(help).toContain('copilot <install|uninstall> [--profile core|full]')
+    expect(help).toContain('claude <install|uninstall> [--profile core|full|strict]')
+    expect(help).toContain('cursor <install|uninstall> [--profile core|full|strict]')
+    expect(help).toContain('gemini <install|uninstall> [--profile core|full|strict]')
+    expect(help).toContain('copilot <install|uninstall> [--profile core|full|strict]')
     expect(help).toContain('codex <install|uninstall>')
     expect(help).toContain('opencode <install|uninstall>')
   })
@@ -1606,24 +1608,28 @@ describe('cli main', () => {
     expect(logs).toContain('opencode local rules installed')
   })
 
-  it('passes the requested MCP profile into claude, cursor, and copilot installs', async () => {
+  it('passes the requested install profile into claude, cursor, gemini, and copilot installs', async () => {
     const { io } = createIo()
     const dependencies = createDependencies()
-    const claudeInstall = vi.fn().mockReturnValue('claude full install')
-    const cursorInstall = vi.fn().mockReturnValue('cursor full install')
-    const installCopilotMcp = vi.fn().mockReturnValue('copilot full install')
+    const claudeInstall = vi.fn().mockReturnValue('claude strict install')
+    const cursorInstall = vi.fn().mockReturnValue('cursor strict install')
+    const geminiInstall = vi.fn().mockReturnValue('gemini strict install')
+    const installCopilotMcp = vi.fn().mockReturnValue('copilot strict install')
 
     dependencies.claudeInstall = claudeInstall as unknown as CliDependencies['claudeInstall']
     dependencies.cursorInstall = cursorInstall as unknown as CliDependencies['cursorInstall']
+    dependencies.geminiInstall = geminiInstall as unknown as CliDependencies['geminiInstall']
     dependencies.installCopilotMcp = installCopilotMcp as unknown as CliDependencies['installCopilotMcp']
 
-    await expect(executeCli(['claude', 'install', '--profile', 'full'], io, dependencies)).resolves.toBe(0)
-    await expect(executeCli(['cursor', 'install', '--profile', 'full'], io, dependencies)).resolves.toBe(0)
-    await expect(executeCli(['copilot', 'install', '--profile', 'full'], io, dependencies)).resolves.toBe(0)
+    await expect(executeCli(['claude', 'install', '--profile', 'strict'], io, dependencies)).resolves.toBe(0)
+    await expect(executeCli(['cursor', 'install', '--profile', 'strict'], io, dependencies)).resolves.toBe(0)
+    await expect(executeCli(['gemini', 'install', '--profile', 'strict'], io, dependencies)).resolves.toBe(0)
+    await expect(executeCli(['copilot', 'install', '--profile', 'strict'], io, dependencies)).resolves.toBe(0)
 
-    expect(claudeInstall).toHaveBeenCalledWith('.', { profile: 'full' })
-    expect(cursorInstall).toHaveBeenCalledWith('.', { profile: 'full' })
-    expect(installCopilotMcp).toHaveBeenCalledWith('.', { profile: 'full' })
+    expect(claudeInstall).toHaveBeenCalledWith('.', { profile: 'strict' })
+    expect(cursorInstall).toHaveBeenCalledWith('.', { profile: 'strict' })
+    expect(geminiInstall).toHaveBeenCalledWith('.', { profile: 'strict' })
+    expect(installCopilotMcp).toHaveBeenCalledWith('.', { profile: 'strict' })
   })
 
   it('removes the Copilot MCP config during copilot uninstall', async () => {
