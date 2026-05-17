@@ -9,12 +9,12 @@ import { CODE_EXTENSIONS, DOC_EXTENSIONS, MANIFEST_METADATA_KEY, OFFICE_EXTENSIO
 import { extractCompareBaselineNonCodeText } from '../pipeline/extract/non-code.js'
 import { loadBenchmarkQuestions } from './benchmark/questions.js'
 import { parsePromptRunnerOutput, type PromptRunnerUsage } from './prompt-runner.js'
-import { retrieveContext, tokenizeLabel, type RetrieveResult } from '../runtime/retrieve.js'
+import { compactRetrieveResult, retrieveContext, tokenizeLabel, type CompactRetrieveResult, type RetrieveResult } from '../runtime/retrieve.js'
 import { QUERY_TOKEN_ESTIMATOR, estimateQueryTokens, loadGraph } from '../runtime/serve.js'
 import { sidecarAwareFileFingerprint } from '../shared/binary-ingest-sidecar.js'
 import { MAX_TEXT_BYTES, validateGraphOutputPath, validateGraphPath } from '../shared/security.js'
 
-export type CompareBaselineMode = 'full' | 'bounded' | 'native_agent'
+export type CompareBaselineMode = 'full' | 'bounded' | 'pack_only' | 'native_agent'
 export type CompareRunMode = 'baseline' | 'graphify'
 export type CompareRunStatus = 'not_run' | 'succeeded' | 'failed' | 'context_overflow'
 export type CompareFailureReason = 'prompt_too_long' | 'runner_error' | 'exec_error'
@@ -86,6 +86,12 @@ export interface ComparePromptTokenEstimator {
 
 export type ComparePromptUsage = PromptRunnerUsage
 
+export interface CompareReportPack extends CompactRetrieveResult {
+  claims?: NonNullable<RetrieveResult['claims']>
+  coverage?: NonNullable<RetrieveResult['coverage']>
+  selection_diagnostics?: NonNullable<RetrieveResult['selection_diagnostics']>
+}
+
 export interface ComparePromptReport {
   question: string
   graph_path: string
@@ -142,6 +148,7 @@ export interface ComparePromptReport {
     graphify: string | null
   }
   provider_proof?: ComparePromptProviderProof
+  pack?: CompareReportPack
   paths: ComparePromptArtifactPaths
 }
 
@@ -492,6 +499,16 @@ function formatGraphifyContextSections(retrieval: RetrieveResult): ContextPrompt
         }]
       : []),
   ]
+}
+
+function compareReportPackFromRetrieveResult(retrieval: RetrieveResult): CompareReportPack {
+  const compact = compactRetrieveResult(retrieval)
+  return {
+    ...compact,
+    ...(retrieval.claims ? { claims: retrieval.claims } : {}),
+    ...(retrieval.coverage ? { coverage: retrieval.coverage } : {}),
+    ...(retrieval.selection_diagnostics ? { selection_diagnostics: retrieval.selection_diagnostics } : {}),
+  }
 }
 
 function computeReductionRatio(baselinePromptTokens: number, graphifyPromptTokens: number): number {
@@ -884,7 +901,7 @@ function deriveBaselineCorpusText(graphPath: string, graph: KnowledgeGraph): str
 export function buildBaselinePromptPack(input: BuildBaselinePromptPackInput): ComparePromptPack {
   const corpusText = input.corpusText.trim()
   const corpusBody =
-    input.mode === 'bounded'
+    input.mode === 'bounded' || input.mode === 'pack_only'
       ? buildBoundedCorpusExcerpt(input.question, input.graph, corpusText, input.maxTokens ?? DEFAULT_BOUNDED_BASELINE_TOKENS)
       : corpusText
   const builtPrompt = buildBaselinePromptArtifact(input.question, input.graph, corpusBody, input.mode, input.session)
@@ -968,6 +985,8 @@ export function generateCompareArtifacts(input: GenerateCompareArtifactsInput): 
   const outputDir = validateGraphOutputPath(input.outputDir)
   const now = input.now ?? new Date()
   const outputRoot = createCompareOutputRoot(outputDir, now)
+  const projectRoot = realpathSync(inferProjectRootFromGraphPath(graphPath))
+  const retrievalBudget = input.retrievalBudget ?? DEFAULT_RETRIEVAL_BUDGET
   let baselineSession: ContextSessionState | undefined
   let graphifySession: ContextSessionState | undefined
 
@@ -975,17 +994,6 @@ export function generateCompareArtifacts(input: GenerateCompareArtifactsInput): 
     const questionOutputDir = questions.length === 1 ? outputRoot : join(outputRoot, `question-${String(index + 1).padStart(3, '0')}`)
     mkdirSync(questionOutputDir, { recursive: true })
 
-    const baselinePrompt = buildBaselinePromptPack({
-      question,
-      graph,
-      corpusText,
-      mode: input.baselineMode,
-      ...(input.baselineMaxTokens !== undefined ? { maxTokens: input.baselineMaxTokens } : {}),
-      ...(baselineSession ? { session: baselineSession } : {}),
-    })
-    baselineSession = baselinePrompt.session_state
-    const projectRoot = realpathSync(inferProjectRootFromGraphPath(graphPath))
-    const retrievalBudget = input.retrievalBudget ?? DEFAULT_RETRIEVAL_BUDGET
     const retrieval = retrieveCompareContext(graph, question, retrievalBudget, projectRoot)
     const graphifyPrompt = buildGraphifyPromptPack({
       question,
@@ -993,6 +1001,20 @@ export function generateCompareArtifacts(input: GenerateCompareArtifactsInput): 
       ...(graphifySession ? { session: graphifySession } : {}),
     })
     graphifySession = graphifyPrompt.session_state
+    const comparePack = input.baselineMode === 'pack_only' ? compareReportPackFromRetrieveResult(retrieval) : undefined
+    const baselineMaxTokens =
+      input.baselineMode === 'pack_only'
+        ? graphifyPrompt.token_count
+        : input.baselineMaxTokens
+    const baselinePrompt = buildBaselinePromptPack({
+      question,
+      graph,
+      corpusText,
+      mode: input.baselineMode,
+      ...(baselineMaxTokens !== undefined ? { maxTokens: baselineMaxTokens } : {}),
+      ...(baselineSession ? { session: baselineSession } : {}),
+    })
+    baselineSession = baselinePrompt.session_state
 
     const paths: ComparePromptArtifactPaths = {
       output_dir: questionOutputDir,
@@ -1069,6 +1091,7 @@ export function generateCompareArtifacts(input: GenerateCompareArtifactsInput): 
         baseline: null,
         graphify: null,
       },
+      ...(comparePack ? { pack: comparePack } : {}),
       paths,
     }
 
@@ -1284,7 +1307,7 @@ export function formatCompareSummary(result: GenerateCompareArtifactsResult): st
   // (not a real agent's behavior) so reduction_ratio is a synthetic estimate;
   // append an explicit disclosure line. native_agent mode is preferred for shipping.
   const baselineModes = new Set<CompareBaselineMode>(result.reports.map((report) => report.baseline_mode))
-  const usesSyntheticBaseline = baselineModes.has('full') || baselineModes.has('bounded')
+  const usesSyntheticBaseline = baselineModes.has('full') || baselineModes.has('bounded') || baselineModes.has('pack_only')
 
   const lines = [
     `[graphify compare] completed ${result.reports.length} question(s)`,

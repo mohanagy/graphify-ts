@@ -168,6 +168,7 @@ graphify-ts pack "why does auth fail?" --task explain --retrieval-strategy slice
 graphify-ts prompt "how does auth work?" --provider claude     # provider-ready compiled prompt
 graphify-ts review-compare graphify-out/graph.json --exec '...' --yes  # PR review benchmark
 graphify-ts compare "How does auth work?" --exec '...' --yes           # general benchmark
+graphify-ts compare "How does auth work?" --baseline-mode pack_only --exec '...' --yes  # bounded raw context vs compiled graphify pack
 graphify-ts time-travel main HEAD --view risk   # what changed between two refs
 graphify-ts federate frontend/graph.json backend/graph.json  # multi-repo merge
 graphify-ts --help                              # full surface

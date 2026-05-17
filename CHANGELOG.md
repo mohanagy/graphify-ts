@@ -4,6 +4,10 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Pack-only compare mode**: `graphify-ts compare --baseline-mode pack_only` now compares one bounded raw-context baseline prompt against one compiled graphify pack, persists the compact pack audit fields in `report.json`, and keeps `native_agent` as the provider-reported runtime benchmark path.
+
 ## [0.22.9] - 2026-05-16
 
 ### Added

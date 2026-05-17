@@ -544,6 +544,56 @@ describe('compare runtime', () => {
     expect(estimateQueryTokens(boundedPack.prompt)).toBeLessThanOrEqual(120)
   })
 
+  it('builds pack_only compare artifacts with a bounded baseline and persisted pack metadata', () => {
+    const graph = makeGraph()
+    writeProjectFiles()
+    const graphPath = writeGraphFixture(graph)
+
+    const result = generateCompareArtifacts({
+      graphPath,
+      question: 'how does login create a session',
+      outputDir: COMPARE_OUTPUT_ROOT,
+      execTemplate: 'runner --prompt {prompt_file} --question {question} --mode {mode} --out {output_file}',
+      baselineMode: 'pack_only',
+      now: new Date('2026-04-24T19:30:00.000Z'),
+    })
+
+    const report = result.reports[0]!
+    const baselinePrompt = readFileSync(report.paths.baseline_prompt, 'utf8')
+    const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+    const savedPack = savedReport.pack as Record<string, unknown>
+
+    expect(report.baseline_mode).toBe('pack_only')
+    expect(baselinePrompt).toContain('[bounded baseline excerpt]')
+    expect(report.baseline_prompt_tokens).toBeLessThanOrEqual(report.graphify_prompt_tokens)
+    expect(savedReport.baseline_mode).toBe('pack_only')
+    expect(savedPack.token_count).toEqual(expect.any(Number))
+    expect(savedPack.matched_nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: 'authenticateUser',
+        }),
+      ]),
+    )
+    expect(savedPack.relationships).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          relation: 'calls',
+        }),
+      ]),
+    )
+    expect(savedPack.coverage).toEqual(
+      expect.objectContaining({
+        entries: expect.any(Array),
+      }),
+    )
+    expect(savedPack.selection_diagnostics).toEqual(
+      expect.objectContaining({
+        selection_strategy: 'value-per-token',
+      }),
+    )
+  })
+
   it('rejects bounded baseline budgets below the prompt floor', () => {
     const graph = makeGraph()
     const corpusText = makeCorpusText()

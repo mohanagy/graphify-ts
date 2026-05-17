@@ -36,6 +36,8 @@ node dist/src/cli/bin.js compare "How does login create a session?" \
   --yes
 ```
 
+If you want to isolate the context-compiler claim without MCP/tool-call behavior, switch to `--baseline-mode pack_only`. That mode compares one bounded raw-context baseline prompt against one compiled graphify pack and persists the compact pack audit fields (`token_count`, matched nodes, relationships, coverage, and selection diagnostics) in `report.json`.
+
 If you switch to `--baseline-mode native_agent`, prefer a structured Anthropic runner such as `cat {prompt_file} | claude -p --output-format json`. Plain-text Claude runs still save paired answers, but the report cannot compute Anthropic-billed reductions without the trailing JSON usage block.
 
 Gemini-safe installed-CLI invocation:
