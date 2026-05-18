@@ -2173,6 +2173,7 @@ describe('compare runtime', () => {
         },
       }),
     )
+    expect(savedReport).not.toHaveProperty('graphify_trace')
   })
 
   it('redacts persisted compare stderr summaries', async () => {

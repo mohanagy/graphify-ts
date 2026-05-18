@@ -1404,11 +1404,7 @@ export async function executeCompareRuns(
         report.failure_reason[execution.mode] = contextOverflowEvidence !== null ? 'prompt_too_long' : 'exec_error'
         report.evidence[execution.mode] = contextOverflowEvidence
         if (execution.mode === 'graphify') {
-          if (graphifyTrace) {
-            report.graphify_trace = graphifyTrace
-          } else {
-            delete report.graphify_trace
-          }
+          delete report.graphify_trace
         }
       }
 
