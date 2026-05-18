@@ -1848,13 +1848,14 @@ describe('compare runtime', () => {
   it('sanitizes share-safe compare stderr and evidence paths without changing the local report', async () => {
     const graph = makeGraph()
     writeProjectFiles()
-    const secretPath = join(PROJECT_FIXTURE_ROOT, 'src', 'secret.ts')
+    const secretPath = join(PROJECT_FIXTURE_ROOT, 'Quarterly Reports', 'review notes.txt')
+    mkdirSync(dirname(secretPath), { recursive: true })
     writeFileSync(secretPath, 'export const secret = true\n', 'utf8')
     const graphPath = writeGraphFixture(graph)
     const outputTimestamp = '2026-04-24T19-30-00'
     const questionOutputDir = join(COMPARE_OUTPUT_ROOT, outputTimestamp)
     const overflowPath = relative(questionOutputDir, secretPath)
-    const expectedShareSafeSecretPath = '<project-root>/src/secret.ts'
+    const expectedShareSafeSecretPath = '<project-root>/Quarterly Reports/review notes.txt'
 
     const result = await executeCompareRuns(
       {
@@ -1896,6 +1897,8 @@ describe('compare runtime', () => {
     expect(shareSafeStderr).not.toMatch(/\.\.[\\/A-Za-z0-9_-]/)
     expect(shareSafeEvidence).toContain(`${expectedShareSafeSecretPath} for details`)
     expect(shareSafeStderr).toContain(`${expectedShareSafeSecretPath} for details`)
+    expect(shareSafeEvidence).toContain('for details')
+    expect(shareSafeStderr).toContain('for details')
     expect(shareSafeReport).toEqual(
       expect.objectContaining({
         evidence: expect.objectContaining({

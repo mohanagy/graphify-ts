@@ -8,7 +8,7 @@ export interface ShareSafePathRoots {
 
 const URL_TOKEN_PATTERN = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'`<>]+/gi
 const PATH_SEGMENT_PATTERN = String.raw`[^\s"'<>\\/]+(?: [^\s"'<>\\/]+)*`
-const RELATIVE_TRAVERSAL_SEGMENT_PATTERN = String.raw`[^\s"'<>\\/]+`
+const RELATIVE_TRAVERSAL_SEGMENT_PATTERN = PATH_SEGMENT_PATTERN
 const ABSOLUTE_PATH_TOKEN_PATTERN = new RegExp(
   String.raw`(?<!<artifact-root>)(?<!<project-root>)(?:[A-Za-z]:[\\/](?:${PATH_SEGMENT_PATTERN}(?:[\\/]+${PATH_SEGMENT_PATTERN})*)?|\/(?:${PATH_SEGMENT_PATTERN}(?:[\\/]+${PATH_SEGMENT_PATTERN})*)?)`,
   'g',
@@ -114,7 +114,6 @@ function externalPathFallback(path: string): string {
 
 function isWithinShareSafeRootedToken(text: string, offset: number): boolean {
   const boundary = Math.max(
-    text.lastIndexOf(' ', offset - 1),
     text.lastIndexOf('\n', offset - 1),
     text.lastIndexOf('\r', offset - 1),
     text.lastIndexOf('\t', offset - 1),
@@ -123,7 +122,9 @@ function isWithinShareSafeRootedToken(text: string, offset: number): boolean {
     text.lastIndexOf('`', offset - 1),
   )
   const tokenPrefix = text.slice(boundary + 1, offset)
-  return tokenPrefix.includes('<artifact-root>') || tokenPrefix.includes('<project-root>')
+  const placeholderIndex = Math.max(tokenPrefix.lastIndexOf('<artifact-root>'), tokenPrefix.lastIndexOf('<project-root>'))
+  if (placeholderIndex < 0) return false
+  return /^<(?:artifact-root|project-root)>(?:\/[^"'`<>\r\n\t]*)?$/.test(tokenPrefix.slice(placeholderIndex))
 }
 
 export function toShareSafeArtifactPath(path: string, roots: ShareSafePathRoots): string {
@@ -132,7 +133,7 @@ export function toShareSafeArtifactPath(path: string, roots: ShareSafePathRoots)
   return externalPathFallback(path)
 }
 
-function sanitizeRelativeTraversalPath(path: string, roots: ShareSafePathRoots): string {
+function resolveRelativeTraversalPath(path: string, roots: ShareSafePathRoots): string | null {
   for (const candidate of [resolve(roots.projectRoot, path), resolve(roots.artifactRoot, path)]) {
     if (!existsSync(candidate)) continue
 
@@ -140,7 +141,36 @@ function sanitizeRelativeTraversalPath(path: string, roots: ShareSafePathRoots):
     if (rewrittenPath !== null) return rewrittenPath
   }
 
+  return null
+}
+
+function sanitizeRelativeTraversalPath(path: string, roots: ShareSafePathRoots): string {
+  const rewrittenPath = resolveRelativeTraversalPath(path, roots)
+  if (rewrittenPath !== null) return rewrittenPath
   return externalPathFallback(path)
+}
+
+function sanitizeRelativeTraversalToken(token: string, roots: ShareSafePathRoots): string {
+  const { path, suffix } = splitTrailingPathPunctuation(token)
+  const rewrittenPath = resolveRelativeTraversalPath(path, roots)
+  if (rewrittenPath !== null) return `${rewrittenPath}${suffix}`
+
+  let matchedPrefix = ''
+  let matchedRewrite: string | null = null
+  for (let index = 0; index < path.length; index += 1) {
+    if (path[index] !== ' ') continue
+    const candidatePath = path.slice(0, index)
+    const candidateRewrite = resolveRelativeTraversalPath(candidatePath, roots)
+    if (candidateRewrite === null) continue
+    matchedPrefix = candidatePath
+    matchedRewrite = candidateRewrite
+  }
+
+  if (matchedRewrite !== null) {
+    return `${matchedRewrite}${path.slice(matchedPrefix.length)}${suffix}`
+  }
+
+  return `${sanitizeRelativeTraversalPath(path, roots)}${suffix}`
 }
 
 export function sanitizeShareSafeText(text: string, roots: ShareSafePathRoots): string {
@@ -151,10 +181,9 @@ export function sanitizeShareSafeText(text: string, roots: ShareSafePathRoots): 
     return placeholder
   })
 
-  const traversalSanitizedText = protectedText.replace(RELATIVE_TRAVERSAL_TOKEN_PATTERN, (token) => {
-    const { path, suffix } = splitTrailingPathPunctuation(token)
-    return `${sanitizeRelativeTraversalPath(path, roots)}${suffix}`
-  })
+  const traversalSanitizedText = protectedText.replace(RELATIVE_TRAVERSAL_TOKEN_PATTERN, (token) =>
+    sanitizeRelativeTraversalToken(token, roots),
+  )
 
   const sanitizedText = traversalSanitizedText.replace(ABSOLUTE_PATH_TOKEN_PATTERN, (token, offset, source) => {
     if (isWithinShareSafeRootedToken(source, offset)) {
