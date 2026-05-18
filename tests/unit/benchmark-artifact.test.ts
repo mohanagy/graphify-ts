@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
@@ -115,7 +115,11 @@ function writeCompareStyleReport(reportPath: string, pack: CompareReportPack): v
 function runPackVerifier(
   testName: string,
   pack: CompareReportPack,
-  gateConfig: Record<string, PackQualityGateDefinition> = { 'docs-artifact': DOCS_ARTIFACT_GATE },
+  options: {
+    gateConfig?: Record<string, PackQualityGateDefinition>
+    relativeConfigPath?: boolean
+    relativeReportPath?: boolean
+  } = {},
 ): ReturnType<typeof spawnSync> {
   const fixtureRoot = join(
     process.cwd(),
@@ -125,14 +129,16 @@ function runPackVerifier(
   )
   const reportPath = join(fixtureRoot, 'report.json')
   const configPath = join(fixtureRoot, 'quality-gates.json')
+  const reportArg = options.relativeReportPath ? relative(process.cwd(), reportPath) : reportPath
+  const configArg = options.relativeConfigPath ? relative(process.cwd(), configPath) : configPath
   mkdirSync(fixtureRoot, { recursive: true })
   writeCompareStyleReport(reportPath, pack)
-  writeFileSync(configPath, `${JSON.stringify(gateConfig, null, 2)}\n`, 'utf8')
+  writeFileSync(configPath, `${JSON.stringify(options.gateConfig ?? { 'docs-artifact': DOCS_ARTIFACT_GATE }, null, 2)}\n`, 'utf8')
 
   try {
     return spawnSync(
       process.execPath,
-      [PACK_VERIFIER_PATH, '--gate', 'docs-artifact', '--config', configPath, '--report', reportPath],
+      [PACK_VERIFIER_PATH, '--gate', 'docs-artifact', '--config', configArg, '--report', reportArg],
       { encoding: 'utf8' },
     )
   } finally {
@@ -304,14 +310,28 @@ describe('shared GoValidate pack-quality verifier contract', () => {
     expect(output).toContain('pack.relationships count 58 exceeds max_relationships 57')
   })
 
+  it('resolves relative --config paths from the current working directory like --report', () => {
+    const result = runPackVerifier('relative-config-path', buildPackFixture(), {
+      relativeConfigPath: true,
+      relativeReportPath: true,
+    })
+    const output = combinedOutput(result)
+
+    expect(result.status).toBe(0)
+    expect(output).toContain('docs-artifact')
+    expect(output).toContain('PASS')
+  })
+
   it('rejects gate configs whose labels normalize to empty strings', () => {
     const result = runPackVerifier(
       'invalid-label-config',
       buildPackFixture(),
       {
-        'docs-artifact': {
-          ...DOCS_ARTIFACT_GATE,
-          required_labels: ['---'],
+        gateConfig: {
+          'docs-artifact': {
+            ...DOCS_ARTIFACT_GATE,
+            required_labels: ['---'],
+          },
         },
       },
     )

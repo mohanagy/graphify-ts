@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { readFileSync } from 'node:fs'
-import { dirname, isAbsolute, resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 function usage() {
@@ -228,9 +228,7 @@ function verifyPackQuality(gateName, gate, report) {
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const args = parseArgs(process.argv.slice(2))
-const configPath = args.config && isAbsolute(args.config)
-  ? resolve(args.config)
-  : resolve(scriptDir, args.config ?? 'quality-gates.json')
+const configPath = args.config ? resolve(args.config) : resolve(scriptDir, 'quality-gates.json')
 const reportPath = resolve(args.report)
 const gates = loadGateConfig(configPath)
 const { gateName, gate } = resolveGate(gates, args)
