@@ -552,12 +552,25 @@ describe('runBenchmark', () => {
           share_safe_report: join(dirname(executions[0]!.promptFile), 'report.share-safe.json'),
         }),
       )
+      const localReport = JSON.parse(readFileSync(run!.artifacts!.report, 'utf8')) as Record<string, unknown>
       const shareSafePath = run!.artifacts!.share_safe_report
       const shareSafeReport = JSON.parse(readFileSync(shareSafePath, 'utf8')) as Record<string, unknown>
 
+      expect(localReport).toEqual(
+        expect.objectContaining({
+          question: 'how does authentication work',
+          artifacts: {
+            prompt: relative(process.cwd(), executions[0]!.promptFile),
+            answer: relative(process.cwd(), executions[0]!.outputFile),
+            report: relative(process.cwd(), run!.artifacts!.report),
+          },
+        }),
+      )
+      expect((localReport.artifacts as Record<string, unknown>)?.share_safe_report).toBeUndefined()
       expect(shareSafeReport).toEqual(
         expect.objectContaining({
           question: 'how does authentication work',
+          share_safe_report: true,
           artifacts: expect.objectContaining({
             prompt: '<artifact-root>/graphify-prompt.txt',
             answer: '<artifact-root>/graphify-answer.txt',

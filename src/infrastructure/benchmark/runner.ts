@@ -250,6 +250,11 @@ export async function runBenchmarkPrompt(options: RunBenchmarkPromptOptions): Pr
     session_state: promptPack.session_state,
   }
 
+  const localReportArtifacts = {
+    prompt: portablePath(artifacts.prompt),
+    answer: portablePath(artifacts.answer),
+    report: portablePath(artifacts.report),
+  }
   const localReport = {
     question: options.question,
     prompt_tokens_estimated: run.prompt_tokens_estimated,
@@ -261,12 +266,7 @@ export async function runBenchmarkPrompt(options: RunBenchmarkPromptOptions): Pr
     usage: run.usage,
     elapsed_ms: run.elapsed_ms,
     prompt_token_estimator: QUERY_TOKEN_ESTIMATOR,
-    artifacts: {
-      prompt: portablePath(artifacts.prompt),
-      answer: portablePath(artifacts.answer),
-      report: portablePath(artifacts.report),
-      share_safe_report: portablePath(artifacts.share_safe_report),
-    },
+    artifacts: localReportArtifacts,
   }
   const shareSafeRoots = {
     artifactRoot: outputRoot,
@@ -279,16 +279,17 @@ export async function runBenchmarkPrompt(options: RunBenchmarkPromptOptions): Pr
   )
   writeFileSync(
     artifacts.share_safe_report,
-    `${JSON.stringify(
-      {
-        ...localReport,
-        artifacts: {
-          prompt: toShareSafeArtifactPath(artifacts.prompt, shareSafeRoots),
-          answer: toShareSafeArtifactPath(artifacts.answer, shareSafeRoots),
-          report: toShareSafeArtifactPath(artifacts.report, shareSafeRoots),
-          share_safe_report: toShareSafeArtifactPath(artifacts.share_safe_report, shareSafeRoots),
+      `${JSON.stringify(
+        {
+          ...localReport,
+          share_safe_report: true,
+          artifacts: {
+            ...Object.fromEntries(
+              Object.entries(localReportArtifacts).map(([key, path]) => [key, toShareSafeArtifactPath(path, shareSafeRoots)]),
+            ),
+            share_safe_report: toShareSafeArtifactPath(artifacts.share_safe_report, shareSafeRoots),
+          },
         },
-      },
       null,
       2,
     )}\n`,
