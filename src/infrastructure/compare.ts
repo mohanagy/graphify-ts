@@ -1709,12 +1709,16 @@ function formatNativeAgentSuiteMetricLine(
   decreasedLabel: string,
   increasedLabel: string,
   includeMeanMedian = false,
+  totalQuestionCount = changes.length,
 ): string {
   const wins = changes.filter((change) => change.percentReduction > 0).length
   const losses = changes.filter((change) => change.percentReduction < 0).length
   const parts = [
     `- Suite ${label}: ${formatCount(wins, 'win', 'wins')} · ${formatCount(losses, 'loss', 'losses')}`,
   ]
+  if (changes.length !== totalQuestionCount) {
+    parts.push(`${changes.length}/${totalQuestionCount} comparable`)
+  }
 
   if (includeMeanMedian) {
     const reductions = changes.map((change) => change.percentReduction)
@@ -2001,6 +2005,7 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
     `[graphify compare] completed ${result.reports.length} native_agent question(s)`,
     `- Output: ${result.output_root}`,
   ]
+  const totalQuestionCount = result.reports.length
   const comparableReports = result.reports.filter(isComparableNativeAgentReport)
   if (comparableReports.length > 1) {
     lines.push(
@@ -2013,6 +2018,7 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
         'less',
         'more',
         true,
+        totalQuestionCount,
       ),
       formatNativeAgentSuiteMetricLine(
         'num_turns',
@@ -2022,6 +2028,8 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
         })),
         'fewer',
         'more',
+        false,
+        totalQuestionCount,
       ),
       formatNativeAgentSuiteMetricLine(
         'latency',
@@ -2031,6 +2039,8 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
         })),
         'faster',
         'slower',
+        false,
+        totalQuestionCount,
       ),
     )
   }

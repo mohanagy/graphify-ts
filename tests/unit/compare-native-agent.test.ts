@@ -582,4 +582,72 @@ describe('formatNativeAgentCompareSummary', () => {
     expect(summary).toContain('Suite num_turns: 1 win · 1 loss · best win: "win case" (50% fewer) · worst regression: "loss case" (50% more)')
     expect(summary).toContain('Suite latency: 1 win · 1 loss · best win: "win case" (50% faster) · worst regression: "loss case" (50% slower)')
   })
+
+  it('calls out the comparable-question denominator when answer-only runs are excluded from suite aggregates', () => {
+    const result = buildSuiteSummaryResult([
+      {
+        question: 'win a',
+        baselineTurns: 9,
+        graphifyTurns: 3,
+        baselineDurationMs: 9000,
+        graphifyDurationMs: 3000,
+        baselineInputTokens: 900,
+        graphifyInputTokens: 300,
+        reductions: {
+          num_turns: 3,
+          duration_ms: 3,
+          input_tokens: 3,
+          cost_usd: 1,
+        },
+      },
+      {
+        question: 'win b',
+        baselineTurns: 8,
+        graphifyTurns: 2,
+        baselineDurationMs: 8000,
+        graphifyDurationMs: 2000,
+        baselineInputTokens: 800,
+        graphifyInputTokens: 200,
+        reductions: {
+          num_turns: 4,
+          duration_ms: 4,
+          input_tokens: 4,
+          cost_usd: 1,
+        },
+      },
+      {
+        question: 'answer only',
+        baselineTurns: 5,
+        graphifyTurns: 5,
+        baselineDurationMs: 5000,
+        graphifyDurationMs: 5000,
+        baselineInputTokens: 500,
+        graphifyInputTokens: 500,
+        reductions: {
+          num_turns: 1,
+          duration_ms: 1,
+          input_tokens: 1,
+          cost_usd: 1,
+        },
+      },
+    ])
+    result.reports[2] = {
+      ...result.reports[2]!,
+      graphify: {
+        kind: 'answer_only',
+        evidence: null,
+        exit_code: 0,
+        stderr: null,
+        result_path: '/tmp/project/answer-only.txt',
+      },
+      reductions: null,
+    }
+
+    const summary = formatNativeAgentCompareSummary(result)
+
+    expect(summary).toContain('Suite input_tokens (Anthropic-reported): 2 wins · 0 losses · 2/3 comparable · mean reduction 70.8% · median reduction 70.8% · best win: "win b" (75% less) · worst regression: none')
+    expect(summary).toContain('Suite num_turns: 2 wins · 0 losses · 2/3 comparable · best win: "win b" (75% fewer) · worst regression: none')
+    expect(summary).toContain('Suite latency: 2 wins · 0 losses · 2/3 comparable · best win: "win b" (75% faster) · worst regression: none')
+    expect(summary).toContain('"answer only" → answer-only run saved; no Anthropic usage block was available, so provider-proof reductions were not computed')
+  })
 })
