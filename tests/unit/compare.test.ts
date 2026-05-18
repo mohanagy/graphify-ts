@@ -742,7 +742,8 @@ describe('compare runtime', () => {
         graph_path: '<project-root>/graphify-out/graph.json',
         paths: expect.objectContaining({
           output_dir: '<artifact-root>',
-          report: '<artifact-root>/report.share-safe.json',
+          report: '<artifact-root>/report.json',
+          share_safe_report: '<artifact-root>/report.share-safe.json',
         }),
       }),
     )

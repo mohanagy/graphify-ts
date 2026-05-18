@@ -301,7 +301,7 @@ function writeCompareReport(report: ComparePromptReport): void {
       output_dir: toShareSafeArtifactPath(report.paths.output_dir, shareSafeRoots),
       baseline_prompt: toShareSafeArtifactPath(report.paths.baseline_prompt, shareSafeRoots),
       graphify_prompt: toShareSafeArtifactPath(report.paths.graphify_prompt, shareSafeRoots),
-      report: toShareSafeArtifactPath(report.paths.share_safe_report, shareSafeRoots),
+      report: toShareSafeArtifactPath(report.paths.report, shareSafeRoots),
       share_safe_report: toShareSafeArtifactPath(report.paths.share_safe_report, shareSafeRoots),
     },
   }
