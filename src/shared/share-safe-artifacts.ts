@@ -6,8 +6,14 @@ export interface ShareSafePathRoots {
   projectRoot: string
 }
 
-const ABSOLUTE_PATH_TOKEN_PATTERN = /(?:[A-Za-z]:[\\/]|\/)[^\s"'`<>]+/g
+const URL_TOKEN_PATTERN = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'`<>]+/gi
+const PATH_SEGMENT_PATTERN = String.raw`[^\s"'<>\\/]+(?: [^\s"'<>\\/]+)*`
+const ABSOLUTE_PATH_TOKEN_PATTERN = new RegExp(
+  String.raw`(?:[A-Za-z]:[\\/](?:${PATH_SEGMENT_PATTERN}(?:[\\/]+${PATH_SEGMENT_PATTERN})*)?|\/(?:${PATH_SEGMENT_PATTERN}(?:[\\/]+${PATH_SEGMENT_PATTERN})*)?)`,
+  'g',
+)
 const TRAILING_PATH_PUNCTUATION = new Set([',', '.', ':', ';', ')', ']', '}'])
+const URL_PLACEHOLDER_PREFIX = '__GRAPHIFY_SHARE_SAFE_URL__'
 
 function sameResolvedPath(path: string, root: string): boolean {
   return resolve(path) === resolve(root)
@@ -108,9 +114,20 @@ export function toShareSafeArtifactPath(path: string, roots: ShareSafePathRoots)
 }
 
 export function sanitizeShareSafeText(text: string, roots: ShareSafePathRoots): string {
-  return text.replace(ABSOLUTE_PATH_TOKEN_PATTERN, (token) => {
+  const urls: string[] = []
+  const protectedText = text.replace(URL_TOKEN_PATTERN, (url) => {
+    const placeholder = `${URL_PLACEHOLDER_PREFIX}${urls.length}__`
+    urls.push(url)
+    return placeholder
+  })
+
+  const sanitizedText = protectedText.replace(ABSOLUTE_PATH_TOKEN_PATTERN, (token) => {
     const { path, suffix } = splitTrailingPathPunctuation(token)
     const rewrittenPath = toShareSafeRootedPath(path, roots)
     return rewrittenPath === null ? `${externalPathFallback(path)}${suffix}` : `${rewrittenPath}${suffix}`
+  })
+
+  return sanitizedText.replace(new RegExp(`${URL_PLACEHOLDER_PREFIX}(\\d+)__`, 'g'), (_placeholder, index) => {
+    return urls[Number(index)] ?? ''
   })
 }

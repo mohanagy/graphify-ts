@@ -13,8 +13,9 @@ import {
 } from '../../src/infrastructure/review-compare.js'
 import { estimateQueryTokens } from '../../src/runtime/serve.js'
 
-function createRepo(options: { pathLikeNodeIds?: boolean } = {}): string {
-  const root = mkdtempSync(join(tmpdir(), 'graphify-ts-review-compare-'))
+function createRepo(options: { pathLikeNodeIds?: boolean; pathWithSpaces?: boolean } = {}): string {
+  const repoPrefix = options.pathWithSpaces ? 'graphify ts review compare repo-' : 'graphify-ts-review-compare-'
+  const root = mkdtempSync(join(tmpdir(), repoPrefix))
   mkdirSync(join(root, 'src'), { recursive: true })
   mkdirSync(join(root, 'tests'), { recursive: true })
   mkdirSync(join(root, 'graphify-out'), { recursive: true })
@@ -307,14 +308,17 @@ describe('review compare', () => {
   })
 
   it('redacts local artifact paths from share-safe stderr on failed runs', async () => {
-    const root = createRepo()
+    const root = createRepo({ pathWithSpaces: true })
     repoRoots.push(root)
-    const externalAbsolutePath = process.platform === 'win32' ? 'C:\\Users\\alice\\.ssh\\config' : '/Users/alice/.ssh/config'
+    const externalAbsolutePath = process.platform === 'win32'
+      ? 'C:\\Users\\alice\\Desktop\\Quarterly Reports\\review notes.txt'
+      : '/Users/alice/Desktop/Quarterly Reports/review notes.txt'
+    const diagnosticUrl = 'https://example.com/errors/review-compare?path=/docs/reference'
 
     const result = await executeReviewCompareRuns(
       {
         graphPath: join(root, 'graphify-out', 'graph.json'),
-        outputDir: join(root, 'graphify-out', 'review-compare'),
+        outputDir: join(root, 'graphify-out', 'review compare'),
         execTemplate: 'runner --prompt {prompt_file} --mode {mode} --out {output_file}',
         now: new Date('2026-05-01T21:00:00.000Z'),
       },
@@ -328,6 +332,7 @@ describe('review compare', () => {
             `graph=${join(root, 'graphify-out', 'graph.json')}`,
             `project=${root}`,
             `external=${externalAbsolutePath}`,
+            `url=${diagnosticUrl}`,
           ].join('\n'),
           elapsedMs: execution.mode === 'verbose' ? 15 : 9,
         }),
@@ -349,6 +354,7 @@ describe('review compare', () => {
     expect(shareSafeReport.stderr.verbose).toContain('graph=<project-root>/graphify-out/graph.json')
     expect(shareSafeReport.stderr.verbose).toContain('project=<project-root>')
     expect(shareSafeReport.stderr.verbose).toContain(`external=${basename(externalAbsolutePath)}`)
+    expect(shareSafeReport.stderr.verbose).toContain(`url=${diagnosticUrl}`)
     expect(shareSafeReport.stderr.verbose).not.toContain(root)
     expect(shareSafeReport.stderr.verbose).not.toContain(externalAbsolutePath)
     expect(shareSafeRaw).not.toContain(externalAbsolutePath)
