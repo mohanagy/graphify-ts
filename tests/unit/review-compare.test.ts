@@ -9,6 +9,7 @@ import {
   executeReviewCompareRuns,
   formatReviewCompareSummary,
   generateReviewCompareArtifacts,
+  type ReviewCompareReport,
 } from '../../src/infrastructure/review-compare.js'
 import { estimateQueryTokens } from '../../src/runtime/serve.js'
 
@@ -303,5 +304,46 @@ describe('review compare', () => {
       compact: 9,
     })
     expect(formatReviewCompareSummary(result)).toContain('Prompt tokens')
+  })
+
+  it('redacts local artifact paths from share-safe stderr on failed runs', async () => {
+    const root = createRepo()
+    repoRoots.push(root)
+
+    const result = await executeReviewCompareRuns(
+      {
+        graphPath: join(root, 'graphify-out', 'graph.json'),
+        outputDir: join(root, 'graphify-out', 'review-compare'),
+        execTemplate: 'runner --prompt {prompt_file} --mode {mode} --out {output_file}',
+        now: new Date('2026-05-01T21:00:00.000Z'),
+      },
+      {
+        runner: async (execution) => ({
+          exitCode: 1,
+          stdout: '',
+          stderr: [
+            `prompt=${execution.promptFile}`,
+            `output=${execution.outputFile}`,
+            `graph=${join(root, 'graphify-out', 'graph.json')}`,
+            `project=${root}`,
+          ].join('\n'),
+          elapsedMs: execution.mode === 'verbose' ? 15 : 9,
+        }),
+      },
+    )
+
+    const localReport = JSON.parse(readFileSync(result.report.paths.report, 'utf8')) as ReviewCompareReport
+    const shareSafeReport = JSON.parse(readFileSync(result.report.paths.share_safe_report, 'utf8')) as ReviewCompareReport
+
+    expect(localReport.stderr.verbose).toContain(`prompt=${result.report.paths.verbose_prompt}`)
+    expect(localReport.stderr.verbose).toContain(`output=${result.report.answer_paths.verbose}`)
+    expect(localReport.stderr.verbose).toContain(`graph=${join(root, 'graphify-out', 'graph.json')}`)
+    expect(localReport.stderr.verbose).toContain(`project=${root}`)
+
+    expect(shareSafeReport.stderr.verbose).toContain('prompt=<artifact-root>/verbose-prompt.txt')
+    expect(shareSafeReport.stderr.verbose).toContain('output=<artifact-root>/verbose-answer.txt')
+    expect(shareSafeReport.stderr.verbose).toContain('graph=<project-root>/graphify-out/graph.json')
+    expect(shareSafeReport.stderr.verbose).toContain('project=<project-root>')
+    expect(shareSafeReport.stderr.verbose).not.toContain(root)
   })
 })

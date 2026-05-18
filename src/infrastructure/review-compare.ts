@@ -5,7 +5,11 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 
 import { analyzePrImpact, compactPrImpactResult } from '../runtime/pr-impact.js'
 import { estimateQueryTokens, loadGraph } from '../runtime/serve.js'
-import { toShareSafeArtifactPath, type ShareSafePathRoots } from '../shared/share-safe-artifacts.js'
+import {
+  sanitizeShareSafeText,
+  toShareSafeArtifactPath,
+  type ShareSafePathRoots,
+} from '../shared/share-safe-artifacts.js'
 import { findNearestExistingAncestor, validateGraphPath } from '../shared/security.js'
 import { buildContextPrompt } from './context-prompt.js'
 
@@ -147,6 +151,16 @@ function rewriteReviewComparePaths(
     compact_prompt: toShareSafeArtifactPath(paths.compact_prompt, roots),
     report: toShareSafeArtifactPath(paths.report, roots),
     share_safe_report: toShareSafeArtifactPath(paths.share_safe_report, roots),
+  }
+}
+
+function rewriteShareSafeStderr(
+  stderr: Record<ReviewCompareMode, string | null>,
+  roots: ShareSafePathRoots,
+): Record<ReviewCompareMode, string | null> {
+  return {
+    verbose: stderr.verbose === null ? null : sanitizeShareSafeText(stderr.verbose, roots),
+    compact: stderr.compact === null ? null : sanitizeShareSafeText(stderr.compact, roots),
   }
 }
 
@@ -361,6 +375,7 @@ function writeReport(report: ReviewCompareReport): void {
     ...report,
     graph_path: toShareSafeArtifactPath(report.graph_path, roots),
     answer_paths: rewriteAnswerPaths(report.answer_paths, roots),
+    stderr: rewriteShareSafeStderr(report.stderr, roots),
     paths: rewriteReviewComparePaths(report.paths, roots),
   }
 
