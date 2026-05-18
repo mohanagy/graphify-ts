@@ -25,7 +25,7 @@ Expected signals on the checked-in demo:
 
 This is still the most reproducible question-set proof path because the corpus, labels, and expected signals are checked in here. It now runs through your configured terminal runner, so use `--yes` for CI/non-interactive runs and expect model-token usage unless your runner is purely local.
 
-`benchmark` keeps the per-run prompt/answer files and full `report.json` as local artifacts. It also writes a companion `report.share-safe.json` with stable placeholders so you can publish token and coverage metrics without exposing real local artifact paths. Treat that share-safe report as publishing evidence, not as a guarantee that every possible project detail has been fully redacted.
+Runner-backed `benchmark` executions (`--exec ...`) keep the per-run prompt/answer files and full `report.json` as local artifacts. That path also writes a companion `report.share-safe.json` with stable placeholders, preserving the per-run usage/proof fields plus sanitized artifact paths for sharing without exposing real local paths. The benchmark-wide coverage/evidence totals still live in the aggregate benchmark result and terminal summary rather than inside each per-run share-safe file. Treat that share-safe report as publishing evidence, not as a guarantee that every possible project detail has been fully redacted.
 
 ## 2. Same-question, same-model A/B proof
 
