@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync 
 import { dirname, join, resolve } from 'node:path'
 
 import { strToU8, zipSync } from 'fflate'
+import { vi } from 'vitest'
 
 import { KnowledgeGraph } from '../../src/contracts/graph.js'
 import {
@@ -17,6 +18,7 @@ import {
 import { parsePromptRunnerOutput } from '../../src/infrastructure/prompt-runner.js'
 import { saveManifest } from '../../src/pipeline/manifest.js'
 import { toJson } from '../../src/pipeline/export.js'
+import * as retrieveRuntime from '../../src/runtime/retrieve.js'
 import { retrieveContext } from '../../src/runtime/retrieve.js'
 import { estimateQueryTokens } from '../../src/runtime/serve.js'
 import { MAX_TEXT_BYTES } from '../../src/shared/security.js'
@@ -592,6 +594,58 @@ describe('compare runtime', () => {
         selection_strategy: 'value-per-token',
       }),
     )
+  })
+
+  it('sanitizes pack_only source_file paths in share-safe compare reports', () => {
+    const graph = makeGraph()
+    writeProjectFiles()
+    const graphPath = writeGraphFixture(graph)
+    const outsideSourcePath = resolve(PROJECT_FIXTURE_ROOT, '..', '..', '..', 'vault', 'private', 'auth.ts')
+    const originalRetrieveContext = retrieveRuntime.retrieveContext
+    const retrieveSpy = vi.spyOn(retrieveRuntime, 'retrieveContext').mockImplementation((inputGraph, options) => ({
+      ...originalRetrieveContext(inputGraph, options),
+      matched_nodes: originalRetrieveContext(inputGraph, options).matched_nodes.map((node) =>
+        node.label === 'authenticateUser' ? { ...node, source_file: outsideSourcePath } : node,
+      ),
+    }))
+
+    try {
+      const result = generateCompareArtifacts({
+        graphPath,
+        question: 'how does login create a session',
+        corpusText: makeCorpusText(),
+        outputDir: COMPARE_OUTPUT_ROOT,
+        execTemplate: 'runner --prompt {prompt_file} --question {question} --mode {mode} --out {output_file}',
+        baselineMode: 'pack_only',
+        now: new Date('2026-04-24T19:30:00.000Z'),
+      })
+
+      const report = result.reports[0]!
+      const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+      const shareSafeReport = JSON.parse(readFileSync(report.paths.share_safe_report, 'utf8')) as Record<string, unknown>
+      const savedPack = savedReport.pack as { matched_nodes: Array<{ label: string; source_file: string }> }
+      const shareSafePack = shareSafeReport.pack as { matched_nodes: Array<{ label: string; source_file: string }> }
+
+      expect(savedPack.matched_nodes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: 'authenticateUser',
+            source_file: outsideSourcePath,
+          }),
+        ]),
+      )
+      expect(shareSafePack.matched_nodes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: 'authenticateUser',
+            source_file: 'auth.ts',
+          }),
+        ]),
+      )
+      expect(JSON.stringify(shareSafeReport)).not.toContain(outsideSourcePath)
+    } finally {
+      retrieveSpy.mockRestore()
+    }
   })
 
   it('rejects bounded baseline budgets below the prompt floor', () => {
@@ -1729,6 +1783,61 @@ describe('compare runtime', () => {
     expect(savedReport).toContain('stderr omitted for safety')
     expect(savedReport).not.toContain('super-secret')
     expect(savedReport).not.toContain('abc123')
+  })
+
+  it('sanitizes share-safe compare stderr and evidence paths without changing the local report', async () => {
+    const graph = makeGraph()
+    writeProjectFiles()
+    const graphPath = writeGraphFixture(graph)
+    const overflowPath = resolve(PROJECT_FIXTURE_ROOT, '..', '..', '..', 'vault', 'private', 'overflow.log')
+    const execErrorPath = resolve(PROJECT_FIXTURE_ROOT, '..', '..', '..', 'vault', 'private', 'runner-error.log')
+
+    const result = await executeCompareRuns(
+      {
+        graphPath,
+        question: 'how does login create a session',
+        outputDir: COMPARE_OUTPUT_ROOT,
+        execTemplate: 'runner --prompt {prompt_file} --mode {mode} --out {output_file}',
+        baselineMode: 'full',
+        now: new Date('2026-04-24T19:30:00.000Z'),
+      },
+      {
+        runner: async (execution) => {
+          if (execution.mode === 'baseline') {
+            return {
+              exitCode: 1,
+              stdout: `Prompt is too long while loading ${overflowPath}\n`,
+              stderr: '',
+              elapsedMs: 3,
+            }
+          }
+
+          throw new Error(`Runner crashed while reading ${execErrorPath}`)
+        },
+      },
+    )
+
+    const report = result.reports[0]!
+    const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+    const shareSafeReport = JSON.parse(readFileSync(report.paths.share_safe_report, 'utf8')) as Record<string, unknown>
+
+    expect(report.evidence.baseline).toContain(overflowPath)
+    expect(report.stderr.graphify).toContain(execErrorPath)
+    expect(JSON.stringify(savedReport)).toContain(overflowPath)
+    expect(JSON.stringify(savedReport)).toContain(execErrorPath)
+
+    expect(JSON.stringify(shareSafeReport)).not.toContain(overflowPath)
+    expect(JSON.stringify(shareSafeReport)).not.toContain(execErrorPath)
+    expect(shareSafeReport).toEqual(
+      expect.objectContaining({
+        evidence: expect.objectContaining({
+          baseline: expect.stringContaining('overflow.log'),
+        }),
+        stderr: expect.objectContaining({
+          graphify: expect.stringContaining('runner-error.log'),
+        }),
+      }),
+    )
   })
 
   it('loads graphify snippets when compare runs from outside the inferred project root', () => {

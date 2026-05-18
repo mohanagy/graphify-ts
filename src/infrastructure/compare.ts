@@ -12,7 +12,7 @@ import { parsePromptRunnerOutput, type PromptRunnerUsage } from './prompt-runner
 import { compactRetrieveResult, retrieveContext, tokenizeLabel, type CompactRetrieveResult, type RetrieveResult } from '../runtime/retrieve.js'
 import { QUERY_TOKEN_ESTIMATOR, estimateQueryTokens, loadGraph } from '../runtime/serve.js'
 import { sidecarAwareFileFingerprint } from '../shared/binary-ingest-sidecar.js'
-import { toShareSafeArtifactPath } from '../shared/share-safe-artifacts.js'
+import { sanitizeShareSafeText, type ShareSafePathRoots } from '../shared/share-safe-artifacts.js'
 import { MAX_TEXT_BYTES, validateGraphOutputPath, validateGraphPath } from '../shared/security.js'
 
 export type CompareBaselineMode = 'full' | 'bounded' | 'pack_only' | 'native_agent'
@@ -290,21 +290,7 @@ function writeCompareReport(report: ComparePromptReport): void {
       share_safe_report: portablePath(report.paths.share_safe_report),
     },
   }
-  const shareSafeReport = {
-    ...report,
-    graph_path: toShareSafeArtifactPath(report.graph_path, shareSafeRoots),
-    answer_paths: {
-      baseline: toShareSafeArtifactPath(report.answer_paths.baseline, shareSafeRoots),
-      graphify: toShareSafeArtifactPath(report.answer_paths.graphify, shareSafeRoots),
-    },
-    paths: {
-      output_dir: toShareSafeArtifactPath(report.paths.output_dir, shareSafeRoots),
-      baseline_prompt: toShareSafeArtifactPath(report.paths.baseline_prompt, shareSafeRoots),
-      graphify_prompt: toShareSafeArtifactPath(report.paths.graphify_prompt, shareSafeRoots),
-      report: toShareSafeArtifactPath(report.paths.report, shareSafeRoots),
-      share_safe_report: toShareSafeArtifactPath(report.paths.share_safe_report, shareSafeRoots),
-    },
-  }
+  const shareSafeReport = sanitizeCompareShareSafeValue(report, shareSafeRoots)
 
   writeFileSync(
     report.paths.report,
@@ -316,6 +302,24 @@ function writeCompareReport(report: ComparePromptReport): void {
     `${JSON.stringify(shareSafeReport, null, 2)}\n`,
     'utf8',
   )
+}
+
+function sanitizeCompareShareSafeValue(value: unknown, roots: ShareSafePathRoots): unknown {
+  if (typeof value === 'string') {
+    return sanitizeShareSafeText(value, roots)
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeCompareShareSafeValue(entry, roots))
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, sanitizeCompareShareSafeValue(entry, roots)]),
+    )
+  }
+
+  return value
 }
 
 async function defaultComparePromptRunner(execution: ComparePromptExecution): Promise<ComparePromptRunnerResult> {
