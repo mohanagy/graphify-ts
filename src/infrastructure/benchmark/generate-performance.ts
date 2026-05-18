@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 
 import { generateGraph, type GenerateGraphOptions, type GenerateGraphResult } from '../generate.js'
@@ -70,11 +70,14 @@ function ensureCleanDir(path: string): void {
   mkdirSync(path, { recursive: true })
 }
 
-function directorySize(path: string): number {
+export function directorySize(path: string): number {
   if (!existsSync(path)) {
     return 0
   }
-  const stats = statSync(path)
+  const stats = lstatSync(path)
+  if (stats.isSymbolicLink()) {
+    return 0
+  }
   if (!stats.isDirectory()) {
     return stats.size
   }

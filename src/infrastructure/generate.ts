@@ -291,6 +291,13 @@ export function generateGraph(rootPath = '.', options: GenerateGraphOptions = {}
 
   const codeFiles = detected.files[FileType.CODE]
   const extractableFiles = collectExtractableFiles(detected.files)
+  const nonCodeExtractableFiles = [
+    ...detected.files[FileType.DOCUMENT],
+    ...detected.files[FileType.PAPER],
+    ...detected.files[FileType.IMAGE],
+    ...detected.files[FileType.AUDIO],
+    ...detected.files[FileType.VIDEO],
+  ]
   let extractedFiles = options.clusterOnly ? 0 : extractableFiles.length
   let cacheSummary: GenerateGraphCacheSummary | null = null
 
@@ -310,24 +317,40 @@ export function generateGraph(rootPath = '.', options: GenerateGraphOptions = {}
   // disk cache (#77), so we always do a full SPI build + projection.
   const buildViaSpi = (): ReturnType<typeof buildFromJson> | null => {
     if (extractableFiles.length === 0) return null
-    const built = buildSpiCached({
-      root: resolvedRootPath,
-      graphifyVersion: `spi-extractor-${EXTRACTOR_CACHE_VERSION}`,
-    })
-    extractedFiles = built.cache.hit ? 0 : built.cache.file_count
-    cacheSummary = {
-      strategy: 'spi',
-      hit: built.cache.hit,
-      reason: built.cache.reason,
-      fileCount: built.cache.file_count,
+    const built =
+      codeFiles.length > 0
+        ? buildSpiCached({
+            root: resolvedRootPath,
+            graphifyVersion: `spi-extractor-${EXTRACTOR_CACHE_VERSION}`,
+          })
+        : null
+    const spiExtraction = built ? projectSpiToExtraction(built.spi, { root: resolvedRootPath }) : emptyExtraction()
+    const nonCodeExtraction =
+      nonCodeExtractableFiles.length > 0
+        ? extract(nonCodeExtractableFiles, {
+            allowedTargets: extractableFiles,
+            contextNodes: spiExtraction.nodes,
+          })
+        : emptyExtraction()
+
+    extractedFiles = (built ? (built.cache.hit ? 0 : built.cache.file_count) : 0) + nonCodeExtractableFiles.length
+    cacheSummary = built
+      ? {
+          strategy: 'spi',
+          hit: built.cache.hit,
+          reason: built.cache.reason,
+          fileCount: built.cache.file_count,
+        }
+      : null
+
+    if (built) {
+      if (built.cache.hit) {
+        notes.push(`SPI cache hit (${built.cache.file_count} files, key ${built.cache.cache_key.slice(0, 8)}).`)
+      } else {
+        notes.push(`SPI build via projector (${built.cache.file_count} files, reason=${built.cache.reason}).`)
+      }
     }
-    const extraction = projectSpiToExtraction(built.spi, { root: resolvedRootPath })
-    if (built.cache.hit) {
-      notes.push(`SPI cache hit (${built.cache.file_count} files, key ${built.cache.cache_key.slice(0, 8)}).`)
-    } else {
-      notes.push(`SPI build via projector (${built.cache.file_count} files, reason=${built.cache.reason}).`)
-    }
-    return buildFromJson(extraction, { directed })
+    return buildFromJson(mergeExtractions([spiExtraction, nonCodeExtraction]), { directed })
   }
 
   const graph = options.clusterOnly

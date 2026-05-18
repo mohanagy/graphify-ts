@@ -4827,8 +4827,8 @@ describe('generateGraph', () => {
     })
   })
 
-  test('returns structured extraction and cache metrics for generate, update, and cluster-only flows', () => {
-    withTempDir((tempDir) => {
+  test('returns structured extraction and cache metrics for generate, update, and cluster-only flows', async () => {
+    await withTempDirAsync(async (tempDir) => {
       mkdirSync(join(tempDir, 'src'), { recursive: true })
       mkdirSync(join(tempDir, 'docs'), { recursive: true })
       writeFileSync(join(tempDir, 'src', 'alpha.ts'), 'export function alpha(): number { return 1 }\n', 'utf8')
@@ -4846,7 +4846,7 @@ describe('generateGraph', () => {
 
       const spiCold = generateGraph(tempDir, { useSpi: true, noHtml: true })
       expect(spiCold.extractableFiles).toBe(3)
-      expect(spiCold.extractedFiles).toBe(2)
+      expect(spiCold.extractedFiles).toBe(3)
       expect(spiCold.cache).toEqual(expect.objectContaining({
         strategy: 'spi',
         hit: false,
@@ -4856,7 +4856,7 @@ describe('generateGraph', () => {
 
       const spiWarm = generateGraph(tempDir, { useSpi: true, noHtml: true })
       expect(spiWarm.extractableFiles).toBe(3)
-      expect(spiWarm.extractedFiles).toBe(0)
+      expect(spiWarm.extractedFiles).toBe(1)
       expect(spiWarm.cache).toEqual(expect.objectContaining({
         strategy: 'spi',
         hit: true,
@@ -4870,6 +4870,7 @@ describe('generateGraph', () => {
       expect(updateNoop.extractedFiles).toBe(0)
       expect(updateNoop.cache).toBeNull()
 
+      await delay(10)
       writeFileSync(join(tempDir, 'src', 'beta.ts'), 'export function beta(): number { return 2 }\n', 'utf8')
       const updateChanged = generateGraph(tempDir, { update: true, noHtml: true })
       expect(updateChanged.extractableFiles).toBe(3)

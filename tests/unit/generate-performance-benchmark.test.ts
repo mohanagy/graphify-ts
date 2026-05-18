@@ -1,10 +1,10 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { runGeneratePerformanceBenchmark } from '../../src/infrastructure/benchmark/generate-performance.js'
+import { directorySize, runGeneratePerformanceBenchmark } from '../../src/infrastructure/benchmark/generate-performance.js'
 
 function withTempDir(run: (dir: string) => void): void {
   const dir = mkdtempSync(join(tmpdir(), 'graphify-generate-benchmark-'))
@@ -76,14 +76,14 @@ describe('generate performance benchmark harness', () => {
         strategy: 'spi',
         cache_hit: false,
         cache_reason: 'no-cache',
-        extracted_files: 2,
+        extracted_files: 3,
       }))
       expect(summary.variants['generate-spi-warm']).toEqual(expect.objectContaining({
         mode: 'generate',
         strategy: 'spi',
         cache_hit: true,
         cache_reason: 'fresh-cache',
-        extracted_files: 0,
+        extracted_files: 1,
       }))
       expect(summary.variants['update-noop']).toEqual(expect.objectContaining({
         mode: 'update',
@@ -114,5 +114,19 @@ describe('generate performance benchmark harness', () => {
 
     expect(runner).toContain('runGeneratePerformanceBenchmark')
     expect(runner).toContain('GRAPHIFY_PERF_RESULTS_DIR')
+  })
+
+  it.runIf(process.platform !== 'win32')('ignores symlinks when measuring output directory size', () => {
+    withTempDir((dir) => {
+      const root = join(dir, 'root')
+      const outside = join(dir, 'outside')
+      mkdirSync(root, { recursive: true })
+      mkdirSync(outside, { recursive: true })
+      writeFileSync(join(root, 'report.json'), '{}\n', 'utf8')
+      writeFileSync(join(outside, 'large.bin'), 'x'.repeat(2048), 'utf8')
+      symlinkSync(outside, join(root, 'linked-outside'), 'dir')
+
+      expect(directorySize(root)).toBe(Buffer.byteLength('{}\n'))
+    })
   })
 })
