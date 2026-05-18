@@ -12,7 +12,7 @@ import { parsePromptRunnerOutput, type PromptRunnerUsage } from './prompt-runner
 import { compactRetrieveResult, retrieveContext, tokenizeLabel, type CompactRetrieveResult, type RetrieveResult } from '../runtime/retrieve.js'
 import { QUERY_TOKEN_ESTIMATOR, estimateQueryTokens, loadGraph } from '../runtime/serve.js'
 import { sidecarAwareFileFingerprint } from '../shared/binary-ingest-sidecar.js'
-import { sanitizeShareSafeText, type ShareSafePathRoots } from '../shared/share-safe-artifacts.js'
+import { sanitizeShareSafeText, toShareSafeArtifactPath, type ShareSafePathRoots } from '../shared/share-safe-artifacts.js'
 import { MAX_TEXT_BYTES, validateGraphOutputPath, validateGraphPath } from '../shared/security.js'
 
 export type CompareBaselineMode = 'full' | 'bounded' | 'pack_only' | 'native_agent'
@@ -304,18 +304,51 @@ function writeCompareReport(report: ComparePromptReport): void {
   )
 }
 
-function sanitizeCompareShareSafeValue(value: unknown, roots: ShareSafePathRoots): unknown {
+function isAbsolutePathLike(value: string): boolean {
+  const normalized = value.replaceAll('\\', '/')
+  return normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)
+}
+
+function sanitizeCompareShareSafePath(value: string, roots: ShareSafePathRoots): string {
+  return isAbsolutePathLike(value) ? toShareSafeArtifactPath(value, roots) : value
+}
+
+function shouldSanitizeCompareShareSafeText(path: readonly string[]): boolean {
+  const rootKey = path[0]
+  return rootKey === 'stderr' || rootKey === 'evidence'
+}
+
+function shouldSanitizeCompareShareSafePath(path: readonly string[]): boolean {
+  const key = path[path.length - 1]
+  const parentKey = path[path.length - 2]
+
+  return (
+    key === 'graph_path' ||
+    key === 'source_file' ||
+    key === 'focus_files' ||
+    parentKey === 'paths' ||
+    parentKey === 'answer_paths'
+  )
+}
+
+function sanitizeCompareShareSafeValue(value: unknown, roots: ShareSafePathRoots, path: string[] = []): unknown {
   if (typeof value === 'string') {
-    return sanitizeShareSafeText(value, roots)
+    if (shouldSanitizeCompareShareSafeText(path)) {
+      return sanitizeShareSafeText(value, roots)
+    }
+    if (shouldSanitizeCompareShareSafePath(path)) {
+      return sanitizeCompareShareSafePath(value, roots)
+    }
+    return value
   }
 
   if (Array.isArray(value)) {
-    return value.map((entry) => sanitizeCompareShareSafeValue(entry, roots))
+    return value.map((entry) => sanitizeCompareShareSafeValue(entry, roots, path))
   }
 
   if (value && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, sanitizeCompareShareSafeValue(entry, roots)]),
+      Object.entries(value).map(([key, entry]) => [key, sanitizeCompareShareSafeValue(entry, roots, [...path, key])]),
     )
   }
 

@@ -596,7 +596,7 @@ describe('compare runtime', () => {
     )
   })
 
-  it('sanitizes pack_only source_file paths in share-safe compare reports', () => {
+  it('preserves repo-relative pack_only source_file paths while sanitizing absolute ones in share-safe compare reports', () => {
     const graph = makeGraph()
     writeProjectFiles()
     const graphPath = writeGraphFixture(graph)
@@ -632,6 +632,10 @@ describe('compare runtime', () => {
             label: 'authenticateUser',
             source_file: outsideSourcePath,
           }),
+          expect.objectContaining({
+            label: 'SessionManager',
+            source_file: 'src/session.ts',
+          }),
         ]),
       )
       expect(shareSafePack.matched_nodes).toEqual(
@@ -639,6 +643,10 @@ describe('compare runtime', () => {
           expect.objectContaining({
             label: 'authenticateUser',
             source_file: 'auth.ts',
+          }),
+          expect.objectContaining({
+            label: 'SessionManager',
+            source_file: 'src/session.ts',
           }),
         ]),
       )
