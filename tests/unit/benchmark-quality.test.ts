@@ -71,6 +71,7 @@ const RUNNER_OUTPUT_DIR = join(process.cwd(), 'graphify-out', 'benchmark-quality
 const SHARED_PACK_QUALITY_GATES_PATH = join(process.cwd(), 'docs', 'benchmarks', 'govalidate-suite', 'quality-gates.json')
 
 interface SharedPackQualityGate {
+  prompt: string
   required_labels: string[]
   forbidden_labels: string[]
   max_pack_tokens: number
@@ -510,6 +511,8 @@ describe('shared GoValidate pack-quality gate config', () => {
 
     for (const [gateName, gate] of entries) {
       expect(gateName.length).toBeGreaterThan(0)
+      expect(typeof gate.prompt).toBe('string')
+      expect(gate.prompt.trim().length).toBeGreaterThan(0)
       expect(gate.required_labels.length).toBeGreaterThan(0)
       expect(Array.isArray(gate.forbidden_labels)).toBe(true)
       expect(Number.isFinite(gate.max_pack_tokens)).toBe(true)

@@ -14,6 +14,7 @@ const PACK_VERIFIER_PATH = resolve('docs', 'benchmarks', 'govalidate-suite', 've
 const PACK_GATE_CONFIG_PATH = resolve('docs', 'benchmarks', 'govalidate-suite', 'quality-gates.json')
 
 interface PackQualityGateDefinition {
+  prompt: string
   required_labels: string[]
   forbidden_labels: string[]
   max_pack_tokens: number
@@ -22,6 +23,7 @@ interface PackQualityGateDefinition {
 }
 
 const DOCS_ARTIFACT_GATE: PackQualityGateDefinition = {
+  prompt: 'Explain how idea report is getting generated',
   required_labels: ['IdeaReportController', 'GenerateIdeaReportService'],
   forbidden_labels: ['IdeaReportSharePage', 'GenerateIdeaReportScript'],
   max_pack_tokens: 1_456,
@@ -121,7 +123,7 @@ function runPackVerifier(
   testName: string,
   pack: CompareReportPack,
   options: {
-    gateConfig?: Record<string, PackQualityGateDefinition>
+    gateConfig?: Record<string, unknown>
     relativeConfigPath?: boolean
     relativeReportPath?: boolean
   } = {},
@@ -153,6 +155,10 @@ function runPackVerifier(
 
 function combinedOutput(result: ReturnType<typeof spawnSync>): string {
   return `${result.stdout ?? ''}${result.stderr ?? ''}`.trim()
+}
+
+function toPosixPath(path: string): string {
+  return path.replaceAll('\\', '/')
 }
 
 describe('public benchmark artifact (2026-04-30 govalidate)', () => {
@@ -290,8 +296,8 @@ describe('public benchmark artifact (2026-05-12 govalidate report generation)', 
   })
 
   it('README points readers to the shared suite verifier and gate config', () => {
-    expect(readme).toContain(relative(process.cwd(), PACK_VERIFIER_PATH))
-    expect(readme).toContain(relative(process.cwd(), PACK_GATE_CONFIG_PATH))
+    expect(readme).toContain(toPosixPath(relative(process.cwd(), PACK_VERIFIER_PATH)))
+    expect(readme).toContain(toPosixPath(relative(process.cwd(), PACK_GATE_CONFIG_PATH)))
   })
 })
 
@@ -331,6 +337,43 @@ describe('shared GoValidate pack-quality verifier contract', () => {
     expect(output).toContain('pack.token_count 1457 exceeds max_pack_tokens 1456')
     expect(output).toContain('pack.matched_nodes count 39 exceeds max_matched_nodes 38')
     expect(output).toContain('pack.relationships count 58 exceeds max_relationships 57')
+  })
+
+  it('rejects gate configs that omit prompt even when selected by gate name', () => {
+    const result = runPackVerifier('missing-prompt', buildPackFixture(), {
+      gateConfig: {
+        'docs-artifact': {
+          required_labels: DOCS_ARTIFACT_GATE.required_labels,
+          forbidden_labels: DOCS_ARTIFACT_GATE.forbidden_labels,
+          max_pack_tokens: DOCS_ARTIFACT_GATE.max_pack_tokens,
+          max_matched_nodes: DOCS_ARTIFACT_GATE.max_matched_nodes,
+          max_relationships: DOCS_ARTIFACT_GATE.max_relationships,
+        },
+      },
+    })
+
+    expect(result.status).not.toBe(0)
+    expect(combinedOutput(result)).toContain('Malformed gate definition for docs-artifact: prompt must be a non-empty string')
+  })
+
+  it('rejects compare reports with fractional token counts', () => {
+    const result = runPackVerifier(
+      'fractional-token-count',
+      buildPackFixture({ token_count: 1456.5 }),
+    )
+
+    expect(result.status).not.toBe(0)
+    expect(combinedOutput(result)).toContain('Malformed compare report: pack.token_count must be a non-negative integer')
+  })
+
+  it('rejects compare reports with negative token counts', () => {
+    const result = runPackVerifier(
+      'negative-token-count',
+      buildPackFixture({ token_count: -1 }),
+    )
+
+    expect(result.status).not.toBe(0)
+    expect(combinedOutput(result)).toContain('Malformed compare report: pack.token_count must be a non-negative integer')
   })
 
   it('resolves relative --config paths from the current working directory like --report', () => {

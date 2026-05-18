@@ -104,12 +104,12 @@ function validateGateDefinition(gateName, gate) {
   if (!Number.isInteger(maxRelationships) || maxRelationships < 0) {
     fail(`Malformed gate definition for ${gateName}: max_relationships must be a non-negative integer`)
   }
-  if ('prompt' in gate && (typeof gate.prompt !== 'string' || gate.prompt.trim() === '')) {
-    fail(`Malformed gate definition for ${gateName}: prompt must be a non-empty string when provided`)
+  if (typeof gate.prompt !== 'string' || gate.prompt.trim() === '') {
+    fail(`Malformed gate definition for ${gateName}: prompt must be a non-empty string`)
   }
 
   return {
-    prompt: typeof gate.prompt === 'string' ? gate.prompt : null,
+    prompt: gate.prompt.trim(),
     required_labels: requiredLabels,
     forbidden_labels: forbiddenLabels,
     max_pack_tokens: maxPackTokens,
@@ -163,8 +163,8 @@ function validateReport(reportPath) {
   }
 
   const { pack } = report
-  if (!Number.isFinite(pack.token_count)) {
-    fail(`Malformed compare report: pack.token_count must be a finite number`)
+  if (!Number.isInteger(pack.token_count) || pack.token_count < 0) {
+    fail(`Malformed compare report: pack.token_count must be a non-negative integer`)
   }
   if (!Array.isArray(pack.matched_nodes)) {
     fail(`Malformed compare report: pack.matched_nodes must be an array`)
