@@ -309,8 +309,35 @@ function isAbsolutePathLike(value: string): boolean {
   return normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)
 }
 
-function sanitizeCompareShareSafePath(value: string, roots: ShareSafePathRoots): string {
-  return isAbsolutePathLike(value) ? toShareSafeArtifactPath(value, roots) : value
+function compareShareSafePathRoots(path: readonly string[], roots: ShareSafePathRoots): string[] {
+  const key = path[path.length - 1]
+  const parentKey = path[path.length - 2]
+
+  if (parentKey === 'paths' || parentKey === 'answer_paths') {
+    return [roots.artifactRoot]
+  }
+
+  if (key === 'graph_path' || key === 'source_file' || key === 'focus_files') {
+    return [roots.projectRoot]
+  }
+
+  return [roots.projectRoot, roots.artifactRoot]
+}
+
+function sanitizeCompareShareSafePath(value: string, roots: ShareSafePathRoots, path: readonly string[]): string {
+  if (isAbsolutePathLike(value)) {
+    return toShareSafeArtifactPath(value, roots)
+  }
+
+  const candidateRoots = compareShareSafePathRoots(path, roots)
+  for (const root of candidateRoots) {
+    if (isPathWithinRoot(resolve(root, value), root)) {
+      return value
+    }
+  }
+
+  const fallbackRoot = candidateRoots[0] ?? roots.projectRoot
+  return toShareSafeArtifactPath(resolve(fallbackRoot, value), roots)
 }
 
 function shouldSanitizeCompareShareSafeText(path: readonly string[]): boolean {
@@ -337,7 +364,7 @@ function sanitizeCompareShareSafeValue(value: unknown, roots: ShareSafePathRoots
       return sanitizeShareSafeText(value, roots)
     }
     if (shouldSanitizeCompareShareSafePath(path)) {
-      return sanitizeCompareShareSafePath(value, roots)
+      return sanitizeCompareShareSafePath(value, roots, path)
     }
     return value
   }

@@ -656,6 +656,58 @@ describe('compare runtime', () => {
     }
   })
 
+  it('sanitizes outside-root relative traversal source_file paths in share-safe compare reports', () => {
+    const graph = makeGraph()
+    writeProjectFiles()
+    const graphPath = writeGraphFixture(graph)
+    const outsideTraversalPath = '../../vault/private/auth.ts'
+    const originalRetrieveContext = retrieveRuntime.retrieveContext
+    const retrieveSpy = vi.spyOn(retrieveRuntime, 'retrieveContext').mockImplementation((inputGraph, options) => ({
+      ...originalRetrieveContext(inputGraph, options),
+      matched_nodes: originalRetrieveContext(inputGraph, options).matched_nodes.map((node) =>
+        node.label === 'authenticateUser' ? { ...node, source_file: outsideTraversalPath } : node,
+      ),
+    }))
+
+    try {
+      const result = generateCompareArtifacts({
+        graphPath,
+        question: 'how does login create a session',
+        corpusText: makeCorpusText(),
+        outputDir: COMPARE_OUTPUT_ROOT,
+        execTemplate: 'runner --prompt {prompt_file} --question {question} --mode {mode} --out {output_file}',
+        baselineMode: 'pack_only',
+        now: new Date('2026-04-24T19:30:00.000Z'),
+      })
+
+      const report = result.reports[0]!
+      const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+      const shareSafeReport = JSON.parse(readFileSync(report.paths.share_safe_report, 'utf8')) as Record<string, unknown>
+      const savedPack = savedReport.pack as { matched_nodes: Array<{ label: string; source_file: string }> }
+      const shareSafePack = shareSafeReport.pack as { matched_nodes: Array<{ label: string; source_file: string }> }
+
+      expect(savedPack.matched_nodes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: 'authenticateUser',
+            source_file: outsideTraversalPath,
+          }),
+        ]),
+      )
+      expect(shareSafePack.matched_nodes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: 'authenticateUser',
+            source_file: 'auth.ts',
+          }),
+        ]),
+      )
+      expect(JSON.stringify(shareSafeReport)).not.toContain(outsideTraversalPath)
+    } finally {
+      retrieveSpy.mockRestore()
+    }
+  })
+
   it('rejects bounded baseline budgets below the prompt floor', () => {
     const graph = makeGraph()
     const corpusText = makeCorpusText()
