@@ -47,6 +47,16 @@ export interface GeneratePerformanceBenchmarkSummary {
 }
 
 const CODE_MUTATION_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.java'])
+const CODE_MUTATION_MARKERS: Record<string, string> = {
+  '.ts': 'export const __graphifyBenchmarkTouch = true',
+  '.tsx': 'export const __graphifyBenchmarkTouch = true',
+  '.js': 'export const __graphifyBenchmarkTouch = true',
+  '.jsx': 'export const __graphifyBenchmarkTouch = true',
+  '.py': '# __graphifyBenchmarkTouch = True',
+  '.go': '// __graphifyBenchmarkTouch = true',
+  '.rs': '// __graphifyBenchmarkTouch = true',
+  '.java': '// __graphifyBenchmarkTouch = true',
+}
 const METRICS_TRACKED = [
   'wall_clock_ms',
   'total_files',
@@ -142,8 +152,12 @@ function appendMutation(root: string): void {
     if (!current) {
       continue
     }
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
+    const entries = readdirSync(current, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))
+    for (const entry of entries) {
       const path = join(current, entry.name)
+      if (entry.isSymbolicLink()) {
+        continue
+      }
       if (entry.isDirectory()) {
         if (entry.name === 'graphify-out') {
           continue
@@ -151,8 +165,10 @@ function appendMutation(root: string): void {
         stack.push(path)
         continue
       }
-      if (CODE_MUTATION_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
-        writeFileSync(path, `${readFileSync(path, 'utf8')}\nexport const __graphifyBenchmarkTouch = true\n`, 'utf8')
+      const extension = extname(entry.name).toLowerCase()
+      if (CODE_MUTATION_EXTENSIONS.has(extension)) {
+        const marker = CODE_MUTATION_MARKERS[extension]
+        writeFileSync(path, `${readFileSync(path, 'utf8')}\n${marker}\n`, 'utf8')
         return
       }
     }

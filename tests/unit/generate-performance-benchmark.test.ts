@@ -129,4 +129,32 @@ describe('generate performance benchmark harness', () => {
       expect(directorySize(root)).toBe(Buffer.byteLength('{}\n'))
     })
   })
+
+  it.runIf(process.platform !== 'win32')('mutates the first real code file deterministically with language-appropriate syntax and skips symlinks', () => {
+    withTempDir((dir) => {
+      const fixtureRoot = join(dir, 'fixture')
+      const workDir = join(dir, 'runs')
+      const outside = join(dir, 'outside')
+      mkdirSync(fixtureRoot, { recursive: true })
+      mkdirSync(outside, { recursive: true })
+
+      writeFileSync(join(fixtureRoot, 'a.py'), 'def alpha():\n    return 1\n', 'utf8')
+      writeFileSync(join(fixtureRoot, 'z.ts'), 'export function zeta(): number { return 1 }\n', 'utf8')
+      writeFileSync(join(outside, 'linked.js'), 'export const linked = true\n', 'utf8')
+      symlinkSync(join(outside, 'linked.js'), join(fixtureRoot, 'b.js'))
+
+      runGeneratePerformanceBenchmark({
+        fixtureRoot,
+        workDir,
+      })
+
+      const mutatedPython = readFileSync(join(workDir, 'workspaces', 'update-changed', 'a.py'), 'utf8')
+      const untouchedTs = readFileSync(join(workDir, 'workspaces', 'update-changed', 'z.ts'), 'utf8')
+      const outsideTarget = readFileSync(join(outside, 'linked.js'), 'utf8')
+
+      expect(mutatedPython).toContain('# __graphifyBenchmarkTouch = True')
+      expect(untouchedTs).not.toContain('__graphifyBenchmarkTouch')
+      expect(outsideTarget).not.toContain('__graphifyBenchmarkTouch')
+    })
+  })
 })
