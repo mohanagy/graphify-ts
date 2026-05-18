@@ -22,6 +22,7 @@ import * as retrieveRuntime from '../../src/runtime/retrieve.js'
 import { retrieveContext } from '../../src/runtime/retrieve.js'
 import { estimateQueryTokens } from '../../src/runtime/serve.js'
 import { MAX_TEXT_BYTES } from '../../src/shared/security.js'
+import { sanitizeShareSafeText } from '../../src/shared/share-safe-artifacts.js'
 
 const PROJECT_FIXTURE_ROOT = resolve('graphify-out', 'test-runtime', 'compare-runtime-project')
 const GRAPH_FIXTURE_ROOT = join(PROJECT_FIXTURE_ROOT, 'graphify-out')
@@ -1909,6 +1910,404 @@ describe('compare runtime', () => {
         }),
       }),
     )
+  })
+
+  it('continues redacting later absolute paths after spaced share-safe placeholders', () => {
+    const projectRoot = PROJECT_FIXTURE_ROOT
+    const artifactRoot = join(COMPARE_OUTPUT_ROOT, 'placeholder-run')
+    const secretPath = join(PROJECT_FIXTURE_ROOT, 'Quarterly Reports', 'review notes.txt')
+
+    mkdirSync(dirname(secretPath), { recursive: true })
+    mkdirSync(artifactRoot, { recursive: true })
+    writeFileSync(secretPath, 'export const secret = true\n', 'utf8')
+
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/Quarterly Reports/review notes.txt and /etc/passwd',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/Quarterly Reports/review notes.txt and passwd')
+  })
+
+  it('preserves spaced share-safe placeholders even when the referenced file does not exist', () => {
+    const projectRoot = PROJECT_FIXTURE_ROOT
+    const artifactRoot = join(COMPARE_OUTPUT_ROOT, 'placeholder-run')
+
+    mkdirSync(artifactRoot, { recursive: true })
+
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/Quarterly Reports/missing notes.txt and /etc/passwd',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/Quarterly Reports/missing notes.txt and passwd')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/Quarterly Reports/missing notes.txt',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/Quarterly Reports/missing notes.txt')
+  })
+
+  it('does not let dotted prose inside a spaced placeholder hide later absolute paths', () => {
+    const projectRoot = PROJECT_FIXTURE_ROOT
+    const artifactRoot = join(COMPARE_OUTPUT_ROOT, 'placeholder-run')
+
+    mkdirSync(artifactRoot, { recursive: true })
+
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/foo v1.2 beta.3 /etc/passwd',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/foo v1.2 beta.3 passwd')
+  })
+
+  it('preserves non-existent spaced placeholder directories without hiding later absolute paths', () => {
+    const projectRoot = PROJECT_FIXTURE_ROOT
+    const artifactRoot = join(COMPARE_OUTPUT_ROOT, 'placeholder-run')
+
+    mkdirSync(artifactRoot, { recursive: true })
+
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/dir with space/subdir and /etc/passwd',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/dir with space/subdir and passwd')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/dir with space/subdir',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/dir with space/subdir')
+  })
+
+  it('keeps redacting punctuation-attached absolute paths after spaced placeholders', () => {
+    const projectRoot = PROJECT_FIXTURE_ROOT
+    const artifactRoot = join(COMPARE_OUTPUT_ROOT, 'placeholder-run')
+    const secretPath = join(PROJECT_FIXTURE_ROOT, 'Quarterly Reports', 'review notes.txt')
+
+    mkdirSync(dirname(secretPath), { recursive: true })
+    mkdirSync(artifactRoot, { recursive: true })
+    writeFileSync(secretPath, 'export const secret = true\n', 'utf8')
+
+    const traversalPath = relative(artifactRoot, secretPath)
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/dir with space,/etc/passwd',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/dir with space,passwd')
+    expect(
+      sanitizeShareSafeText(
+        `${traversalPath},/etc/passwd`,
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/Quarterly Reports/review notes.txt,passwd')
+  })
+
+  it('keeps redacting punctuation-attached Windows absolute paths after protected prefixes', () => {
+    const projectRoot = PROJECT_FIXTURE_ROOT
+    const artifactRoot = join(COMPARE_OUTPUT_ROOT, 'placeholder-run')
+    const secretPath = join(PROJECT_FIXTURE_ROOT, 'Quarterly Reports', 'review notes.txt')
+    const uncWindowsPath = String.raw`\\server\share\secret.txt`
+
+    mkdirSync(dirname(secretPath), { recursive: true })
+    mkdirSync(artifactRoot, { recursive: true })
+    writeFileSync(secretPath, 'export const secret = true\n', 'utf8')
+
+    const traversalPath = relative(artifactRoot, secretPath)
+    const windowsSlashPath = 'C:/Windows/system32/drivers/etc/hosts'
+    const windowsBackslashPath = 'C:\\Windows\\system32\\drivers\\etc\\hosts'
+    const spacedWindowsPath = 'C:/Users/Alice/My Secrets/secret.txt'
+
+    expect(
+      sanitizeShareSafeText(
+        `<project-root>/Quarterly Reports/review notes.txt,${windowsSlashPath}`,
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/Quarterly Reports/review notes.txt,hosts')
+    expect(
+      sanitizeShareSafeText(
+        `<project-root>/Quarterly Reports/review notes.txt,${windowsBackslashPath}`,
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/Quarterly Reports/review notes.txt,hosts')
+    expect(
+      sanitizeShareSafeText(
+        `${traversalPath},${windowsSlashPath}`,
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/Quarterly Reports/review notes.txt,hosts')
+    expect(
+      sanitizeShareSafeText(
+        `<project-root>/Quarterly Reports,${spacedWindowsPath}`,
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/Quarterly Reports,secret.txt')
+    expect(
+      sanitizeShareSafeText(
+        `<project-root>/Quarterly Reports/review notes.txt,${uncWindowsPath}`,
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/Quarterly Reports/review notes.txt,secret.txt')
+    expect(
+      sanitizeShareSafeText(
+        `before ${uncWindowsPath} after`,
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('before secret.txt after')
+    expect(
+      sanitizeShareSafeText(
+        'x,C:/Windows/notepad.exe,C:/Windows/system.ini',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('x,notepad.exe,system.ini')
+  })
+
+  it('keeps redacting separator-restarted absolute paths after protected prefixes', () => {
+    const projectRoot = PROJECT_FIXTURE_ROOT
+    const artifactRoot = join(COMPARE_OUTPUT_ROOT, 'placeholder-run')
+
+    mkdirSync(artifactRoot, { recursive: true })
+
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/foo//etc/passwd',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/foo/passwd')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/foo/C:/Users/alice/secret.txt',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/foo/secret.txt')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/dir with space/subdir:/Users/alice/secret.txt',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/dir with space/subdir:secret.txt')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/missing notes:/etc/passwd',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/missing notes:passwd')
+  })
+
+  it('preserves punctuation-delimited prose after sanitizing traversal paths with spaces', () => {
+    const projectRoot = PROJECT_FIXTURE_ROOT
+    const artifactRoot = join(COMPARE_OUTPUT_ROOT, 'placeholder-run')
+    const secretPath = join(PROJECT_FIXTURE_ROOT, 'Quarterly Reports', 'review notes.txt')
+
+    mkdirSync(dirname(secretPath), { recursive: true })
+    mkdirSync(artifactRoot, { recursive: true })
+    writeFileSync(secretPath, 'export const secret = true\n', 'utf8')
+
+    const traversalPath = relative(artifactRoot, secretPath)
+    expect(
+      sanitizeShareSafeText(
+        `${traversalPath}: details`,
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/Quarterly Reports/review notes.txt: details')
+    expect(
+      sanitizeShareSafeText(
+        `${traversalPath}:${traversalPath}`,
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/Quarterly Reports/review notes.txt:<project-root>/Quarterly Reports/review notes.txt')
+  })
+
+  it('preserves protocol-relative URLs while still sanitizing double-slash paths', () => {
+    const projectRoot = PROJECT_FIXTURE_ROOT
+    const artifactRoot = join(COMPARE_OUTPUT_ROOT, 'placeholder-run')
+
+    mkdirSync(artifactRoot, { recursive: true })
+
+    expect(
+      sanitizeShareSafeText(
+        '//example.com/foo',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('//example.com/foo')
+    expect(
+      sanitizeShareSafeText(
+        'See //example.com/foo for docs',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('See //example.com/foo for docs')
+    expect(
+      sanitizeShareSafeText(
+        '//example.com/api/v1/users',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('//example.com/api/v1/users')
+    expect(
+      sanitizeShareSafeText(
+        'See //example.com/blog/2026/launch for details',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('See //example.com/blog/2026/launch for details')
+    expect(
+      sanitizeShareSafeText(
+        '//example.com/docs/getting-started',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('//example.com/docs/getting-started')
+    expect(
+      sanitizeShareSafeText(
+        '//github.com/openai/gpt-5',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('//github.com/openai/gpt-5')
+    expect(
+      sanitizeShareSafeText(
+        'See //example.com/foo/bar for docs',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('See //example.com/foo/bar for docs')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/safe://example.com/docs/getting-started',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/safe://example.com/docs/getting-started')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/src/auth.ts://github.com/openai/gpt-5',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/src/auth.ts://github.com/openai/gpt-5')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/safe://example.com/foo/bar',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/safe://example.com/foo/bar')
+    expect(
+      sanitizeShareSafeText(
+        '//cdn.example.com/assets/app.js',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('//cdn.example.com/assets/app.js')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/safe://cdn.example.com/assets/app.js',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/safe://cdn.example.com/assets/app.js')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/Quarterly Reports/review notes.txt://example.com/foo',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/Quarterly Reports/review notes.txt://example.com/foo')
+    expect(
+      sanitizeShareSafeText(
+        'foo.bar://example.com/a/b',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('foo.bar://example.com/a/b')
+    expect(
+      sanitizeShareSafeText(
+        '//server/share/secret.txt',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('secret.txt')
+    expect(
+      sanitizeShareSafeText(
+        '//server.example.com/share/secret.txt',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('secret.txt')
+    expect(
+      sanitizeShareSafeText(
+        '//server.example.com/share/secret',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('secret')
+    expect(
+      sanitizeShareSafeText(
+        '//server.example.com/Engineering/secret.txt',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('secret.txt')
+    expect(
+      sanitizeShareSafeText(
+        '//server.example.com/engineering/secret',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('secret')
+    expect(
+      sanitizeShareSafeText(
+        '//corp.example.com/alice/secret',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('secret')
+    expect(
+      sanitizeShareSafeText(
+        '//server.example.com/Engineering',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('Engineering')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/foo//server.example.com/share/secret.txt',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/foo/secret.txt')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/foo//server.example.com/share/secret',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/foo/secret')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/foo//server.example.com/Engineering/secret.txt',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/foo/secret.txt')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/safe://corp.example.com/alice/secret',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/safe:<external-path>secret')
+    expect(
+      sanitizeShareSafeText(
+        'See //server.example.com/Engineering for access',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('See Engineering for access')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/safe://etc/passwd',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/safe:<external-path>passwd')
+    expect(
+      sanitizeShareSafeText(
+        '<project-root>/safe://C:/Users/alice/secret.txt',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('<project-root>/safe:<external-path>secret.txt')
+    expect(
+      sanitizeShareSafeText(
+        'see file:///etc/passwd and file:///C:/Users/alice/Documents/secret.txt',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('see file://passwd and file://secret.txt')
+    expect(
+      sanitizeShareSafeText(
+        'See.file:///etc/passwd',
+        { artifactRoot, projectRoot },
+      ),
+    ).toBe('See.file://passwd')
   })
 
   it('sanitizes escaped artifact-root answer path traversals without reclassifying them under the project root', async () => {
