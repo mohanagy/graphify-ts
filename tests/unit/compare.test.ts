@@ -1094,6 +1094,96 @@ describe('compare runtime', () => {
     expect(graphifyTraceJson).not.toContain(privateToolArgument)
   })
 
+  it('preserves compact graphify trace metadata when graphify exits non-zero with structured stdout', async () => {
+    const graph = makeGraph()
+    writeProjectFiles()
+    const graphPath = writeGraphFixture(graph)
+    const privateQuestionPayload = 'PRIVATE_FAILED_QUESTION_PAYLOAD'
+    const privateToolArgument = 'PRIVATE_FAILED_TOOL_ARGUMENT'
+
+    const result = await executeCompareRuns(
+      {
+        graphPath,
+        question: 'how does login create a session',
+        outputDir: COMPARE_OUTPUT_ROOT,
+        execTemplate: 'runner --prompt {prompt_file} --mode {mode} --out {output_file}',
+        baselineMode: 'full',
+        now: new Date('2026-04-24T19:30:00.000Z'),
+      },
+      {
+        runner: async (execution) => ({
+          exitCode: execution.mode === 'graphify' ? 23 : 0,
+          stdout:
+            execution.mode === 'baseline'
+              ? makeClaudeStructuredCompareStdout({
+                  result: 'baseline answer\n',
+                  usage: {
+                    input_tokens: 1200,
+                    output_tokens: 90,
+                    cache_creation_input_tokens: 100,
+                    cache_read_input_tokens: 20,
+                  },
+                })
+              : makeClaudeStructuredCompareStdout({
+                  result: 'graphify partial output\n',
+                  usage: {
+                    input_tokens: 400,
+                    output_tokens: 70,
+                    cache_creation_input_tokens: 0,
+                    cache_read_input_tokens: 10,
+                  },
+                  assistant_turns: [
+                    {
+                      turn: 1,
+                      content: [
+                        {
+                          type: 'tool_use',
+                          name: 'retrieve',
+                          input: { question: privateQuestionPayload },
+                        },
+                        {
+                          type: 'tool_use',
+                          name: 'mcp__graphify-ts__impact',
+                          input: { label: 'SessionManager', note: privateToolArgument },
+                        },
+                      ],
+                    },
+                  ],
+                }),
+          stderr: execution.mode === 'graphify' ? 'runner exited with a failure\n' : '',
+          elapsedMs: execution.mode === 'baseline' ? 11 : 17,
+        }),
+      },
+    )
+
+    const report = result.reports[0]!
+    const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+    const graphifyTrace = savedReport.graphify_trace as Record<string, unknown> | undefined
+    const graphifyTraceJson = JSON.stringify(graphifyTrace ?? null)
+
+    expect(report.status.graphify).toBe('failed')
+    expect(report.usage.graphify).toBeNull()
+    expect(readFileSync(report.answer_paths.graphify, 'utf8')).toBe('graphify partial output\n')
+    expect(graphifyTrace).toEqual(
+      expect.objectContaining({
+        tool_call_count: 2,
+        tool_calls_by_name: {
+          'mcp__graphify-ts__impact': 1,
+          retrieve: 1,
+        },
+        per_turn: [
+          expect.objectContaining({
+            turn: 1,
+            tool_call_count: 2,
+            tools: ['retrieve', 'mcp__graphify-ts__impact'],
+          }),
+        ],
+      }),
+    )
+    expect(graphifyTraceJson).not.toContain(privateQuestionPayload)
+    expect(graphifyTraceJson).not.toContain(privateToolArgument)
+  })
+
   it('keeps graphify_trace absent when compare stdout does not expose trace data', async () => {
     const graph = makeGraph()
     writeProjectFiles()

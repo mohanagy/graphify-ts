@@ -1352,6 +1352,7 @@ export async function executeCompareRuns(
     ]
 
     for (const execution of executions) {
+      let graphifyTrace: CompareGraphifyTrace | undefined
       try {
         validateCompareExecTemplate(input.execTemplate)
         const command = expandCompareExecTemplate(input.execTemplate, {
@@ -1365,6 +1366,9 @@ export async function executeCompareRuns(
           question: report.question,
           command,
         })
+        if (execution.mode === 'graphify') {
+          graphifyTrace = extractGraphifyTrace(executionResult.stdout)
+        }
         const parsedOutput = parsePromptRunnerOutput(executionResult.stdout)
         ensureCompareAnswerFile(
           execution.outputFile,
@@ -1382,7 +1386,6 @@ export async function executeCompareRuns(
           executionResult.exitCode === 0 ? null : contextOverflowEvidence !== null ? 'prompt_too_long' : 'runner_error'
         report.evidence[execution.mode] = contextOverflowEvidence
         if (execution.mode === 'graphify') {
-          const graphifyTrace = executionResult.exitCode === 0 ? extractGraphifyTrace(executionResult.stdout) : undefined
           if (graphifyTrace) {
             report.graphify_trace = graphifyTrace
           } else {
@@ -1401,7 +1404,11 @@ export async function executeCompareRuns(
         report.failure_reason[execution.mode] = contextOverflowEvidence !== null ? 'prompt_too_long' : 'exec_error'
         report.evidence[execution.mode] = contextOverflowEvidence
         if (execution.mode === 'graphify') {
-          delete report.graphify_trace
+          if (graphifyTrace) {
+            report.graphify_trace = graphifyTrace
+          } else {
+            delete report.graphify_trace
+          }
         }
       }
 
