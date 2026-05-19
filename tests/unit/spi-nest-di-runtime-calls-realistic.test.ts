@@ -321,6 +321,14 @@ describe('SPI realistic Nest DI runtime-call fixture', () => {
         expect.objectContaining({ from: '.addJob()', to: '.process()', relation: 'enqueues_job', direction: 'forward' }),
       ]),
     )
+    expect(result.execution_slice?.status).toBe('complete')
+    expect(result.execution_slice?.steps.map((step) => step.label)).toEqual([
+      '.generateFromProblem()',
+      '.startPipeline()',
+      '.addJob()',
+      '.process()',
+      '.save()',
+    ])
     expect(labels).toEqual(
       expect.arrayContaining([
         '.generateFromProblem()',

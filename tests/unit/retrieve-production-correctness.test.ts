@@ -217,6 +217,14 @@ describe('retrieveContext production retrieval regressions', () => {
       '.score()',
       '.save()',
     ]))
+    expect(result.execution_slice?.status).toBe('complete')
+    expect(result.execution_slice?.steps.map((step) => step.label)).toEqual([
+      '.generateFromProblem()',
+      '.startPipeline()',
+      '.addJob()',
+      '.process()',
+      '.save()',
+    ])
 
     const forbiddenPaths = [
       { from: '.createIdea()', to: '.generateFromProblem()', relation: 'calls' },
