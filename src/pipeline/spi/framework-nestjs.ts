@@ -30,10 +30,12 @@
 //                     runtime providers list could not be enumerated.
 //   * `enqueues_job` — producer method symbol → worker handler method symbol.
 //                     A workspace-wide worker index collects literal
-//                     `@Processor('queue')` + `@Process('job')` handlers, then
-//                     producer methods that call `.add('job-name', payload)`
-//                     emit a high-confidence semantic edge when that job
-//                     literal resolves unambiguously to a single worker.
+//                     `@Processor('queue')` + `@Process('job')` handlers keyed
+//                     by a canonical `queue.job` string. Producer methods emit
+//                     a high-confidence semantic edge only when a queue-like
+//                     receiver calls `.add('queue.job', payload)` and that
+//                     fully qualified literal resolves unambiguously to one
+//                     worker handler.
 //
 // Confidence rules (per docs/designs/2026-05-10-spi-v1.md):
 //   * `high`   — both decorator binding and target identifier resolve
@@ -130,6 +132,11 @@ export type DetectNestFrameworkContext = {
 
 type BullWorkerIndex = {
   handlersByKey: Map<string, Set<string>>
+}
+
+type BullEnqueueSite = {
+  jobNameLiteral: ts.StringLiteralLike
+  workerKey: string
 }
 
 const BULL_WORKER_INDEX_CACHE = new WeakMap<ts.Program, BullWorkerIndex>()
@@ -660,11 +667,11 @@ function emitEnqueueEdgesInCallable(
 
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {
-      const jobNameLiteral = bullEnqueueJobName(node)
-      if (jobNameLiteral) {
-        const targetId = uniqueBullWorkerTarget(workerIndex, jobNameLiteral.text)
+      const enqueueSite = resolveBullEnqueueSite(node, ctx)
+      if (enqueueSite) {
+        const targetId = uniqueBullWorkerTarget(workerIndex, enqueueSite.workerKey)
         if (targetId && targetId !== callerId) {
-          const edgeKey = `${callerId}|${targetId}|${jobNameLiteral.text}`
+          const edgeKey = `${callerId}|${targetId}|${enqueueSite.workerKey}`
           if (!emitted.has(edgeKey)) {
             emitted.add(edgeKey)
             ctx.edges.push({
@@ -673,7 +680,7 @@ function emitEnqueueEdgesInCallable(
               kind: 'enqueues_job',
               confidence: 'high',
               source: 'heuristic',
-              evidence: { file_id: ctx.fileId, range: rangeOf(jobNameLiteral, ctx.sourceFile) },
+              evidence: { file_id: ctx.fileId, range: rangeOf(enqueueSite.jobNameLiteral, ctx.sourceFile) },
             })
           }
         }
@@ -691,7 +698,7 @@ function sourceFileHasBullEnqueueSite(sourceFile: ts.SourceFile): boolean {
 
   const visit = (node: ts.Node): void => {
     if (found) return
-    if (ts.isCallExpression(node) && bullEnqueueJobName(node)) {
+    if (ts.isCallExpression(node) && bullEnqueueJobNameLiteral(node)) {
       found = true
       return
     }
@@ -743,14 +750,13 @@ function buildBullWorkerIndex(program: ts.Program, pathToFileId: Map<string, str
 
         const baseId = symbolIdFor(fileId, 'method', `${className}.${methodName}`)
         const methodId = overloadIndex === 0 ? baseId : `${baseId}#${overloadIndex}`
-        for (const key of bullWorkerKeys(queueName, jobName)) {
-          let targets = handlersByKey.get(key)
-          if (!targets) {
-            targets = new Set<string>()
-            handlersByKey.set(key, targets)
-          }
-          targets.add(methodId)
+        const key = bullWorkerKey(queueName, jobName)
+        let targets = handlersByKey.get(key)
+        if (!targets) {
+          targets = new Set<string>()
+          handlersByKey.set(key, targets)
         }
+        targets.add(methodId)
       }
     }
   }
@@ -784,7 +790,7 @@ function bullProcessJobName(methodDecl: ts.MethodDeclaration): string | null {
   return null
 }
 
-function bullEnqueueJobName(callExpr: ts.CallExpression): ts.StringLiteralLike | null {
+function bullEnqueueJobNameLiteral(callExpr: ts.CallExpression): ts.StringLiteralLike | null {
   const callee = callExpr.expression
   if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== 'add') return null
   const arg = callExpr.arguments[0]
@@ -792,18 +798,137 @@ function bullEnqueueJobName(callExpr: ts.CallExpression): ts.StringLiteralLike |
   return ts.isStringLiteralLike(arg) ? arg : null
 }
 
-function bullWorkerKeys(queueName: string, jobName: string): string[] {
+function resolveBullEnqueueSite(
+  callExpr: ts.CallExpression,
+  ctx: DetectNestFrameworkContext,
+): BullEnqueueSite | null {
+  const jobNameLiteral = bullEnqueueJobNameLiteral(callExpr)
+  if (!jobNameLiteral) return null
+
+  const callee = callExpr.expression
+  if (!ts.isPropertyAccessExpression(callee)) return null
+  if (!bullReceiverLooksLikeQueue(callee.expression, ctx.checker)) return null
+
+  const workerKey = bullQualifiedJobKey(jobNameLiteral.text)
+  if (!workerKey) return null
+
+  return { jobNameLiteral, workerKey }
+}
+
+function bullWorkerKey(queueName: string, jobName: string): string {
   if (jobName.startsWith(`${queueName}.`)) {
-    return [jobName]
+    return jobName
   }
 
-  return [jobName, `${queueName}.${jobName}`]
+  return `${queueName}.${jobName}`
+}
+
+function bullQualifiedJobKey(jobName: string): string | null {
+  if (!jobName.includes('.')) return null
+  const segments = jobName.split('.')
+  if (segments.some((segment) => segment.length === 0)) return null
+  return jobName
 }
 
 function uniqueBullWorkerTarget(workerIndex: BullWorkerIndex, key: string): string | null {
   const targets = workerIndex.handlersByKey.get(key)
   if (!targets || targets.size !== 1) return null
   return [...targets][0] ?? null
+}
+
+function bullReceiverLooksLikeQueue(expr: ts.Expression, checker: ts.TypeChecker): boolean {
+  return bullQueueNameCandidates(expr, checker).some(looksLikeQueueCandidate)
+}
+
+function bullQueueNameCandidates(expr: ts.Expression, checker: ts.TypeChecker): string[] {
+  const candidates = new Set<string>()
+  const addCandidate = (value: string | null | undefined): void => {
+    if (value && value.length > 0) candidates.add(value)
+  }
+
+  addCandidate(expressionNameText(expr))
+
+  const type = checker.getTypeAtLocation(expr)
+  addCandidate(type.symbol?.getName())
+  addCandidate(type.aliasSymbol?.getName())
+
+  const typeText = checker.typeToString(type)
+  if (typeText && !typeText.startsWith('{')) {
+    addCandidate(typeText)
+  }
+
+  const symbol = checker.getSymbolAtLocation(queueReceiverSymbolNode(expr))
+  if (!symbol) return [...candidates]
+
+  addCandidate(symbol.getName())
+  for (const declaration of symbol.declarations ?? []) {
+    addCandidate(declarationNameText(declaration))
+    if (
+      (ts.isPropertyDeclaration(declaration)
+        || ts.isPropertySignature(declaration)
+        || ts.isParameter(declaration)
+        || ts.isVariableDeclaration(declaration))
+      && declaration.type
+    ) {
+      addCandidate(checker.typeToString(checker.getTypeFromTypeNode(declaration.type)))
+    }
+    if (
+      (ts.isPropertyDeclaration(declaration) || ts.isVariableDeclaration(declaration))
+      && declaration.initializer
+      && ts.isNewExpression(declaration.initializer)
+    ) {
+      addCandidate(expressionNameText(declaration.initializer.expression))
+    }
+  }
+
+  return [...candidates]
+}
+
+function looksLikeQueueCandidate(candidate: string): boolean {
+  const trimmed = candidate.trim()
+  if (!trimmed) return false
+
+  if (/(?:^|[.)])Queue(?:<|$)/.test(trimmed)) {
+    return true
+  }
+
+  const tokens = trimmed
+    .split(/[^A-Za-z0-9]+/)
+    .flatMap((segment) => segment.match(/[A-Z]+(?=[A-Z][a-z0-9])|[A-Z]?[a-z0-9]+/g) ?? [])
+    .map((token) => token.toLowerCase())
+
+  return tokens.at(-1) === 'queue'
+}
+
+function queueReceiverSymbolNode(expr: ts.Expression): ts.Node {
+  if (ts.isPropertyAccessExpression(expr)) return expr.name
+  if (ts.isElementAccessExpression(expr)) return expr.argumentExpression ?? expr.expression
+  return expr
+}
+
+function expressionNameText(expr: ts.Expression): string | null {
+  if (ts.isIdentifier(expr)) return expr.text
+  if (ts.isPropertyAccessExpression(expr)) return expr.name.text
+  if (expr.kind === ts.SyntaxKind.ThisKeyword) return 'this'
+  if (ts.isParenthesizedExpression(expr)) return expressionNameText(expr.expression)
+  if (ts.isAsExpression(expr) || ts.isTypeAssertionExpression(expr)) {
+    return expressionNameText(expr.expression)
+  }
+  if (ts.isNewExpression(expr)) return expressionNameText(expr.expression)
+  if (ts.isCallExpression(expr)) return expressionNameText(expr.expression)
+  return null
+}
+
+function declarationNameText(node: ts.Node): string | null {
+  const namedNode = node as ts.Node & { name?: ts.DeclarationName }
+  const name = namedNode.name
+  if (!name) return null
+  if (ts.isIdentifier(name)) return name.text
+  if (ts.isStringLiteralLike(name)) return name.text
+  if (ts.isComputedPropertyName(name) && ts.isStringLiteralLike(name.expression)) {
+    return name.expression.text
+  }
+  return null
 }
 
 // Returns the string token of an `@Inject('TOKEN')` decorator on this

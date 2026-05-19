@@ -227,6 +227,42 @@ describe('SPI realistic Nest DI runtime-call fixture', () => {
     expect(findCallsEdge(spi, process.id, save.id)).toBeTruthy()
   })
 
+  it('does not treat unrelated .add() calls as queue enqueue edges', () => {
+    const spi = buildFixtureSpi()
+    const recordPipelineStage = findSymbol(
+      spi,
+      'src/modules/diagnostics/diagnostics.service.ts',
+      'DiagnosticsService.recordPipelineStage',
+      'method',
+    )
+    const process = findSymbol(
+      spi,
+      'src/modules/pipeline/workers/orchestrator.worker.ts',
+      'OrchestratorWorker.process',
+      'method',
+    )
+
+    expect(findEdgeOfKind(spi, recordPipelineStage.id, process.id, 'enqueues_job')).toBeUndefined()
+  })
+
+  it('does not treat dequeue-style receivers as queue enqueue edges', () => {
+    const spi = buildFixtureSpi()
+    const drainPipelineStage = findSymbol(
+      spi,
+      'src/modules/diagnostics/diagnostics.service.ts',
+      'DiagnosticsService.drainPipelineStage',
+      'method',
+    )
+    const process = findSymbol(
+      spi,
+      'src/modules/pipeline/workers/orchestrator.worker.ts',
+      'OrchestratorWorker.process',
+      'method',
+    )
+
+    expect(findEdgeOfKind(spi, drainPipelineStage.id, process.id, 'enqueues_job')).toBeUndefined()
+  })
+
   it('preserves realistic route-method outgoing calls through SPI projection and graph building', () => {
     const extraction = buildFixtureExtraction()
     const graph = buildFromJson({ ...extraction, root_path: FIXTURE_ROOT }, { directed: true })
