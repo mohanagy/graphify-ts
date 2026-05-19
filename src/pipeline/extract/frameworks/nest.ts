@@ -57,6 +57,7 @@ interface NestDecoratorCall {
 
 interface BullWorkerIndex {
   handlersByKey: Map<string, Set<string>>
+  handlersByQueue: Map<string, Set<string>>
 }
 
 interface BullWorkerIndexCacheEntry {
@@ -639,14 +640,59 @@ function bullReceiverLooksLikeQueue(expression: ts.Expression, classDecl: ts.Cla
 
 function uniqueBullWorkerTarget(workerIndex: BullWorkerIndex, key: string): string | null {
   const targets = workerIndex.handlersByKey.get(key)
-  if (!targets || targets.size !== 1) {
+  if (targets?.size === 1) {
+    return [...targets][0] ?? null
+  }
+
+  const queueTargets = new Set<string>()
+  for (const [queueName, queueHandlers] of workerIndex.handlersByQueue) {
+    if (key !== queueName && !key.startsWith(`${queueName}.`)) {
+      continue
+    }
+    for (const target of queueHandlers) {
+      queueTargets.add(target)
+    }
+  }
+
+  if (queueTargets.size !== 1) {
     return null
   }
-  return [...targets][0] ?? null
+  return [...queueTargets][0] ?? null
+}
+
+function addBullWorkerTarget(index: Map<string, Set<string>>, key: string, methodId: string): void {
+  let targets = index.get(key)
+  if (!targets) {
+    targets = new Set<string>()
+    index.set(key, targets)
+  }
+  targets.add(methodId)
+}
+
+function classExtendsNamedBase(classDecl: ts.ClassDeclaration, baseName: string): boolean {
+  for (const clause of classDecl.heritageClauses ?? []) {
+    if (clause.token !== ts.SyntaxKind.ExtendsKeyword) {
+      continue
+    }
+    for (const type of clause.types) {
+      if (expressionNameText(type.expression) === baseName) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+function isBullWorkerHostProcessMethod(classDecl: ts.ClassDeclaration, methodDecl: ts.MethodDeclaration): boolean {
+  return !!methodDecl.name
+    && ts.isIdentifier(methodDecl.name)
+    && methodDecl.name.text === 'process'
+    && classExtendsNamedBase(classDecl, 'WorkerHost')
 }
 
 function buildBullWorkerIndex(filePaths: readonly string[]): BullWorkerIndex {
   const handlersByKey = new Map<string, Set<string>>()
+  const handlersByQueue = new Map<string, Set<string>>()
 
   for (const filePath of filePaths) {
     let sourceText: string
@@ -677,24 +723,19 @@ function buildBullWorkerIndex(filePaths: readonly string[]): BullWorkerIndex {
           continue
         }
 
-        const jobName = bullProcessJobName(member)
-        if (!jobName) {
-          continue
-        }
-
-        const workerKey = bullWorkerKey(queueName, jobName)
         const methodId = _makeId(classId, member.name.text)
-        let targets = handlersByKey.get(workerKey)
-        if (!targets) {
-          targets = new Set<string>()
-          handlersByKey.set(workerKey, targets)
+        const jobName = bullProcessJobName(member)
+        if (jobName) {
+          addBullWorkerTarget(handlersByKey, bullWorkerKey(queueName, jobName), methodId)
         }
-        targets.add(methodId)
+        if (isBullWorkerHostProcessMethod(statement, member)) {
+          addBullWorkerTarget(handlersByQueue, queueName, methodId)
+        }
       }
     }
   }
 
-  return { handlersByKey }
+  return { handlersByKey, handlersByQueue }
 }
 
 function sameFileSet(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
@@ -713,13 +754,18 @@ function sameFileSet(left: ReadonlySet<string>, right: ReadonlySet<string>): boo
 
 function getBullWorkerIndex(currentFilePath: string): BullWorkerIndex {
   const workspaceRoot = resolve(process.cwd())
+  const cached = BULL_WORKER_INDEX_CACHE.get(workspaceRoot)
+  const resolvedCurrentFilePath = resolve(currentFilePath)
+  if (cached && cached.files.has(resolvedCurrentFilePath)) {
+    return cached.index
+  }
+
   const files = new Set(
     detect(workspaceRoot).files.code
       .map((filePath) => resolve(filePath))
       .filter((filePath) => TS_LIKE_EXTENSIONS.has(extname(filePath))),
   )
-  files.add(resolve(currentFilePath))
-  const cached = BULL_WORKER_INDEX_CACHE.get(workspaceRoot)
+  files.add(resolvedCurrentFilePath)
   if (cached && sameFileSet(cached.files, files)) {
     return cached.index
   }
@@ -767,7 +813,7 @@ function emitBullEnqueueEdges(
   seenEdges: Set<string>,
 ): void {
   const workerIndex = getBullWorkerIndex(context.filePath)
-  if (workerIndex.handlersByKey.size === 0) {
+  if (workerIndex.handlersByKey.size === 0 && workerIndex.handlersByQueue.size === 0) {
     return
   }
 

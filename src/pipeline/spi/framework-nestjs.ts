@@ -132,6 +132,7 @@ export type DetectNestFrameworkContext = {
 
 type BullWorkerIndex = {
   handlersByKey: Map<string, Set<string>>
+  handlersByQueue: Map<string, Set<string>>
 }
 
 type BullEnqueueSite = {
@@ -624,7 +625,7 @@ function emitConstructorInjects(
 
 function emitEnqueueJobEdges(ctx: DetectNestFrameworkContext): void {
   const workerIndex = getBullWorkerIndex(ctx)
-  if (workerIndex.handlersByKey.size === 0) return
+  if (workerIndex.handlersByKey.size === 0 && workerIndex.handlersByQueue.size === 0) return
 
   const emitted = new Set<string>()
 
@@ -721,6 +722,7 @@ function getBullWorkerIndex(ctx: DetectNestFrameworkContext): BullWorkerIndex {
 
 function buildBullWorkerIndex(program: ts.Program, pathToFileId: Map<string, string>): BullWorkerIndex {
   const handlersByKey = new Map<string, Set<string>>()
+  const handlersByQueue = new Map<string, Set<string>>()
 
   for (const sourceFile of program.getSourceFiles()) {
     if (sourceFile.isDeclarationFile) continue
@@ -734,8 +736,8 @@ function buildBullWorkerIndex(program: ts.Program, pathToFileId: Map<string, str
       if (!queueName) continue
 
       const className = stmt.name.text
-      const overloadCounts = new Map<string, number>()
-      for (const member of stmt.members) {
+        const overloadCounts = new Map<string, number>()
+        for (const member of stmt.members) {
         if (!ts.isMethodDeclaration(member) || !member.name || !ts.isIdentifier(member.name)) {
           continue
         }
@@ -746,22 +748,47 @@ function buildBullWorkerIndex(program: ts.Program, pathToFileId: Map<string, str
         overloadCounts.set(overloadKey, overloadIndex + 1)
 
         const jobName = bullProcessJobName(member)
-        if (!jobName) continue
-
         const baseId = symbolIdFor(fileId, 'method', `${className}.${methodName}`)
         const methodId = overloadIndex === 0 ? baseId : `${baseId}#${overloadIndex}`
-        const key = bullWorkerKey(queueName, jobName)
-        let targets = handlersByKey.get(key)
-        if (!targets) {
-          targets = new Set<string>()
-          handlersByKey.set(key, targets)
+        if (jobName) {
+          addBullWorkerTarget(handlersByKey, bullWorkerKey(queueName, jobName), methodId)
         }
-        targets.add(methodId)
+        if (isBullWorkerHostProcessMethod(stmt, member)) {
+          addBullWorkerTarget(handlersByQueue, queueName, methodId)
+        }
       }
     }
   }
 
-  return { handlersByKey }
+  return { handlersByKey, handlersByQueue }
+}
+
+function addBullWorkerTarget(index: Map<string, Set<string>>, key: string, methodId: string): void {
+  let targets = index.get(key)
+  if (!targets) {
+    targets = new Set<string>()
+    index.set(key, targets)
+  }
+  targets.add(methodId)
+}
+
+function classExtendsNamedBase(classDecl: ts.ClassDeclaration, baseName: string): boolean {
+  for (const clause of classDecl.heritageClauses ?? []) {
+    if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue
+    for (const type of clause.types) {
+      if (expressionNameText(type.expression) === baseName) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+function isBullWorkerHostProcessMethod(classDecl: ts.ClassDeclaration, methodDecl: ts.MethodDeclaration): boolean {
+  return !!methodDecl.name
+    && ts.isIdentifier(methodDecl.name)
+    && methodDecl.name.text === 'process'
+    && classExtendsNamedBase(classDecl, 'WorkerHost')
 }
 
 function bullProcessorQueueName(classDecl: ts.ClassDeclaration): string | null {
@@ -832,8 +859,20 @@ function bullQualifiedJobKey(jobName: string): string | null {
 
 function uniqueBullWorkerTarget(workerIndex: BullWorkerIndex, key: string): string | null {
   const targets = workerIndex.handlersByKey.get(key)
-  if (!targets || targets.size !== 1) return null
-  return [...targets][0] ?? null
+  if (targets?.size === 1) return [...targets][0] ?? null
+
+  const queueTargets = new Set<string>()
+  for (const [queueName, queueHandlers] of workerIndex.handlersByQueue) {
+    if (key !== queueName && !key.startsWith(`${queueName}.`)) {
+      continue
+    }
+    for (const target of queueHandlers) {
+      queueTargets.add(target)
+    }
+  }
+
+  if (queueTargets.size !== 1) return null
+  return [...queueTargets][0] ?? null
 }
 
 function bullReceiverLooksLikeQueue(expr: ts.Expression, checker: ts.TypeChecker): boolean {

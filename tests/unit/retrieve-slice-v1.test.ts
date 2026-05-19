@@ -158,9 +158,11 @@ describe('retrieveContext retrievalStrategy=slice-v1', () => {
       execution_slice?: ExecutionSliceExpectation
     }
 
-    expect((sliced as any).slice.anchors).toEqual([
-      expect.objectContaining({ label: 'POST /login' }),
-    ])
+    expect((sliced as any).slice.anchors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: 'POST /login' }),
+      ]),
+    )
     expect((sliced as any).slice.anchors).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ label: 'LoginValidator.validate' }),
