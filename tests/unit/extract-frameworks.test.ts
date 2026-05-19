@@ -3073,6 +3073,91 @@ describe('js framework extraction contract', () => {
     }
   })
 
+  it('emits nest queue job edges for literal BullMQ-style enqueue sites without inventing direct worker calls', () => {
+    const scratchDir = join(TEST_ARTIFACTS_DIR, 'nest-queue-job-edge')
+    try {
+      writeScratchFiles(scratchDir, {
+        'pipeline.ts': [
+          "import { Controller, Injectable, Post } from '@nestjs/common'",
+          '',
+          'function Processor(_queueName: string): ClassDecorator {',
+          '  return () => undefined',
+          '}',
+          '',
+          'function Process(_jobName: string): MethodDecorator {',
+          '  return () => undefined',
+          '}',
+          '',
+          'type PipelineJobPayload = {',
+          '  problem: string',
+          '  ideaId: string',
+          '}',
+          '',
+          'class PipelineQueue {',
+          '  async add(jobName: string, input: PipelineJobPayload) {',
+          '    return {',
+          '      id: `${input.ideaId}:${jobName}`,',
+          '    }',
+          '  }',
+          '}',
+          '',
+          '@Injectable()',
+          'class QueueRegistryService {',
+          '  private readonly pipelineQueue = new PipelineQueue()',
+          '',
+          '  async addJob(input: PipelineJobPayload) {',
+          "    return this.pipelineQueue.add('legacy.pipeline.edge.process', input)",
+          '  }',
+          '}',
+          '',
+          '@Injectable()',
+          'class PipelineTriggerService {',
+          '  constructor(private readonly queueRegistryService: QueueRegistryService) {}',
+          '',
+          '  async startPipeline(problem: string, ideaId: string) {',
+          '    return this.queueRegistryService.addJob({ problem, ideaId })',
+          '  }',
+          '}',
+          '',
+          "@Processor('legacy.pipeline.edge')",
+          'class OrchestratorWorker {',
+          "  @Process('legacy.pipeline.edge.process')",
+          '  async process(job: { data: PipelineJobPayload }) {',
+          '    return job.data.ideaId',
+          '  }',
+          '}',
+          '',
+          "@Controller('ideas')",
+          'class IdeaGenerationController {',
+          '  constructor(private readonly pipelineTriggerService: PipelineTriggerService) {}',
+          '',
+          "  @Post('generate')",
+          '  async generateFromProblem(problem: string, ideaId: string) {',
+          '    return this.pipelineTriggerService.startPipeline(problem, ideaId)',
+          '  }',
+          '}',
+        ].join('\n'),
+      })
+
+      const result = extractJs(join(scratchDir, 'pipeline.ts'))
+      const addJobNodeId = nodeIdForLabel(result, '.addJob()')
+      const processNodeId = nodeIdForLabel(result, '.process()')
+
+      expect(result.edges).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ source: addJobNodeId, target: processNodeId, relation: 'enqueues_job' }),
+        ]),
+      )
+      expect(result.edges).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ source: addJobNodeId, target: processNodeId, relation: 'calls' }),
+        ]),
+      )
+    } finally {
+      rmSync(scratchDir, { recursive: true, force: true })
+    }
+  })
+
   it('uses the outermost next app directory when nested route segments are literally named app', () => {
     const scratchDir = join(TEST_ARTIFACTS_DIR, 'next-outermost-app-root')
     try {
