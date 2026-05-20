@@ -116,6 +116,43 @@ describe('Framework-aware retrieval boost for v0.17 substrates (#83 → v0.19)',
     expect(client?.framework_boost ?? 0).toBeGreaterThan(0)
   })
 
+  it('storage question boosts repository save endpoints over generic save helpers', () => {
+    writeFile(sandbox, 'src/persistence/report.repository.ts', [
+      'export class ReportRepository {',
+      '  async save(): Promise<void> {}',
+      '}',
+    ].join('\n') + '\n')
+    writeFile(sandbox, 'src/ui/report-footer.ts', [
+      'export class ReportFooter {',
+      '  save(): void {}',
+      '}',
+    ].join('\n') + '\n')
+
+    const result = generateGraph(sandbox, { useSpi: true, noHtml: true })
+    const graph = loadGraph(result.graphPath)
+    const retrieved = retrieveContext(graph, {
+      question: 'Which method writes the report to the database?',
+      budget: 2000,
+    })
+
+    const repoSaveIndex = retrieved.matched_nodes.findIndex((node) =>
+      node.label === '.save()' && node.source_file.endsWith('/src/persistence/report.repository.ts'))
+    const repoClassIndex = retrieved.matched_nodes.findIndex((node) =>
+      node.label === 'ReportRepository' && node.source_file.endsWith('/src/persistence/report.repository.ts'))
+    const helperSaveIndex = retrieved.matched_nodes.findIndex((node) =>
+      node.label === '.save()' && node.source_file.endsWith('/src/ui/report-footer.ts'))
+    const repoSave = repoSaveIndex >= 0 ? retrieved.matched_nodes[repoSaveIndex] : undefined
+
+    expect(repoSaveIndex).toBeGreaterThanOrEqual(0)
+    expect(repoSave?.framework_boost ?? 0).toBeGreaterThan(0)
+    if (repoClassIndex >= 0) {
+      expect(repoSaveIndex).toBeLessThan(repoClassIndex)
+    }
+    if (helperSaveIndex >= 0) {
+      expect(repoSaveIndex).toBeLessThan(helperSaveIndex)
+    }
+  })
+
   it('non-framework question receives no framework boost on Hono nodes', () => {
     writeFile(sandbox, 'src/server.ts', [
       'import { Hono } from "hono"',
