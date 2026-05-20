@@ -7,6 +7,8 @@ import { type PromptRunnerUsage } from '../prompt-runner.js'
 import { type BenchmarkPromptArtifacts, type BenchmarkPromptTokenSource } from './runner.js'
 
 export interface BenchmarkQuestionResult {
+  id?: string
+  description?: string
   question: string
   query_tokens: number
   effective_query_tokens?: number
@@ -152,6 +154,8 @@ export function evaluateBenchmarkQuestion(graph: KnowledgeGraph, question: Bench
   return {
     question: questionSpec.question,
     result: {
+      ...(questionSpec.id ? { id: questionSpec.id } : {}),
+      ...(questionSpec.description ? { description: questionSpec.description } : {}),
       question: questionSpec.question,
       query_tokens: match.queryTokens,
       reduction: Number((corpusTokens / match.queryTokens).toFixed(1)),

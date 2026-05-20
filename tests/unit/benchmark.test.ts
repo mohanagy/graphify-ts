@@ -221,6 +221,37 @@ describe('runBenchmark', () => {
     })
   })
 
+  test('preserves prompt metadata in benchmark per-question results', () => {
+    withTempDir((tempDir) => {
+      const graphPath = join(tempDir, 'graphify-out', 'graph.json')
+      mkdirSync(join(tempDir, 'graphify-out'), { recursive: true })
+      toJson(makeGraph(), { 0: ['n1', 'n2'], 1: ['n3', 'n4'], 2: ['n5'] }, graphPath)
+
+      const result = runBenchmark(graphPath, 10_000, [
+        {
+          id: 'auth-flow',
+          description: 'Trace the authentication path.',
+          question: 'how does authentication work',
+          expected_labels: ['authentication'],
+        },
+      ])
+
+      expect('reduction_ratio' in result).toBe(true)
+      if (!('reduction_ratio' in result)) {
+        return
+      }
+
+      expect(result.per_question).toEqual([
+        expect.objectContaining({
+          id: 'auth-flow',
+          description: 'Trace the authentication path.',
+          question: 'how does authentication work',
+          expected_labels: ['authentication'],
+        }),
+      ])
+    })
+  })
+
   test('returns reduction metrics', () => {
     withTempDir((tempDir) => {
       const graphPath = join(tempDir, 'graphify-out', 'graph.json')
