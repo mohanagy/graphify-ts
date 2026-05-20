@@ -19,11 +19,30 @@ import {
   parseQueryArgs,
   parseReviewCompareArgs,
   parseSaveResultArgs,
+  parseSummaryArgs,
   parseServeArgs,
   parseTimeTravelArgs,
   parseWatchArgs,
 } from '../../src/cli/parser.js'
 import { KnowledgeGraph } from '../../src/contracts/graph.js'
+
+type GraphSummaryPayload = {
+  graph_version?: string
+  generated_at?: string
+  node_count: number
+  edge_count: number
+  file_count: number
+  community_count: number
+  source_domains: Record<string, number>
+  top_modules: Array<{ label: string; degree: number }>
+  entrypoints: Array<{ label: string; source_file: string }>
+  frameworks: string[]
+  runtime_paths: Array<{ from: string; to: string; hops: number }>
+}
+
+type CliTestDependencies = CliDependencies & {
+  runGraphSummary?: (graphPath: string) => GraphSummaryPayload
+}
 
 function createIo() {
   const logs: string[] = []
@@ -50,7 +69,7 @@ function loadPackageVersion(): string {
   return packageJson.version
 }
 
-function createDependencies(): CliDependencies {
+function createDependencies(): CliTestDependencies {
   return {
     loadGraph: (graphPath) => {
       const graph = new KnowledgeGraph()
@@ -922,6 +941,7 @@ describe('cli main', () => {
     expect(help).toContain('copilot <install|uninstall> [--profile core|full|strict]')
     expect(help).toContain('codex <install|uninstall>')
     expect(help).toContain('opencode <install|uninstall>')
+    expect(help).toContain('summary [graph.json]')
   })
 
   it('routes compare through the injected dependency after parsing args', async () => {
@@ -1756,5 +1776,74 @@ describe('cli main', () => {
 
     expect(exitCode).toBe(1)
     expect(errors[0]).toContain("error: unknown command 'mystery'")
+  })
+})
+
+describe('summary command', () => {
+  it('parses summary args with positional and --graph forms', () => {
+    expect(parseSummaryArgs([])).toEqual({
+      graphPath: 'graphify-out/graph.json',
+    })
+
+    expect(parseSummaryArgs(['custom.json'])).toEqual({
+      graphPath: 'custom.json',
+    })
+
+    expect(parseSummaryArgs(['--graph', 'custom.json'])).toEqual({
+      graphPath: 'custom.json',
+    })
+
+    expect(parseSummaryArgs(['--graph=custom.json'])).toEqual({
+      graphPath: 'custom.json',
+    })
+  })
+
+  it('formatHelp documents the summary command', () => {
+    const help = formatHelp()
+    expect(help).toContain('summary [graph.json]')
+  })
+
+  it('dispatches summary to the runGraphSummary dependency and prints JSON', async () => {
+    const { io, logs } = createIo()
+    const dependencies = createDependencies()
+    let capturedGraphPath: string | undefined
+    const expectedPayload = {
+      graph_version: 'abc123def456',
+      generated_at: '2026-05-12T10:00:00.000Z',
+      node_count: 3,
+      edge_count: 2,
+      file_count: 3,
+      community_count: 2,
+      source_domains: { production: 3 },
+      top_modules: [{ label: 'AuthService', degree: 2 }],
+      entrypoints: [{ label: 'AuthService', source_file: 'src/auth/service.ts' }],
+      frameworks: [],
+      runtime_paths: [],
+    }
+    dependencies.runGraphSummary = (graphPath: string) => {
+      capturedGraphPath = graphPath
+      return expectedPayload
+    }
+
+    const exitCode = await executeCli(['summary', 'graphify-out/graph.json'], io, dependencies)
+
+    expect(exitCode).toBe(0)
+    expect(capturedGraphPath).toBe('graphify-out/graph.json')
+    expect(logs).toEqual([JSON.stringify(expectedPayload, null, 2)])
+  })
+
+  it('dispatches summary with default graph path when no argument is given', async () => {
+    const { io } = createIo()
+    const dependencies = createDependencies()
+    let capturedGraphPath: string | undefined
+    dependencies.runGraphSummary = (graphPath: string) => {
+      capturedGraphPath = graphPath
+      return { node_count: 0, edge_count: 0, file_count: 0, community_count: 0, source_domains: {}, top_modules: [], entrypoints: [], frameworks: [], runtime_paths: [] }
+    }
+
+    const exitCode = await executeCli(['summary'], io, dependencies)
+
+    expect(exitCode).toBe(0)
+    expect(capturedGraphPath).toBe('graphify-out/graph.json')
   })
 })

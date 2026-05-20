@@ -159,6 +159,10 @@ export interface DoctorCliOptions {
   graphPath: string
 }
 
+export interface SummaryCliOptions {
+  graphPath: string
+}
+
 export interface HookCliOptions {
   action: 'install' | 'uninstall' | 'status'
 }
@@ -1556,6 +1560,42 @@ export function parseDoctorArgs(args: string[], commandName: 'doctor' | 'status'
     }
 
     throw new UsageError(`error: unknown option for ${commandName}: ${argument}`)
+  }
+
+  return { graphPath }
+}
+
+export function parseSummaryArgs(args: string[]): SummaryCliOptions {
+  const usage = 'Usage: graphify-ts summary [graph.json]'
+  let graphPath = 'graphify-out/graph.json'
+
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]
+    if (!argument) {
+      continue
+    }
+
+    if (argument === '--graph') {
+      graphPath = requireOptionValue('--graph', args[index + 1])
+      index += 1
+      continue
+    }
+
+    if (argument.startsWith('--graph=')) {
+      const [, value] = argument.split('=', 2)
+      graphPath = requireOptionValue('--graph', value)
+      continue
+    }
+
+    if (argument.startsWith('--')) {
+      throw new UsageError(`error: unknown option for summary: ${argument}`)
+    }
+
+    if (graphPath !== 'graphify-out/graph.json') {
+      throw new UsageError(usage)
+    }
+
+    graphPath = argument
   }
 
   return { graphPath }
