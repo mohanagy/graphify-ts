@@ -1,9 +1,26 @@
 import { describe, expect, it } from 'vitest'
 
 import { KnowledgeGraph } from '../../src/contracts/graph.js'
+// @ts-expect-error -- red test for runtime graph summary module prior to implementation.
 import { buildGraphSummary } from '../../src/runtime/graph-summary.js'
 
 const SUMMARY_ARRAY_CAP = 10
+
+type GraphSummaryTopModule = {
+  label: string
+  degree: number
+}
+
+type GraphSummaryEntrypoint = {
+  label: string
+  source_file: string
+}
+
+type GraphSummaryRuntimePath = {
+  from: string
+  to: string
+  hops: number
+}
 
 function padIndex(index: number): string {
   return index.toString().padStart(2, '0')
@@ -175,7 +192,7 @@ describe('buildGraphSummary', () => {
 
     // AuthService (in-degree 2, out-degree 2 → degree 4) and ApiRouter (out-degree 2 → degree 3)
     // should appear in the top list
-    const labels = summary.top_modules.map((m) => m.label)
+    const labels = summary.top_modules.map((module: GraphSummaryTopModule) => module.label)
     expect(labels).toContain('AuthService')
     expect(labels).toContain('ApiRouter')
   })
@@ -202,7 +219,7 @@ describe('buildGraphSummary', () => {
 
     expect(summary.entrypoints).toBeInstanceOf(Array)
 
-    const labels = summary.entrypoints.map((e) => e.label)
+    const labels = summary.entrypoints.map((entrypoint: GraphSummaryEntrypoint) => entrypoint.label)
     expect(labels).toContain('ApiRouter')
     expect(labels).toContain('AuthServiceTest')
     expect(labels).toContain('ApiRouterTest')
@@ -253,9 +270,9 @@ describe('buildGraphSummary', () => {
     })
 
     expect(summary.entrypoints).toHaveLength(SUMMARY_ARRAY_CAP)
-    expect(summary.entrypoints.map(({ label, source_file }) => ({ label, source_file }))).toEqual(expectedEntrypoints)
-    expect(summary.entrypoints.map(({ label }) => label)).not.toContain('Entry10')
-    expect(summary.entrypoints.map(({ label }) => label)).not.toContain('Entry11')
+    expect(summary.entrypoints.map(({ label, source_file }: GraphSummaryEntrypoint) => ({ label, source_file }))).toEqual(expectedEntrypoints)
+    expect(summary.entrypoints.map(({ label }: GraphSummaryEntrypoint) => label)).not.toContain('Entry10')
+    expect(summary.entrypoints.map(({ label }: GraphSummaryEntrypoint) => label)).not.toContain('Entry11')
 
     const repeatedSummary = buildGraphSummary(graph)
     expect(repeatedSummary.entrypoints).toEqual(summary.entrypoints)
@@ -284,8 +301,8 @@ describe('buildGraphSummary', () => {
     }
 
     expect(summary.runtime_paths).toEqual(expectedRuntimePaths)
-    expect(summary.runtime_paths.map(({ from }) => from)).not.toContain('RuntimeEntry10')
-    expect(summary.runtime_paths.map(({ from }) => from)).not.toContain('RuntimeEntry11')
+    expect(summary.runtime_paths.map(({ from }: GraphSummaryRuntimePath) => from)).not.toContain('RuntimeEntry10')
+    expect(summary.runtime_paths.map(({ from }: GraphSummaryRuntimePath) => from)).not.toContain('RuntimeEntry11')
 
     const repeatedSummary = buildGraphSummary(graph)
     expect(repeatedSummary.runtime_paths).toEqual(summary.runtime_paths)

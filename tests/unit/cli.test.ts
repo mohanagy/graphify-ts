@@ -25,6 +25,24 @@ import {
 } from '../../src/cli/parser.js'
 import { KnowledgeGraph } from '../../src/contracts/graph.js'
 
+type GraphSummaryPayload = {
+  graph_version?: string
+  generated_at?: string
+  node_count: number
+  edge_count: number
+  file_count: number
+  community_count: number
+  source_domains: Record<string, number>
+  top_modules: Array<{ label: string; degree: number }>
+  entrypoints: Array<{ label: string; source_file: string }>
+  frameworks: string[]
+  runtime_paths: Array<{ from: string; to: string; hops: number }>
+}
+
+type CliTestDependencies = CliDependencies & {
+  runGraphSummary?: (graphPath: string) => GraphSummaryPayload
+}
+
 function createIo() {
   const logs: string[] = []
   const errors: string[] = []
@@ -50,7 +68,7 @@ function loadPackageVersion(): string {
   return packageJson.version
 }
 
-function createDependencies(): CliDependencies {
+function createDependencies(): CliTestDependencies {
   return {
     loadGraph: (graphPath) => {
       const graph = new KnowledgeGraph()
@@ -1783,7 +1801,7 @@ describe('summary command', () => {
       frameworks: [],
       runtime_paths: [],
     }
-    ;(dependencies as Record<string, unknown>)['runGraphSummary'] = (graphPath: string) => {
+    dependencies.runGraphSummary = (graphPath: string) => {
       capturedGraphPath = graphPath
       return expectedPayload
     }
@@ -1799,7 +1817,7 @@ describe('summary command', () => {
     const { io } = createIo()
     const dependencies = createDependencies()
     let capturedGraphPath: string | undefined
-    ;(dependencies as Record<string, unknown>)['runGraphSummary'] = (graphPath: string) => {
+    dependencies.runGraphSummary = (graphPath: string) => {
       capturedGraphPath = graphPath
       return { node_count: 0, edge_count: 0, file_count: 0, community_count: 0, source_domains: {}, top_modules: [], entrypoints: [], frameworks: [], runtime_paths: [] }
     }
