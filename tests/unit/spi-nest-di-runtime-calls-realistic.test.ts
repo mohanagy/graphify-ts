@@ -467,13 +467,14 @@ describe('SPI realistic Nest DI runtime-call fixture', () => {
       retrievalLevel: 4,
       retrievalStrategy: 'slice-v1',
     })
+    const repositoryPathSuffix = 'src/modules/reports/report.repository.ts'
 
     const saveIndex = result.matched_nodes.findIndex((node) =>
       node.label === '.save()'
-      && normalizePathForAssertion(node.source_file).endsWith('/src/modules/reports/report.repository.ts'))
+      && normalizePathForAssertion(node.source_file).endsWith(repositoryPathSuffix))
     const repositoryIndex = result.matched_nodes.findIndex((node) =>
       node.label === 'ReportRepository'
-      && normalizePathForAssertion(node.source_file).endsWith('/src/modules/reports/report.repository.ts'))
+      && normalizePathForAssertion(node.source_file).endsWith(repositoryPathSuffix))
     const frontendIndex = result.matched_nodes.findIndex((node) =>
       normalizePathForAssertion(node.source_file).includes('platform/src/features/idea-detail/components/ReportFooter.tsx'))
     const saveNode = saveIndex >= 0 ? result.matched_nodes[saveIndex] : undefined

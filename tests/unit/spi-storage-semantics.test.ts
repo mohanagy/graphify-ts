@@ -69,7 +69,7 @@ function findPrismaOperationNode(
 ): StorageTaggedEntity | undefined {
   const entry = extraction.nodes.find((candidate) => {
     const metadata = asFrameworkMetadata(candidate.framework_metadata)
-    return candidate.source_file.endsWith(path)
+    return candidate.source_file.replaceAll('\\', '/').endsWith(path)
       && (
         candidate.framework_role === 'prisma_model_reader'
         || candidate.framework_role === 'prisma_model_writer'
