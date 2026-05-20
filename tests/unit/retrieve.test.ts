@@ -3151,6 +3151,195 @@ describe('retrieve', () => {
       expect(result.matched_nodes.find((node) => node.label === 'SharedAuthPolicy')?.source_file).toBe('/opt/shared/auth/policy.ts')
     })
 
+    it('does not special-case repository source paths during retrieve serialization', () => {
+      const graph = new KnowledgeGraph()
+      graph.graph.root_path = '/workspace/app'
+      graph.addNode('report_repository_save', {
+        label: 'save()',
+        source_file: '/workspace/app/src/repositories/report.repository.ts',
+        line_number: 14,
+        node_kind: 'method',
+        file_type: 'code',
+        framework: 'repository',
+        framework_role: 'repository_writer',
+        framework_metadata: {
+          storage_operation: 'save',
+        },
+        community: 0,
+      })
+
+      const result = retrieveContext(graph, {
+        question: 'save repository method',
+        budget: 3000,
+        fileType: 'code',
+      })
+
+      expect(result.matched_nodes).toHaveLength(1)
+      expect(result.matched_nodes[0]?.source_file).toBe('src/repositories/report.repository.ts')
+    })
+
+    it('adds repository storage boosts only for storage-oriented prompts', () => {
+      const graph = new KnowledgeGraph()
+      graph.addNode('report_repository_save', {
+        label: 'save()',
+        source_file: '/src/repositories/report.repository.ts',
+        line_number: 14,
+        node_kind: 'method',
+        file_type: 'code',
+        framework: 'repository',
+        framework_role: 'repository_writer',
+        framework_metadata: {
+          storage_operation: 'save',
+        },
+        community: 0,
+      })
+
+      const result = retrieveContext(graph, {
+        question: 'which database method saves reports',
+        budget: 3000,
+        fileType: 'code',
+      })
+      const unrelated = retrieveContext(graph, {
+        question: 'how does the report footer work',
+        budget: 3000,
+        fileType: 'code',
+      })
+
+      expect(result.matched_nodes).toHaveLength(1)
+      expect(result.matched_nodes[0]?.framework_boost ?? 0).toBeGreaterThan(0)
+      expect(unrelated.matched_nodes).toHaveLength(1)
+      expect(unrelated.matched_nodes[0]?.framework_boost ?? 0).toBe(0)
+    })
+
+    it('keeps repository method introspection prompts neutral', () => {
+      const graph = new KnowledgeGraph()
+      graph.addNode('report_repository_save', {
+        label: 'save()',
+        source_file: '/src/repositories/report.repository.ts',
+        line_number: 14,
+        node_kind: 'method',
+        file_type: 'code',
+        framework: 'repository',
+        framework_role: 'repository_writer',
+        framework_metadata: {
+          storage_operation: 'save',
+        },
+        community: 0,
+      })
+      graph.addNode('report_repository_find', {
+        label: 'findAll()',
+        source_file: '/src/repositories/report.repository.ts',
+        line_number: 20,
+        node_kind: 'method',
+        file_type: 'code',
+        framework: 'repository',
+        framework_role: 'repository_reader',
+        framework_metadata: {
+          storage_operation: 'findAll',
+        },
+        community: 0,
+      })
+
+      const result = retrieveContext(graph, {
+        question: 'list all repository class methods',
+        budget: 3000,
+        fileType: 'code',
+      })
+
+      expect(result.matched_nodes).toHaveLength(2)
+      expect(result.matched_nodes.every((node) => (node.framework_boost ?? 0) === 0)).toBe(true)
+    })
+
+    it('does not reduce Prisma client or model-access boosts for mixed model persistence prompts', () => {
+      const graph = new KnowledgeGraph()
+      graph.addNode('prisma_client', {
+        label: 'PrismaClient',
+        source_file: '/src/db/client.ts',
+        line_number: 2,
+        node_kind: 'variable',
+        file_type: 'code',
+        framework: 'prisma',
+        framework_role: 'prisma_client',
+        community: 0,
+      })
+      graph.addNode('prisma_model_access', {
+        label: 'UserModelAccess',
+        source_file: '/src/db/user.ts',
+        line_number: 8,
+        node_kind: 'property',
+        file_type: 'code',
+        framework: 'prisma',
+        framework_role: 'prisma_model_access',
+        community: 0,
+      })
+
+      const modelOnly = retrieveContext(graph, {
+        question: 'which Prisma models exist',
+        budget: 3000,
+        fileType: 'code',
+      })
+      const mixed = retrieveContext(graph, {
+        question: 'which Prisma models get persisted',
+        budget: 3000,
+        fileType: 'code',
+      })
+
+      const modelOnlyClient = modelOnly.matched_nodes.find((node) => node.label === 'PrismaClient')
+      const mixedClient = mixed.matched_nodes.find((node) => node.label === 'PrismaClient')
+      const modelOnlyAccess = modelOnly.matched_nodes.find((node) => node.label === 'UserModelAccess')
+      const mixedAccess = mixed.matched_nodes.find((node) => node.label === 'UserModelAccess')
+
+      expect(modelOnlyClient).toBeDefined()
+      expect(mixedClient).toBeDefined()
+      expect(modelOnlyAccess).toBeDefined()
+      expect(mixedAccess).toBeDefined()
+      expect(mixedClient?.framework_boost ?? 0).toBeGreaterThanOrEqual(modelOnlyClient?.framework_boost ?? 0)
+      expect(mixedAccess?.framework_boost ?? 0).toBeGreaterThanOrEqual(modelOnlyAccess?.framework_boost ?? 0)
+    })
+
+    it('matches storage operations on whole tokens only', () => {
+      const graph = new KnowledgeGraph()
+      graph.addNode('report_repository_save', {
+        label: 'save()',
+        source_file: '/src/repositories/report.repository.ts',
+        line_number: 14,
+        node_kind: 'method',
+        file_type: 'code',
+        framework: 'repository',
+        framework_role: 'repository_writer',
+        framework_metadata: {
+          storage_operation: 'save',
+        },
+        community: 0,
+      })
+      graph.addNode('report_repository_update', {
+        label: 'update()',
+        source_file: '/src/repositories/report.repository.ts',
+        line_number: 20,
+        node_kind: 'method',
+        file_type: 'code',
+        framework: 'repository',
+        framework_role: 'repository_writer',
+        framework_metadata: {
+          storage_operation: 'update',
+        },
+        community: 0,
+      })
+
+      const result = retrieveContext(graph, {
+        question: 'which storage savefile repository methods exist',
+        budget: 3000,
+        fileType: 'code',
+      })
+
+      const saveNode = result.matched_nodes.find((node) => node.label === 'save()')
+      const updateNode = result.matched_nodes.find((node) => node.label === 'update()')
+
+      expect(saveNode).toBeDefined()
+      expect(updateNode).toBeDefined()
+      expect(saveNode?.framework_boost ?? 0).toBe(updateNode?.framework_boost ?? 0)
+    })
+
     it('preserves question in result', () => {
       const graph = buildTestGraph()
       const result = retrieveContext(graph, { question: 'how does auth work?', budget: 5000 })

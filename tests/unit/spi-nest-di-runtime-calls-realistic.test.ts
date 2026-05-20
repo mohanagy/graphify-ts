@@ -460,6 +460,35 @@ describe('SPI realistic Nest DI runtime-call fixture', () => {
     expect(result.slice?.anchors.some((anchor) => frontendLabels.includes(anchor.label))).toBe(false)
   })
 
+  it('prefers ReportRepository.save for storage-boundary prompts', () => {
+    const result = retrieveContext(buildFixtureGraph({ windowsSourcePaths: true }), {
+      question: 'Which method writes the report to the database?',
+      budget: 4000,
+      retrievalLevel: 4,
+      retrievalStrategy: 'slice-v1',
+    })
+    const repositoryPathSuffix = 'src/modules/reports/report.repository.ts'
+
+    const saveIndex = result.matched_nodes.findIndex((node) =>
+      node.label === '.save()'
+      && normalizePathForAssertion(node.source_file).endsWith(repositoryPathSuffix))
+    const repositoryIndex = result.matched_nodes.findIndex((node) =>
+      node.label === 'ReportRepository'
+      && normalizePathForAssertion(node.source_file).endsWith(repositoryPathSuffix))
+    const frontendIndex = result.matched_nodes.findIndex((node) =>
+      normalizePathForAssertion(node.source_file).includes('platform/src/features/idea-detail/components/ReportFooter.tsx'))
+    const saveNode = saveIndex >= 0 ? result.matched_nodes[saveIndex] : undefined
+
+    expect(saveIndex).toBeGreaterThanOrEqual(0)
+    expect(saveNode?.framework_boost ?? 0).toBeGreaterThan(0)
+    if (repositoryIndex >= 0) {
+      expect(saveIndex).toBeLessThan(repositoryIndex)
+    }
+    if (frontendIndex >= 0) {
+      expect(saveIndex).toBeLessThan(frontendIndex)
+    }
+  })
+
   it('keeps frontend report-display prompts routed to display helpers', () => {
     const result = retrieveContext(buildFixtureGraph(), {
       question: 'Where is the generated date displayed in the report footer?',

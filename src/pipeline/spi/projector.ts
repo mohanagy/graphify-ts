@@ -177,6 +177,7 @@ export function projectSpiToExtraction(
     // substrate. ExtractionNode's index signature allows arbitrary keys,
     // so the spread is type-safe.
     if (symbol.framework_metadata) {
+      node.framework_metadata = { ...symbol.framework_metadata }
       for (const [key, value] of Object.entries(symbol.framework_metadata)) {
         if (value !== undefined) {
           node[key] = value
@@ -254,6 +255,7 @@ function frameworkForRole(role: NonNullable<SpiSymbol['framework_role']>): strin
   if (role.startsWith('fastify_')) return 'fastify'
   if (role.startsWith('trpc_')) return 'trpc'
   if (role.startsWith('prisma_')) return 'prisma'
+  if (role.startsWith('repository_')) return 'repository'
   return 'unknown'
 }
 
@@ -282,8 +284,13 @@ function nodeKindForRole(role: NonNullable<SpiSymbol['framework_role']>): NonNul
       return 'route'
     case 'prisma_client':
       return 'class'
+    case 'prisma_model_reader':
+    case 'prisma_model_writer':
     case 'prisma_model_access':
       return 'function'
+    case 'repository_reader':
+    case 'repository_writer':
+      return 'method'
     case 'nest_controller':
     case 'nest_module':
     case 'nest_provider':
@@ -321,6 +328,23 @@ function nodeKindForRole(role: NonNullable<SpiSymbol['framework_role']>): NonNul
 type SymbolProjection = { id: string; label: string }
 
 function projectSymbol(symbol: SpiSymbol, fileBaseStem: string): SymbolProjection | null {
+  const storageOperation = typeof symbol.framework_metadata?.storage_operation === 'string'
+    ? symbol.framework_metadata.storage_operation
+    : null
+  if (
+    (
+      symbol.framework_role === 'prisma_model_reader'
+      || symbol.framework_role === 'prisma_model_writer'
+      || symbol.framework_role === 'prisma_model_access'
+    )
+    && storageOperation
+  ) {
+    return {
+      id: _makeId(fileBaseStem, symbol.name),
+      label: `.${storageOperation}()`,
+    }
+  }
+
   if (symbol.kind === 'method') {
     // SpiSymbol.name for methods is `ClassName.methodName`.
     const dotAt = symbol.name.lastIndexOf('.')

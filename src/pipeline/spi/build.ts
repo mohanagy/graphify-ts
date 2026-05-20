@@ -803,11 +803,14 @@ function addTypeCheckerEdges(ctx: TypeCheckerEdgeContext): void {
       symbolsByFile,
       symbols,
     })
-    // v0.17 (#83): Prisma substrate. Tags `new PrismaClient()` bindings.
+    // v0.17 (#83) + issue #185: Prisma substrate. Tags `new PrismaClient()`
+    // bindings, synthesizes first-pass model-operation symbols, and classifies
+    // repository-shaped CRUD methods.
     detectPrismaFramework({
       sourceFile,
       fileId: file.id,
       symbolsByFile,
+      symbols,
     })
   }
 

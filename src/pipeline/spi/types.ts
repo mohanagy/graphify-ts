@@ -113,7 +113,26 @@ export type SpiFrameworkRole =
   | 'trpc_procedure_subscription'
   // Prisma roles (v0.17 #83)
   | 'prisma_client'
+  | 'prisma_model_reader'
+  | 'prisma_model_writer'
   | 'prisma_model_access'
+  // Storage semantics roles (issue #185)
+  | 'repository_reader'
+  | 'repository_writer'
+
+export type SpiStorageOperation =
+  | 'save'
+  | 'create'
+  | 'update'
+  | 'upsert'
+  | 'findUnique'
+  | 'findMany'
+  | '$transaction'
+
+export type SpiFrameworkMetadata = {
+  storage_operation?: SpiStorageOperation
+  [key: string]: unknown
+}
 
 export type SpiSymbol = {
   id: string
@@ -142,7 +161,7 @@ export type SpiSymbol = {
    * fields without rev-ing the SpiSymbol type. A consumer that wants to
    * type-narrow should do so against the symbol's \`framework_role\`.
    */
-  framework_metadata?: Record<string, unknown>
+  framework_metadata?: SpiFrameworkMetadata
 }
 
 export type SpiEdgeKind =
