@@ -4,7 +4,9 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import type { ExtractionData } from '../../src/contracts/types.js'
 import { buildSpi } from '../../src/pipeline/spi/build.js'
+import { projectSpiToExtraction } from '../../src/pipeline/spi/projector.js'
 import type { SemanticProgramIndex, SpiSymbol, SpiSymbolKind } from '../../src/pipeline/spi/types.js'
 
 const FROZEN_NOW = () => new Date('2026-05-14T00:00:00.000Z')
@@ -28,6 +30,15 @@ function build(root: string): SemanticProgramIndex {
   })
 }
 
+function buildExtraction(root: string): ExtractionData {
+  return projectSpiToExtraction(build(root), { root })
+}
+
+type StorageTaggedEntity = {
+  framework_role?: string | undefined
+  framework_metadata?: Record<string, unknown> | undefined
+}
+
 function findSymbol(
   spi: SemanticProgramIndex,
   path: string,
@@ -39,28 +50,40 @@ function findSymbol(
   return spi.symbols.find((entry) => entry.file_id === file.id && entry.name === name && entry.kind === kind)
 }
 
-function findStorageTaggedSymbol(
-  spi: SemanticProgramIndex,
-  path: string,
-  expected: {
-    operation: string
-    candidateNames: string[]
-  },
-): SpiSymbol | undefined {
-  const file = spi.files.find((entry) => entry.path === path)
-  if (!file) return undefined
+function hasDirectPrismaOperationLabel(label: string, operation: string): boolean {
+  return label === operation
+    || label === `${operation}()`
+    || label === `.${operation}()`
+    || label.endsWith(`.${operation}`)
+    || label.endsWith(`.${operation}()`)
+}
 
-  const symbols = spi.symbols.filter((entry) => entry.file_id === file.id)
-  return symbols.find((entry) =>
-    entry.framework_metadata?.storage_operation === expected.operation
-    && expected.candidateNames.some((name) =>
-      entry.name === name
-      || entry.name.endsWith(`.${name}`)
-      || entry.name.endsWith(name)))
+function asFrameworkMetadata(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : undefined
+}
+
+function findPrismaOperationNode(
+  extraction: ExtractionData,
+  path: string,
+  operation: string,
+): StorageTaggedEntity | undefined {
+  const entry = extraction.nodes.find((candidate) => {
+    const metadata = asFrameworkMetadata(candidate.framework_metadata)
+    return candidate.source_file.endsWith(path)
+      && candidate.framework_role === 'prisma_model_access'
+      && metadata?.storage_operation === operation
+      && hasDirectPrismaOperationLabel(candidate.label, operation)
+  })
+  if (!entry) return undefined
+
+  return {
+    framework_role: typeof entry.framework_role === 'string' ? entry.framework_role : undefined,
+    framework_metadata: asFrameworkMetadata(entry.framework_metadata),
+  }
 }
 
 function expectStorageOperation(
-  symbol: SpiSymbol | undefined,
+  symbol: StorageTaggedEntity | Pick<SpiSymbol, 'framework_role' | 'framework_metadata'> | undefined,
   expected: {
     role?: string | RegExp
     operation: string
@@ -88,7 +111,7 @@ describe('SPI storage operation semantics regressions (#185)', () => {
     rmSync(sandbox, { recursive: true, force: true })
   })
 
-  it('tags Prisma model access wrappers with storage operation metadata', () => {
+  it('tags actual Prisma model operations with storage-oriented Prisma metadata', () => {
     writeFile(sandbox, 'src/db.ts', [
       'import { PrismaClient } from "@prisma/client"',
       'export const prisma = new PrismaClient()',
@@ -120,31 +143,43 @@ describe('SPI storage operation semantics regressions (#185)', () => {
     ].join('\n') + '\n')
 
     const spi = build(sandbox)
+    const extraction = buildExtraction(sandbox)
 
-    expectStorageOperation(findStorageTaggedSymbol(spi, 'src/db.ts', {
-      operation: 'findUnique',
-      candidateNames: ['findUserById', 'findUnique'],
-    }), { role: /^prisma_/, operation: 'findUnique' })
-    expectStorageOperation(findStorageTaggedSymbol(spi, 'src/db.ts', {
-      operation: 'findMany',
-      candidateNames: ['listUsers', 'findMany'],
-    }), { role: /^prisma_/, operation: 'findMany' })
-    expectStorageOperation(findStorageTaggedSymbol(spi, 'src/db.ts', {
-      operation: 'create',
-      candidateNames: ['createUser', 'create'],
-    }), { role: /^prisma_/, operation: 'create' })
-    expectStorageOperation(findStorageTaggedSymbol(spi, 'src/db.ts', {
-      operation: 'update',
-      candidateNames: ['updateUser', 'update'],
-    }), { role: /^prisma_/, operation: 'update' })
-    expectStorageOperation(findStorageTaggedSymbol(spi, 'src/db.ts', {
-      operation: 'upsert',
-      candidateNames: ['upsertUser', 'upsert'],
-    }), { role: /^prisma_/, operation: 'upsert' })
-    expectStorageOperation(findStorageTaggedSymbol(spi, 'src/db.ts', {
-      operation: '$transaction',
-      candidateNames: ['persistUsersInTransaction', '$transaction', 'transaction'],
-    }), { role: /^prisma_/, operation: '$transaction' })
+    for (const wrapperName of [
+      'findUserById',
+      'listUsers',
+      'createUser',
+      'updateUser',
+      'upsertUser',
+      'persistUsersInTransaction',
+    ] as const) {
+      expect(findSymbol(spi, 'src/db.ts', wrapperName, 'function')).toBeDefined()
+    }
+
+    expectStorageOperation(
+      findPrismaOperationNode(extraction, 'src/db.ts', 'findUnique'),
+      { role: 'prisma_model_access', operation: 'findUnique' },
+    )
+    expectStorageOperation(
+      findPrismaOperationNode(extraction, 'src/db.ts', 'findMany'),
+      { role: 'prisma_model_access', operation: 'findMany' },
+    )
+    expectStorageOperation(
+      findPrismaOperationNode(extraction, 'src/db.ts', 'create'),
+      { role: 'prisma_model_access', operation: 'create' },
+    )
+    expectStorageOperation(
+      findPrismaOperationNode(extraction, 'src/db.ts', 'update'),
+      { role: 'prisma_model_access', operation: 'update' },
+    )
+    expectStorageOperation(
+      findPrismaOperationNode(extraction, 'src/db.ts', 'upsert'),
+      { role: 'prisma_model_access', operation: 'upsert' },
+    )
+    expectStorageOperation(
+      findPrismaOperationNode(extraction, 'src/db.ts', '$transaction'),
+      { role: 'prisma_model_access', operation: '$transaction' },
+    )
   })
 
   it('classifies repository-style CRUD methods as persistence endpoints', () => {
@@ -192,6 +227,11 @@ describe('SPI storage operation semantics regressions (#185)', () => {
       'export function save(value: string): string {',
       '  return value.trim()',
       '}',
+      'export class DraftBuffer {',
+      '  save(value: string): string {',
+      '    return value',
+      '  }',
+      '}',
       'export class ReportFormatter {',
       '  create(value: string): string {',
       '    return value.toUpperCase()',
@@ -215,6 +255,7 @@ describe('SPI storage operation semantics regressions (#185)', () => {
 
     const genericSymbols = [
       findSymbol(spi, 'src/helpers.ts', 'save', 'function'),
+      findSymbol(spi, 'src/helpers.ts', 'DraftBuffer.save', 'method'),
       findSymbol(spi, 'src/helpers.ts', 'ReportFormatter.create', 'method'),
       findSymbol(spi, 'src/helpers.ts', 'ReportFormatter.update', 'method'),
       findSymbol(spi, 'src/helpers.ts', 'ReportFormatter.upsert', 'method'),
