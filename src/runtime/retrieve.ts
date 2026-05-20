@@ -1199,6 +1199,15 @@ function includesAnyToken(tokens: readonly string[], candidates: readonly string
   return candidates.some((candidate) => tokens.includes(candidate))
 }
 
+function escapeRegexLiteral(value: string): string {
+  return value.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
+}
+
+function containsWholeQuestionToken(questionLower: string, value: string): boolean {
+  const normalizedValue = value.toLowerCase()
+  return normalizedValue.length > 0 && new RegExp(`(^|[^a-z0-9])${escapeRegexLiteral(normalizedValue)}(?=$|[^a-z0-9])`).test(questionLower)
+}
+
 function containsUrlLikeRoutePath(question: string): boolean {
   return (
     /(^|[\s"'`([{])(\/(?:[A-Za-z0-9:_-]+(?:\/[A-Za-z0-9:_-]+)*)?\/?)(?=$|[\s"'`)\]}?!,:;])/.test(question) ||
@@ -1486,7 +1495,6 @@ function buildFrameworkQuestionProfile(question: string, questionTokens: readonl
     || persistenceIntent
     || storageReadIntent
     || storageWriteIntent
-    || includesAnyToken(questionTokens, ['method', 'methods', 'boundary', 'boundaries'])
   )
   const storageEndpointIntent =
     persistenceIntent
@@ -1649,7 +1657,7 @@ function frameworkBoostForNode(
     // verb (e.g. user-supplied data leaking in via SPI metadata) can't
     // break the RegExp constructor or match unintended substrings.
     const verb = metadata.http_method.toLowerCase()
-    if (verb && new RegExp(`\\b${verb.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')}\\b`).test(questionLower)) {
+    if (verb && new RegExp(`\\b${escapeRegexLiteral(verb)}\\b`).test(questionLower)) {
       boost += 1.5
     }
   }
@@ -1679,7 +1687,7 @@ function frameworkBoostForNode(
   }
   if (metadata.storage_operation && questionLower) {
     const storageOperation = metadata.storage_operation.toLowerCase()
-    if (storageOperation.length >= 2 && questionLower.includes(storageOperation)) {
+    if (storageOperation.length >= 2 && containsWholeQuestionToken(questionLower, storageOperation)) {
       boost += 1.75
     }
   }
@@ -1843,17 +1851,17 @@ function frameworkBoostForNode(
 
   if (profile.prisma) {
     if (frameworkRole === 'prisma_client') {
-      boost += profile.storageEndpointIntent
-        ? 1
-        : profile.modelIntent
-          ? 3
+      boost += profile.modelIntent
+        ? 3
+        : profile.storageEndpointIntent
+          ? 1
           : 1.5
     }
     if (frameworkRole === 'prisma_model_access') {
-      boost += profile.storageEndpointIntent
-        ? 2.25
-        : profile.modelIntent
-          ? 3
+      boost += profile.modelIntent
+        ? 3
+        : profile.storageEndpointIntent
+          ? 2.25
           : 1
     }
     if (frameworkRole === 'prisma_model_reader') {
