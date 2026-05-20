@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -149,6 +149,76 @@ describe('runBenchmark', () => {
       { question: 'workspace architecture docs', expected_labels: ['Workspace Architecture', 'architecture.md'] },
       { question: 'billing flow', expected_labels: [] },
     ])
+  })
+
+  test('preserves prompt metadata from shared question files', () => {
+    withTempDir((tempDir) => {
+      const questionsPath = join(tempDir, 'benchmark-questions.json')
+      writeFileSync(
+        questionsPath,
+        `${JSON.stringify([
+          {
+            id: 'report-generation',
+            description: 'Trace how report generation is assembled end to end.',
+            question: 'How is the report generated?',
+            expected_labels: [],
+          },
+        ], null, 2)}\n`,
+        'utf8',
+      )
+
+      expect(loadBenchmarkQuestions(questionsPath)).toEqual([
+        {
+          id: 'report-generation',
+          description: 'Trace how report generation is assembled end to end.',
+          question: 'How is the report generated?',
+          expected_labels: [],
+        },
+      ])
+    })
+  })
+
+  test('rejects blank prompt ids when present in shared question files', () => {
+    withTempDir((tempDir) => {
+      const questionsPath = join(tempDir, 'benchmark-questions.json')
+      writeFileSync(
+        questionsPath,
+        `${JSON.stringify([
+          {
+            id: '   ',
+            question: 'How is the report generated?',
+            expected_labels: [],
+          },
+        ], null, 2)}\n`,
+        'utf8',
+      )
+
+      expect(() => loadBenchmarkQuestions(questionsPath)).toThrow(
+        'Question file entry 1 id must be a non-empty string when provided',
+      )
+    })
+  })
+
+  test('rejects blank prompt descriptions when present in shared question files', () => {
+    withTempDir((tempDir) => {
+      const questionsPath = join(tempDir, 'benchmark-questions.json')
+      writeFileSync(
+        questionsPath,
+        `${JSON.stringify([
+          {
+            id: 'report-generation',
+            description: '   ',
+            question: 'How is the report generated?',
+            expected_labels: [],
+          },
+        ], null, 2)}\n`,
+        'utf8',
+      )
+
+      expect(() => loadBenchmarkQuestions(questionsPath)).toThrow(
+        'Question file entry 1 description must be a non-empty string when provided',
+      )
+    })
   })
 
   test('returns reduction metrics', () => {
