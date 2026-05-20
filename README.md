@@ -80,6 +80,21 @@ your prompt
 
 When the agent says "tell me more," it expands a stable `handle_id` inside the same MCP session instead of re-reading the repo from scratch.
 
+### Adaptive context-pack representations
+
+Compiled context packs now have a first-pass **rendering-only** adaptive layer. Retrieval still selects the same nodes and paths first; the runtime only changes how those already-selected nodes are emitted for the task.
+
+The current deterministic core modes are:
+
+- `signature`
+- `behavior_sketch`
+- `call_chain`
+- `contract_view`
+- `implementation_excerpt`
+- `dependency_record`
+
+That means the same selected nodes can render differently for `explain`, `review`, and `impact` work without changing retrieval selection. The tradeoff is explicit: lower-token renderings carry less raw implementation detail, while explain-oriented packs keep full code snippets when the runtime already has them.
+
 **What it's good at:**
 - Cutting per-session input tokens on codebase questions (measured 2.6× fewer on the GoValidate benchmark below).
 - PR review via `pr_impact` and `review-compare` — turns the *current git diff* into ranked review risks, structural hotspots, and likely test files (measured 7.25× smaller review prompt on a real PR).
