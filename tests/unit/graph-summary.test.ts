@@ -395,6 +395,81 @@ describe('buildGraphSummary', () => {
     ])
   })
 
+  it('keeps the strongest runtime path when duplicate label pairs exist', () => {
+    const graph = new KnowledgeGraph(true)
+
+    graph.addNode('entry-long', {
+      label: 'Entry',
+      source_file: 'src/runtime/entry-long.ts',
+      source_location: 'L1',
+      file_type: 'code',
+      community: 0,
+      source_domain: 'production',
+    })
+    graph.addNode('handler-long', {
+      label: 'Handler',
+      source_file: 'src/runtime/handler-long.ts',
+      source_location: 'L1',
+      file_type: 'code',
+      community: 0,
+      source_domain: 'production',
+    })
+    graph.addNode('sink-long', {
+      label: 'Sink',
+      source_file: 'src/runtime/sink-long.ts',
+      source_location: 'L1',
+      file_type: 'code',
+      community: 0,
+      source_domain: 'production',
+    })
+
+    graph.addNode('entry-short', {
+      label: 'Entry',
+      source_file: 'src/runtime/entry-short.ts',
+      source_location: 'L1',
+      file_type: 'code',
+      community: 0,
+      source_domain: 'production',
+    })
+    graph.addNode('sink-short', {
+      label: 'Sink',
+      source_file: 'src/runtime/sink-short.ts',
+      source_location: 'L1',
+      file_type: 'code',
+      community: 0,
+      source_domain: 'production',
+    })
+
+    graph.addEdge('entry-long', 'handler-long', {
+      relation: 'calls',
+      confidence: 'EXTRACTED',
+      source_file: 'src/runtime/entry-long.ts',
+    })
+    graph.addEdge('handler-long', 'sink-long', {
+      relation: 'calls',
+      confidence: 'EXTRACTED',
+      source_file: 'src/runtime/handler-long.ts',
+    })
+    graph.addEdge('entry-short', 'sink-short', {
+      relation: 'calls',
+      confidence: 'EXTRACTED',
+      source_file: 'src/runtime/entry-short.ts',
+    })
+
+    const summary = buildGraphSummary(graph)
+
+    expect(summary.runtime_paths).toContainEqual({
+      from: 'Entry',
+      to: 'Sink',
+      hops: 2,
+    })
+    expect(summary.runtime_paths).not.toContainEqual({
+      from: 'Entry',
+      to: 'Sink',
+      hops: 1,
+    })
+  })
+
   it('produces deterministic output on repeated calls', () => {
     const graph = makeRichGraph()
     const s1 = buildGraphSummary(graph)

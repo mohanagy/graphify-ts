@@ -263,6 +263,13 @@ function shortestRuntimeDistances(graph: KnowledgeGraph, startId: string, runtim
   return distances
 }
 
+function strongerRuntimePath(left: GraphSummaryRuntimePath, right: GraphSummaryRuntimePath): GraphSummaryRuntimePath {
+  if (right.hops > left.hops) {
+    return right
+  }
+  return left
+}
+
 function runtimePaths(graph: KnowledgeGraph, nodes: readonly NodeSummary[]): GraphSummaryRuntimePath[] {
   const runtimeNodeIds = new Set(nodes.filter((node) => node.runtimeEligible).map((node) => node.id))
   const nodeMap = new Map(nodes.map((node) => [node.id, node] as const))
@@ -292,7 +299,9 @@ function runtimePaths(graph: KnowledgeGraph, nodes: readonly NodeSummary[]): Gra
       to: best.node.label,
       hops: best.hops,
     }
-    paths.set(JSON.stringify([path.from, path.to]), path)
+    const key = JSON.stringify([path.from, path.to])
+    const existing = paths.get(key)
+    paths.set(key, existing ? strongerRuntimePath(existing, path) : path)
   }
 
   return sortedBounded(
