@@ -1,0 +1,215 @@
+import { describe, expect, it } from 'vitest'
+
+import { KnowledgeGraph } from '../../src/contracts/graph.js'
+import { buildGraphSummary } from '../../src/runtime/graph-summary.js'
+
+function makeRichGraph(): KnowledgeGraph {
+  const graph = new KnowledgeGraph(true) // directed
+
+  // Community 0: auth layer (production, express)
+  graph.addNode('n1', { label: 'AuthService', source_file: 'src/auth/service.ts', source_location: 'L10', file_type: 'code', community: 0, source_domain: 'production', framework: 'express' })
+  graph.addNode('n2', { label: 'TokenValidator', source_file: 'src/auth/token.ts', source_location: 'L5', file_type: 'code', community: 0, source_domain: 'production', framework: 'express' })
+  graph.addNode('n3', { label: 'UserRepository', source_file: 'src/users/repo.ts', source_location: 'L1', file_type: 'code', community: 0, source_domain: 'production' })
+
+  // Community 1: api layer (production, express)
+  graph.addNode('n4', { label: 'ApiRouter', source_file: 'src/api/router.ts', source_location: 'L1', file_type: 'code', community: 1, source_domain: 'production', framework: 'express' })
+  graph.addNode('n5', { label: 'RequestHandler', source_file: 'src/api/handler.ts', source_location: 'L1', file_type: 'code', community: 1, source_domain: 'production' })
+
+  // Community 2: test layer
+  graph.addNode('n6', { label: 'AuthServiceTest', source_file: 'tests/auth.test.ts', source_location: 'L1', file_type: 'code', community: 2, source_domain: 'test', framework: 'jest' })
+  graph.addNode('n7', { label: 'ApiRouterTest', source_file: 'tests/api.test.ts', source_location: 'L1', file_type: 'code', community: 2, source_domain: 'test', framework: 'jest' })
+
+  // Docs node (community 0)
+  graph.addNode('n8', { label: 'README', source_file: 'README.md', source_location: 'L1', file_type: 'document', community: 0, source_domain: 'docs' })
+
+  // Edges: n4 → n1 → n2, n4 → n5, n1 → n3, n6 → n1, n7 → n4
+  graph.addEdge('n4', 'n1', { relation: 'calls', confidence: 'EXTRACTED', source_file: 'src/api/router.ts' })
+  graph.addEdge('n4', 'n5', { relation: 'calls', confidence: 'EXTRACTED', source_file: 'src/api/router.ts' })
+  graph.addEdge('n1', 'n2', { relation: 'calls', confidence: 'EXTRACTED', source_file: 'src/auth/service.ts' })
+  graph.addEdge('n1', 'n3', { relation: 'calls', confidence: 'EXTRACTED', source_file: 'src/auth/service.ts' })
+  graph.addEdge('n6', 'n1', { relation: 'imports', confidence: 'EXTRACTED', source_file: 'tests/auth.test.ts' })
+  graph.addEdge('n7', 'n4', { relation: 'imports', confidence: 'EXTRACTED', source_file: 'tests/api.test.ts' })
+
+  return graph
+}
+
+describe('buildGraphSummary', () => {
+  it('returns correct structural counts', () => {
+    const graph = makeRichGraph()
+    const summary = buildGraphSummary(graph)
+
+    expect(summary.node_count).toBe(8)
+    expect(summary.edge_count).toBe(6)
+    expect(summary.file_count).toBe(8)
+    expect(summary.community_count).toBe(3)
+  })
+
+  it('counts unique source files rather than raw nodes for file_count', () => {
+    const graph = new KnowledgeGraph(true)
+    graph.addNode('service', {
+      label: 'AuthService',
+      source_file: 'src/auth/service.ts',
+      source_location: 'L1',
+      file_type: 'code',
+      community: 0,
+      source_domain: 'production',
+    })
+    graph.addNode('validator', {
+      label: 'TokenValidator',
+      source_file: 'src/auth/service.ts',
+      source_location: 'L20',
+      file_type: 'code',
+      community: 0,
+      source_domain: 'production',
+    })
+
+    const summary = buildGraphSummary(graph)
+
+    expect(summary.node_count).toBe(2)
+    expect(summary.file_count).toBe(1)
+  })
+
+  it('breaks down source-domain counts', () => {
+    const graph = makeRichGraph()
+    const summary = buildGraphSummary(graph)
+
+    expect(summary.source_domains).toMatchObject({
+      production: 5,
+      test: 2,
+      docs: 1,
+    })
+    // No unknown or spurious domains
+    expect(Object.keys(summary.source_domains).sort()).toEqual(['docs', 'production', 'test'])
+  })
+
+  it('returns top_modules ordered by degree descending', () => {
+    const graph = makeRichGraph()
+    const summary = buildGraphSummary(graph)
+
+    expect(summary.top_modules).toBeInstanceOf(Array)
+    expect(summary.top_modules.length).toBeGreaterThan(0)
+
+    // Ordering: each entry's degree is >= the next entry's degree
+    for (let index = 1; index < summary.top_modules.length; index++) {
+      expect(summary.top_modules[index - 1]!.degree).toBeGreaterThanOrEqual(summary.top_modules[index]!.degree)
+    }
+
+    // AuthService (in-degree 2, out-degree 2 → degree 4) and ApiRouter (out-degree 2 → degree 3)
+    // should appear in the top list
+    const labels = summary.top_modules.map((m) => m.label)
+    expect(labels).toContain('AuthService')
+    expect(labels).toContain('ApiRouter')
+  })
+
+  it('collects detected frameworks without duplicates, in deterministic order', () => {
+    const graph = makeRichGraph()
+    const summary = buildGraphSummary(graph)
+
+    expect(summary.frameworks).toBeInstanceOf(Array)
+    expect(summary.frameworks).toContain('express')
+    expect(summary.frameworks).toContain('jest')
+
+    // No duplicates
+    expect(new Set(summary.frameworks).size).toBe(summary.frameworks.length)
+
+    // Deterministic: two calls return identical ordering
+    const summary2 = buildGraphSummary(graph)
+    expect(summary2.frameworks).toEqual(summary.frameworks)
+  })
+
+  it('identifies entrypoints (in-degree 0) in the directed graph', () => {
+    const graph = makeRichGraph()
+    const summary = buildGraphSummary(graph)
+
+    expect(summary.entrypoints).toBeInstanceOf(Array)
+
+    const labels = summary.entrypoints.map((e) => e.label)
+    expect(labels).toContain('ApiRouter')
+    expect(labels).toContain('AuthServiceTest')
+    expect(labels).toContain('ApiRouterTest')
+    expect(labels).not.toContain('README')
+  })
+
+  it('exposes optional graph_version and generated_at metadata fields', () => {
+    const graph = makeRichGraph()
+    const summary = buildGraphSummary(graph)
+
+    // Without a graphPath, metadata is absent; type contract must allow both shapes
+    expect(
+      summary.graph_version === undefined || typeof summary.graph_version === 'string',
+    ).toBe(true)
+    expect(
+      summary.generated_at === undefined || typeof summary.generated_at === 'string',
+    ).toBe(true)
+  })
+
+  it('caps top_modules at 10 entries even when many nodes exist', () => {
+    const graph = new KnowledgeGraph(true)
+    for (let index = 0; index < 15; index++) {
+      graph.addNode(`n${index}`, {
+        label: `Module${index}`,
+        source_file: `src/module${index}.ts`,
+        source_location: 'L1',
+        file_type: 'code',
+        community: 0,
+        source_domain: 'production',
+      })
+    }
+    // All 14 nodes connect to n0 so n0 has degree 14
+    for (let index = 1; index < 15; index++) {
+      graph.addEdge('n0', `n${index}`, { relation: 'calls', confidence: 'EXTRACTED', source_file: 'src/module0.ts' })
+    }
+
+    const summary = buildGraphSummary(graph)
+    expect(summary.top_modules.length).toBeLessThanOrEqual(10)
+  })
+
+  it('caps entrypoints at 10 entries even when many exist', () => {
+    const graph = new KnowledgeGraph(true)
+    for (let index = 0; index < 15; index++) {
+      graph.addNode(`n${index}`, {
+        label: `Entry${index}`,
+        source_file: `src/entry${index}.ts`,
+        source_location: 'L1',
+        file_type: 'code',
+        community: 0,
+        source_domain: 'production',
+      })
+    }
+    // No edges → all 15 are entrypoints
+
+    const summary = buildGraphSummary(graph)
+    expect(summary.entrypoints.length).toBeLessThanOrEqual(10)
+  })
+
+  it('returns high-signal runtime_paths as a bounded array', () => {
+    const graph = makeRichGraph()
+    const summary = buildGraphSummary(graph)
+
+    expect(summary.runtime_paths).toBeInstanceOf(Array)
+    expect(summary.runtime_paths.length).toBeLessThanOrEqual(10)
+
+    for (const path of summary.runtime_paths) {
+      expect(typeof path.from).toBe('string')
+      expect(typeof path.to).toBe('string')
+      expect(typeof path.hops).toBe('number')
+      expect(path.hops).toBeGreaterThanOrEqual(1)
+    }
+
+    expect(summary.runtime_paths).toContainEqual(
+      expect.objectContaining({
+        from: 'ApiRouter',
+        to: 'TokenValidator',
+        hops: 2,
+      }),
+    )
+  })
+
+  it('produces deterministic output on repeated calls', () => {
+    const graph = makeRichGraph()
+    const s1 = buildGraphSummary(graph)
+    const s2 = buildGraphSummary(graph)
+
+    expect(s1).toEqual(s2)
+  })
+})
