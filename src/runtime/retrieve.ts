@@ -490,7 +490,7 @@ function eligibleNodeEntries(graph: KnowledgeGraph, options: Pick<RetrieveOption
 
 function frameworkMetadataFromAttributes(attributes: Record<string, unknown>): FrameworkNodeMetadata {
   const out: FrameworkNodeMetadata = {}
-  for (const key of ['route_path', 'http_method', 'mount_path', 'slice_name', 'procedure_name', 'router_name', 'storage_operation'] as const) {
+  for (const key of ['route_path', 'http_method', 'mount_path', 'slice_name', 'procedure_name', 'router_name'] as const) {
     const value = attributes[key]
     if (typeof value === 'string' && value.length > 0) out[key] = value
   }
@@ -534,22 +534,6 @@ function scoredNodeFromGraphEntry(
     score: 0,
     relevanceBand: 'related',
   }
-}
-
-function serializeRetrieveSourceFile(sourceFile: string, rootPath: string | undefined, frameworkRole: string | undefined): string {
-  if (frameworkRole?.startsWith('repository_')) {
-    const relativeSourceFile = relativizeSourceFile(sourceFile, rootPath)
-    if (
-      relativeSourceFile.length > 0
-      && relativeSourceFile !== sourceFile
-      && !relativeSourceFile.startsWith('/')
-      && !/^[A-Za-z]:\//.test(relativeSourceFile)
-    ) {
-      return `/${relativeSourceFile}`
-    }
-    return relativeSourceFile
-  }
-  return relativizeSourceFile(sourceFile, rootPath)
 }
 
 function expandableLineRange(node: Pick<ScoredNode, 'lineNumber' | 'sourceLocation'>): ContextPackExpandableLineRange | undefined {
@@ -743,7 +727,6 @@ function activeFrameworksForProfile(profile: FrameworkQuestionProfile): Readonly
   if (profile.fastify) frameworks.add('fastify')
   if (profile.trpc) frameworks.add('trpc')
   if (profile.prisma) frameworks.add('prisma')
-  if (profile.prisma) frameworks.add('repository')
   return frameworks
 }
 
@@ -1574,8 +1557,6 @@ interface FrameworkNodeMetadata {
   procedure_name?: string
   /** tRPC router-name prefix on synthesized procedures. */
   router_name?: string
-  /** Storage semantics — repository/ORM operation kind. */
-  storage_operation?: string
 }
 
 function frameworkBoostForNode(
@@ -1795,27 +1776,6 @@ function frameworkBoostForNode(
     if (frameworkRole === 'prisma_model_access') {
       boost += profile.modelIntent ? 3 : 1
     }
-    if (frameworkRole === 'repository_reader') {
-      boost += profile.modelIntent ? 6 : 2
-    }
-    if (frameworkRole === 'repository_writer') {
-      boost += profile.modelIntent ? 10 : 3
-    }
-    if (metadata.storage_operation && questionLower) {
-      const operation = metadata.storage_operation.toLowerCase()
-      if (
-        ['save', 'create', 'update', 'upsert', '$transaction'].includes(operation)
-        && /\b(?:write|writes|save|saves|saved|persist|persists|persisted|create|creates|created|update|updates|updated|upsert|upserts)\b/.test(questionLower)
-      ) {
-        boost += 3.5
-      }
-      if (
-        ['findunique', 'findmany'].includes(operation)
-        && /\b(?:read|reads|find|finds|fetch|fetches|load|loads|lookup|lookups|query|queries)\b/.test(questionLower)
-      ) {
-        boost += 3
-      }
-    }
   }
 
   if (profile.frameworkShaped && boost === 0 && ['function', 'class', 'variable'].includes(nodeKind)) {
@@ -1929,7 +1889,7 @@ function buildRetrieveResultFromOrderedCandidates(
         derived: node.lineNumberDerived,
         fileCache: snippetFileCache,
       })
-      const serializedSourceFile = serializeRetrieveSourceFile(node.sourceFile, rootPath, node.frameworkRole)
+      const serializedSourceFile = relativizeSourceFile(node.sourceFile, rootPath)
       builtEntry = {
         node_id: node.id,
         label: node.label,
@@ -1956,7 +1916,7 @@ function buildRetrieveResultFromOrderedCandidates(
       label: node.label,
       node_id: node.id,
       community: node.community,
-      source_file: serializeRetrieveSourceFile(node.sourceFile, rootPath, node.frameworkRole),
+      source_file: relativizeSourceFile(node.sourceFile, rootPath),
       line_number: node.lineNumber,
       file_type: node.fileType,
       ...(node.nodeKind.trim().length > 0 ? { node_kind: node.nodeKind } : {}),
@@ -1975,7 +1935,7 @@ function buildRetrieveResultFromOrderedCandidates(
       expandable_ref: {
         node_id: node.id,
         label: node.label,
-        source_file: serializeRetrieveSourceFile(node.sourceFile, rootPath, node.frameworkRole),
+        source_file: relativizeSourceFile(node.sourceFile, rootPath),
         ...(() => {
           const lineRange = expandableLineRange(node)
           return lineRange ? { line_range: lineRange } : {}

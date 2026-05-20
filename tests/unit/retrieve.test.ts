@@ -3056,6 +3056,59 @@ describe('retrieve', () => {
       expect(result.matched_nodes.find((node) => node.label === 'SharedAuthPolicy')?.source_file).toBe('/opt/shared/auth/policy.ts')
     })
 
+    it('does not special-case repository source paths during retrieve serialization', () => {
+      const graph = new KnowledgeGraph()
+      graph.graph.root_path = '/workspace/app'
+      graph.addNode('report_repository_save', {
+        label: 'save()',
+        source_file: '/workspace/app/src/repositories/report.repository.ts',
+        line_number: 14,
+        node_kind: 'method',
+        file_type: 'code',
+        framework: 'repository',
+        framework_role: 'repository_writer',
+        framework_metadata: {
+          storage_operation: 'save',
+        },
+        community: 0,
+      })
+
+      const result = retrieveContext(graph, {
+        question: 'save repository method',
+        budget: 3000,
+        fileType: 'code',
+      })
+
+      expect(result.matched_nodes).toHaveLength(1)
+      expect(result.matched_nodes[0]?.source_file).toBe('src/repositories/report.repository.ts')
+    })
+
+    it('does not add retrieval boosts for repository storage-operation metadata', () => {
+      const graph = new KnowledgeGraph()
+      graph.addNode('report_repository_save', {
+        label: 'save()',
+        source_file: '/src/repositories/report.repository.ts',
+        line_number: 14,
+        node_kind: 'method',
+        file_type: 'code',
+        framework: 'repository',
+        framework_role: 'repository_writer',
+        framework_metadata: {
+          storage_operation: 'save',
+        },
+        community: 0,
+      })
+
+      const result = retrieveContext(graph, {
+        question: 'which database method saves reports',
+        budget: 3000,
+        fileType: 'code',
+      })
+
+      expect(result.matched_nodes).toHaveLength(1)
+      expect(result.matched_nodes[0]?.framework_boost).toBe(0)
+    })
+
     it('preserves question in result', () => {
       const graph = buildTestGraph()
       const result = retrieveContext(graph, { question: 'how does auth work?', budget: 5000 })
