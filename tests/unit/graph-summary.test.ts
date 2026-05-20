@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { KnowledgeGraph } from '../../src/contracts/graph.js'
 import { buildGraphSummary } from '../../src/runtime/graph-summary.js'
 
-function makeRichGraph(): KnowledgeGraph {
+function makeRichGraph(options?: {
+  graphVersion?: string
+  generatedAt?: string
+}): KnowledgeGraph {
   const graph = new KnowledgeGraph(true) // directed
 
   // Community 0: auth layer (production, express)
@@ -29,6 +32,13 @@ function makeRichGraph(): KnowledgeGraph {
   graph.addEdge('n1', 'n3', { relation: 'calls', confidence: 'EXTRACTED', source_file: 'src/auth/service.ts' })
   graph.addEdge('n6', 'n1', { relation: 'imports', confidence: 'EXTRACTED', source_file: 'tests/auth.test.ts' })
   graph.addEdge('n7', 'n4', { relation: 'imports', confidence: 'EXTRACTED', source_file: 'tests/api.test.ts' })
+
+  if (options?.graphVersion) {
+    graph.graph.graph_version = options.graphVersion
+  }
+  if (options?.generatedAt) {
+    graph.graph.generated_at = options.generatedAt
+  }
 
   return graph
 }
@@ -130,17 +140,15 @@ describe('buildGraphSummary', () => {
     expect(labels).not.toContain('README')
   })
 
-  it('exposes optional graph_version and generated_at metadata fields', () => {
-    const graph = makeRichGraph()
+  it('surfaces graph_version and generated_at metadata when present on the graph', () => {
+    const graph = makeRichGraph({
+      graphVersion: 'graph-v2026-05-15',
+      generatedAt: '2026-05-15T03:49:06.000Z',
+    })
     const summary = buildGraphSummary(graph)
 
-    // Without a graphPath, metadata is absent; type contract must allow both shapes
-    expect(
-      summary.graph_version === undefined || typeof summary.graph_version === 'string',
-    ).toBe(true)
-    expect(
-      summary.generated_at === undefined || typeof summary.generated_at === 'string',
-    ).toBe(true)
+    expect(summary.graph_version).toBe('graph-v2026-05-15')
+    expect(summary.generated_at).toBe('2026-05-15T03:49:06.000Z')
   })
 
   it('caps top_modules at 10 entries even when many nodes exist', () => {
