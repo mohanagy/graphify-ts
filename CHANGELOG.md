@@ -6,6 +6,7 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ### Added
 
+- **Compact graph summary surface**: adds a bounded deterministic `graphify-ts summary [graph.json]` CLI command plus a default-core MCP `graph_summary` tool that return the same shared JSON overview of graph counts, source domains, top modules, entrypoints, frameworks, and high-signal runtime paths. This is intended as a first-turn repo overview before deeper `retrieve` / `context_pack` calls, and the README/core-profile byte-budget docs now reflect the new 7-tool default core surface.
 - **Execution-slice context packs**: runtime-generation backend packs now expose a separate `execution_slice` section with ordered runtime steps and partial-path signaling while preserving the raw `slice` metadata for compatibility.
 - **Pack-only compare mode**: `graphify-ts compare --baseline-mode pack_only` now compares one bounded raw-context baseline prompt against one compiled graphify pack, persists the compact pack audit fields in `report.json`, and keeps `native_agent` as the provider-reported runtime benchmark path.
 - **Share-safe proof reports**: `compare`, `review-compare`, and runner-backed `benchmark --exec ...` executions now emit a companion `report.share-safe.json` with stable path placeholders while keeping the full local `report.json`.
