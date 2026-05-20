@@ -219,6 +219,14 @@ function isTaggedPrismaRoot(node: ts.Expression, prismaClientBindings: ReadonlyS
   return ts.isIdentifier(node) && prismaClientBindings.has(node.text)
 }
 
+function prismaRoleForOperation(
+  operation: Extract<SpiStorageOperation, 'findUnique' | 'findMany' | 'create' | 'update' | 'upsert' | '$transaction'>,
+): Extract<SpiFrameworkRole, 'prisma_model_reader' | 'prisma_model_writer'> {
+  return PRISMA_READER_OPERATIONS.has(operation)
+    ? 'prisma_model_reader'
+    : 'prisma_model_writer'
+}
+
 function synthesizePrismaStorageSymbol(
   ctx: DetectPrismaFrameworkContext,
   call: ts.CallExpression,
@@ -242,7 +250,7 @@ function synthesizePrismaStorageSymbol(
       end: { line: end.line + 1, column: end.character + 1 },
     },
     exported: false,
-    framework_role: 'prisma_model_access',
+    framework_role: prismaRoleForOperation(operation),
     framework_metadata: {
       storage_operation: operation,
     },

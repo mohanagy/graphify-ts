@@ -113,6 +113,8 @@ export type SpiFrameworkRole =
   | 'trpc_procedure_subscription'
   // Prisma roles (v0.17 #83)
   | 'prisma_client'
+  | 'prisma_model_reader'
+  | 'prisma_model_writer'
   | 'prisma_model_access'
   // Storage semantics roles (issue #185)
   | 'repository_reader'

@@ -70,7 +70,10 @@ function findPrismaOperationNode(
   const entry = extraction.nodes.find((candidate) => {
     const metadata = asFrameworkMetadata(candidate.framework_metadata)
     return candidate.source_file.endsWith(path)
-      && candidate.framework_role === 'prisma_model_access'
+      && (
+        candidate.framework_role === 'prisma_model_reader'
+        || candidate.framework_role === 'prisma_model_writer'
+      )
       && metadata?.storage_operation === operation
       && hasDirectPrismaOperationLabel(candidate.label, operation)
   })
@@ -111,7 +114,7 @@ function expectRepositoryPersistenceOperation(
   },
 ): void {
   expectStorageOperation(symbol, expected)
-  expect(symbol?.framework_role).not.toBe('prisma_model_access')
+  expect(symbol?.framework_role).not.toMatch(/^prisma_model_/)
 }
 
 describe('SPI storage operation semantics regressions (#185)', () => {
@@ -172,27 +175,27 @@ describe('SPI storage operation semantics regressions (#185)', () => {
 
     expectStorageOperation(
       findPrismaOperationNode(extraction, 'src/db.ts', 'findUnique'),
-      { role: 'prisma_model_access', operation: 'findUnique' },
+      { role: 'prisma_model_reader', operation: 'findUnique' },
     )
     expectStorageOperation(
       findPrismaOperationNode(extraction, 'src/db.ts', 'findMany'),
-      { role: 'prisma_model_access', operation: 'findMany' },
+      { role: 'prisma_model_reader', operation: 'findMany' },
     )
     expectStorageOperation(
       findPrismaOperationNode(extraction, 'src/db.ts', 'create'),
-      { role: 'prisma_model_access', operation: 'create' },
+      { role: 'prisma_model_writer', operation: 'create' },
     )
     expectStorageOperation(
       findPrismaOperationNode(extraction, 'src/db.ts', 'update'),
-      { role: 'prisma_model_access', operation: 'update' },
+      { role: 'prisma_model_writer', operation: 'update' },
     )
     expectStorageOperation(
       findPrismaOperationNode(extraction, 'src/db.ts', 'upsert'),
-      { role: 'prisma_model_access', operation: 'upsert' },
+      { role: 'prisma_model_writer', operation: 'upsert' },
     )
     expectStorageOperation(
       findPrismaOperationNode(extraction, 'src/db.ts', '$transaction'),
-      { role: 'prisma_model_access', operation: '$transaction' },
+      { role: 'prisma_model_writer', operation: '$transaction' },
     )
   })
 

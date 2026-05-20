@@ -283,6 +283,8 @@ function nodeKindForRole(role: NonNullable<SpiSymbol['framework_role']>): NonNul
       return 'route'
     case 'prisma_client':
       return 'class'
+    case 'prisma_model_reader':
+    case 'prisma_model_writer':
     case 'prisma_model_access':
       return 'function'
     case 'repository_reader':
@@ -328,7 +330,14 @@ function projectSymbol(symbol: SpiSymbol, fileBaseStem: string): SymbolProjectio
   const storageOperation = typeof symbol.framework_metadata?.storage_operation === 'string'
     ? symbol.framework_metadata.storage_operation
     : null
-  if (symbol.framework_role === 'prisma_model_access' && storageOperation) {
+  if (
+    (
+      symbol.framework_role === 'prisma_model_reader'
+      || symbol.framework_role === 'prisma_model_writer'
+      || symbol.framework_role === 'prisma_model_access'
+    )
+    && storageOperation
+  ) {
     return {
       id: _makeId(fileBaseStem, symbol.name),
       label: `.${storageOperation}()`,
