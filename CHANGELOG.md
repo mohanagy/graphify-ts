@@ -4,6 +4,8 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-05-21
+
 ### Added
 
 - **Compact graph summary surface**: adds a bounded deterministic `graphify-ts summary [graph.json]` CLI command plus a default-core MCP `graph_summary` tool that return the same shared JSON overview of graph counts, source domains, top modules, entrypoints, frameworks, and high-signal runtime paths. This is intended as a first-turn repo overview before deeper `retrieve` / `context_pack` calls, and the README/core-profile byte-budget docs now reflect the new 7-tool default core surface.
@@ -13,6 +15,7 @@ All notable changes to the TypeScript package will be documented in this file.
 - **Generate performance benchmark harness**: adds a small synthetic benchmark flow for `generate`, `update`, `cluster-only`, and SPI cold/warm cache runs, with structured metrics for wall-clock time, file/extraction counts, graph size, output bytes, and cache-hit reasons plus new docs for manual large-repo measurements.
 - **Deterministic answer-quality rubric skeleton**: shared GoValidate benchmark gates now include answer-term checks plus manual-review concept notes, and `verify-answer-quality.js` can validate saved benchmark answer artifacts without calling an LLM.
 - **Public GoValidate benchmark suite**: adds `docs/benchmarks/govalidate-suite/questions.json` with stable prompt ids and descriptions for ten realistic product questions, preserves optional `id`/`description` metadata in shared benchmark question files, and documents the suite as a conservative public prompt set that stays separate from the dated single-prompt benchmark artifact.
+- **Python semantic indexing first pass**: Python extraction now resolves imported top-level function calls across files, guards against dangling nested-function call edges, and adds first-pass FastAPI router/route/endpoint/dependency semantics for decorator-based handlers.
 
 ### Changed
 
