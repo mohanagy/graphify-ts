@@ -650,7 +650,7 @@ export function resolveCrossFilePythonImports(files: readonly string[], extracti
         continue
       }
 
-      const functionMatch = trimmed.match(/^def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/)
+      const functionMatch = trimmed.match(/^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/)
       if (functionMatch?.[1]) {
         const currentClass = classStack[classStack.length - 1]
         const functionId = currentClass ? _makeId(currentClass.id, functionMatch[1]) : _makeId(stem, functionMatch[1])
@@ -852,7 +852,7 @@ export function resolvePythonFastApiSemantics(
         continue
       }
 
-      const functionMatch = trimmed.match(/^def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/)
+      const functionMatch = trimmed.match(/^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/)
       if (functionMatch?.[1]) {
         const currentClass = classStack[classStack.length - 1]
         const functionId = currentClass ? _makeId(currentClass.id, functionMatch[1]) : _makeId(stem, functionMatch[1])

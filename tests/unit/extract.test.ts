@@ -1421,7 +1421,7 @@ describe('extract', () => {
           'router = APIRouter(prefix="/api")',
           '',
           '@router.get("/users")',
-          'def list_users(db = Depends(get_db)):',
+          'async def list_users(db = Depends(get_db)):',
           '    return {"db": db}',
         ].join('\n'),
         'utf8',
