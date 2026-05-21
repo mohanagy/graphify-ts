@@ -1781,6 +1781,7 @@ function buildFrameworkQuestionProfile(question: string, questionTokens: readonl
   const explicitNest = includesAnyToken(questionTokens, ['nest', 'nestjs'])
   const explicitNext = includesAnyToken(questionTokens, ['next', 'nextjs'])
   const explicitRoutingControllers = /\brouting(?:\s|-)?controllers\b/i.test(question)
+    || includesAnyToken(questionTokens, ['routingcontrollers'])
   // v0.19 — explicit mentions of the v0.17 substrates.
   const explicitHono = includesAnyToken(questionTokens, ['hono'])
   const explicitFastify = includesAnyToken(questionTokens, ['fastify'])
@@ -1874,6 +1875,15 @@ function buildFrameworkQuestionProfile(question: string, questionTokens: readonl
     !express &&
     (explicitReactRouter || mentionsReact || loaderIntent || actionIntent || (renderIntent && !nextSpecificIntent))
   const nest = explicitNest || controllerIntent || moduleIntent || guardIntent || interceptorIntent || pipeIntent
+  const inferredRoutingControllers =
+    !explicitExpress &&
+    !explicitNest &&
+    !explicitReactRouter &&
+    !explicitNext &&
+    !explicitHono &&
+    !explicitFastify &&
+    (hasHttpVerb || controllerIntent)
+  const routingControllers = explicitRoutingControllers || inferredRoutingControllers
   const next =
     nextSpecificIntent &&
     (explicitNext ||
@@ -1882,9 +1892,9 @@ function buildFrameworkQuestionProfile(question: string, questionTokens: readonl
       includesAnyToken(questionTokens, ['route', 'routes', 'middleware', 'action', 'actions', 'page', 'pages']))
 
   return {
-    frameworkShaped: express || explicitRoutingControllers || redux || reactRouter || nest || next || repository || hono || fastify || trpc || prisma,
+    frameworkShaped: express || routingControllers || redux || reactRouter || nest || next || repository || hono || fastify || trpc || prisma,
     express,
-    routingControllers: explicitRoutingControllers,
+    routingControllers,
     redux,
     reactRouter,
     nest,

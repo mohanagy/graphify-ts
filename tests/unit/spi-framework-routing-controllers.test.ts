@@ -83,9 +83,11 @@ function writeRoutingControllersFixture(root: string): void {
     '  Authorized,',
     '  Body,',
     '  Controller,',
+    '  Delete,',
     '  Get,',
     '  JsonController,',
     '  Param,',
+    '  Patch,',
     '  Post,',
     '  Put,',
     '  UseBefore,',
@@ -117,6 +119,17 @@ function writeRoutingControllersFixture(root: string): void {
     '    void id',
     '    return body',
     '  }',
+    '',
+    '  @Patch("/:id")',
+    '  patch(@Param("id") id: string, @Body() body: CreateUserDto): CreateUserDto {',
+    '    void id',
+    '    return body',
+    '  }',
+    '',
+    '  @Delete("/:id")',
+    '  remove(@Param("id") id: string): string {',
+    '    return id',
+    '  }',
     '}',
   ].join('\n') + '\n')
   writeFile(root, 'src/server.ts', [
@@ -126,6 +139,26 @@ function writeRoutingControllersFixture(root: string): void {
     'export const app = createExpressServer({',
     '  controllers: [UserController, AdminController],',
     '})',
+  ].join('\n') + '\n')
+  writeFile(root, 'src/server-express-use.ts', [
+    'import { useExpressServer } from "routing-controllers"',
+    'import { UserController } from "./controllers/user.controller.js"',
+    '',
+    'const app = {}',
+    'useExpressServer(app, { controllers: [UserController] })',
+  ].join('\n') + '\n')
+  writeFile(root, 'src/server-koa-create.ts', [
+    'import { createKoaServer } from "routing-controllers"',
+    'import { AdminController } from "./controllers/user.controller.js"',
+    '',
+    'export const app = createKoaServer({ controllers: [AdminController] })',
+  ].join('\n') + '\n')
+  writeFile(root, 'src/server-koa-use.ts', [
+    'import { useKoaServer } from "routing-controllers"',
+    'import { UserController } from "./controllers/user.controller.js"',
+    '',
+    'const app = {}',
+    'useKoaServer(app, { controllers: [UserController] })',
   ].join('\n') + '\n')
 }
 
@@ -183,5 +216,31 @@ describe('buildSpi routing-controllers framework detector', () => {
 
     expect(edge(spi, serverFileId, userControllerId, 'registers_controller')).toBeTruthy()
     expect(edge(spi, serverFileId, adminControllerId, 'registers_controller')).toBeTruthy()
+  })
+
+  it('covers additional HTTP decorators and bootstrap helpers', () => {
+    writeRoutingControllersFixture(sandbox)
+    const spi = build(sandbox)
+
+    const healthMethod = methodSymbol(spi, 'src/controllers/user.controller.ts', 'AdminController.health')
+    const patchMethod = methodSymbol(spi, 'src/controllers/user.controller.ts', 'UserController.patch')
+    const removeMethod = methodSymbol(spi, 'src/controllers/user.controller.ts', 'UserController.remove')
+    const adminControllerId = classSymbol(spi, 'src/controllers/user.controller.ts', 'AdminController').id
+    const userControllerId = classSymbol(spi, 'src/controllers/user.controller.ts', 'UserController').id
+
+    expect(healthMethod.framework_metadata?.http_method).toBe('GET')
+    expect(healthMethod.framework_metadata?.route_path).toBe('/admin/health')
+    expect(patchMethod.framework_metadata?.http_method).toBe('PATCH')
+    expect(patchMethod.framework_metadata?.route_path).toBe('/users/:id')
+    expect(removeMethod.framework_metadata?.http_method).toBe('DELETE')
+    expect(removeMethod.framework_metadata?.route_path).toBe('/users/:id')
+
+    expect(edge(spi, adminControllerId, healthMethod.id, 'controller_route')).toBeTruthy()
+    expect(edge(spi, userControllerId, patchMethod.id, 'controller_route')).toBeTruthy()
+    expect(edge(spi, userControllerId, removeMethod.id, 'controller_route')).toBeTruthy()
+
+    expect(edge(spi, fileIdFor(spi, 'src/server-express-use.ts'), userControllerId, 'registers_controller')).toBeTruthy()
+    expect(edge(spi, fileIdFor(spi, 'src/server-koa-create.ts'), adminControllerId, 'registers_controller')).toBeTruthy()
+    expect(edge(spi, fileIdFor(spi, 'src/server-koa-use.ts'), userControllerId, 'registers_controller')).toBeTruthy()
   })
 })

@@ -95,4 +95,31 @@ describe('routing-controllers runtime surfaces', () => {
     expect(labels).toContain('CreateUserDto')
     expect(routeMethod?.framework_boost ?? 0).toBeGreaterThan(0)
   })
+
+  it('retrieves routing-controller nodes for generic HTTP verb and controller questions', () => {
+    writeRoutingControllersWorkspace(sandbox)
+
+    const result = generateGraph(sandbox, { useSpi: true, noHtml: true })
+    const graph = loadGraph(result.graphPath)
+    const httpRetrieved = retrieveContext(graph, {
+      question: 'Explain POST /users',
+      budget: 2500,
+    })
+    const controllerRetrieved = retrieveContext(graph, {
+      question: 'Which controller handles user creation?',
+      budget: 2500,
+    })
+
+    const httpLabels = httpRetrieved.matched_nodes.map((node) => node.label)
+    const httpRouteMethod = httpRetrieved.matched_nodes.find((node) => node.label === '.create()')
+    const controllerLabels = controllerRetrieved.matched_nodes.map((node) => node.label)
+    const controllerNode = controllerRetrieved.matched_nodes.find((node) => node.label === 'UserController')
+
+    expect(httpLabels).toEqual(
+      expect.arrayContaining(['UserController', '.create()', 'createUser()', 'CreateUserDto']),
+    )
+    expect(httpRouteMethod?.framework_boost ?? 0).toBeGreaterThan(0)
+    expect(controllerLabels).toContain('UserController')
+    expect(controllerNode?.framework_boost ?? 0).toBeGreaterThan(0)
+  })
 })
