@@ -9,8 +9,10 @@ import {
   buildBaselinePromptPack,
   buildGraphifyPromptPack,
   executeCompareRuns,
+  executeNativeAgentCompare,
   expandCompareExecTemplate,
   formatCompareSummary,
+  formatNativeAgentCompareSummary,
   generateCompareArtifacts,
   runCompareCommand,
   resolveCompareQuestions,
@@ -2293,6 +2295,196 @@ describe('compare runtime', () => {
     expect(JSON.stringify(shareSafeReport)).not.toContain(PROJECT_FIXTURE_ROOT)
     expect(readFileSync(join(COMPARE_OUTPUT_ROOT, outputTimestamp, 'baseline-answer.txt'), 'utf8')).toBe('baseline answer\n')
     expect(readFileSync(join(COMPARE_OUTPUT_ROOT, outputTimestamp, 'graphify-answer.txt'), 'utf8')).toBe('graphify answer\n')
+  })
+
+  it('adds deterministic answer-quality results to native_agent suite summaries when sibling quality gates exist', async () => {
+    const graph = makeGraph()
+    writeProjectFiles()
+    const graphPath = writeGraphFixture(graph)
+    const suiteDir = join(PROJECT_FIXTURE_ROOT, 'benchmarks', 'quality-suite')
+    mkdirSync(suiteDir, { recursive: true })
+    const questionsPath = join(suiteDir, 'questions.json')
+    writeFileSync(
+      questionsPath,
+      JSON.stringify(
+        [
+          { question: 'how does login create a session' },
+          { question: 'how does logout clear the session' },
+        ],
+        null,
+        2,
+      ),
+      'utf8',
+    )
+    writeFileSync(
+      join(suiteDir, 'quality-gates.json'),
+      JSON.stringify(
+        {
+          login: {
+            prompt: 'how does login create a session',
+            required_answer_terms: ['SessionManager'],
+            forbidden_answer_terms: ['Billing'],
+            required_concepts: ['login reaches session creation'],
+            answer_quality_notes: ['Deterministic term gates are not a full semantic grader.'],
+            manual_review_notes: ['Confirm the answer explains session creation.'],
+          },
+          logout: {
+            prompt: 'how does logout clear the session',
+            required_answer_terms: ['clearSession'],
+            forbidden_answer_terms: ['Billing'],
+            required_concepts: ['logout reaches session clearing'],
+            answer_quality_notes: ['Deterministic term gates are not a full semantic grader.'],
+            manual_review_notes: ['Confirm the answer explains session invalidation.'],
+          },
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    )
+
+    const result = await executeNativeAgentCompare(
+      {
+        graphPath,
+        questionsPath,
+        outputDir: COMPARE_OUTPUT_ROOT,
+        execTemplate: 'runner --prompt {prompt_file} --mode {mode} --out {output_file}',
+        baselineMode: 'native_agent',
+        now: new Date('2026-04-24T19:30:00.000Z'),
+      },
+      {
+        now: () => new Date('2026-04-24T19:30:00.000Z'),
+        runner: async (execution) => {
+          const answer =
+            execution.question === 'how does login create a session'
+              ? 'SessionManager creates the session.\n'
+              : execution.mode === 'baseline'
+                ? 'clearSession removes the session.\n'
+                : 'Billing handles the logout.\n'
+
+          return {
+            exitCode: 0,
+            stdout: makeClaudeStructuredCompareStdout({
+              result: answer,
+              usage: {
+                input_tokens: execution.mode === 'baseline' ? 120 : 90,
+                output_tokens: 30,
+              },
+            }),
+            stderr: '',
+            elapsedMs: execution.mode === 'baseline' ? 11 : 7,
+          }
+        },
+      },
+    )
+
+    expect(result.answer_quality).toEqual({
+      questions_checked: 2,
+      baseline_passed: 2,
+      graphify_passed: 1,
+      graphify_required_terms_missing: 1,
+      graphify_forbidden_terms_present: 1,
+      manual_review_required: 2,
+    })
+    expect(result.reports[0]?.answer_quality).toEqual(
+      expect.objectContaining({
+        gate: 'login',
+        baseline: expect.objectContaining({
+          passed: true,
+          missing_required_terms: [],
+          forbidden_terms_present: [],
+        }),
+        graphify: expect.objectContaining({
+          passed: true,
+          missing_required_terms: [],
+          forbidden_terms_present: [],
+        }),
+      }),
+    )
+    expect(result.reports[1]?.answer_quality).toEqual(
+      expect.objectContaining({
+        gate: 'logout',
+        baseline: expect.objectContaining({
+          passed: true,
+        }),
+        graphify: expect.objectContaining({
+          passed: false,
+          missing_required_terms: ['clearSession'],
+          forbidden_terms_present: ['Billing'],
+        }),
+      }),
+    )
+
+    const savedReport = JSON.parse(readFileSync(join(COMPARE_OUTPUT_ROOT, '2026-04-24T19-30-00', 'question-002', 'report.json'), 'utf8')) as Record<string, unknown>
+    const shareSafeReport = JSON.parse(readFileSync(join(COMPARE_OUTPUT_ROOT, '2026-04-24T19-30-00', 'question-002', 'report.share-safe.json'), 'utf8')) as Record<string, unknown>
+    expect(savedReport).toEqual(
+      expect.objectContaining({
+        answer_quality: expect.objectContaining({
+          gate: 'logout',
+          graphify: expect.objectContaining({
+            missing_required_terms: ['clearSession'],
+            forbidden_terms_present: ['Billing'],
+          }),
+        }),
+      }),
+    )
+    expect(shareSafeReport).toEqual(
+      expect.objectContaining({
+        answer_quality: expect.objectContaining({
+          gate: 'logout',
+          graphify: expect.objectContaining({
+            missing_required_terms: ['clearSession'],
+            forbidden_terms_present: ['Billing'],
+          }),
+        }),
+      }),
+    )
+    expect(formatNativeAgentCompareSummary(result)).toContain('Answer quality: graphify 1/2 passed deterministic gates')
+    expect(formatNativeAgentCompareSummary(result)).toContain('2 manual-review notes')
+  })
+
+  it('keeps native_agent suite runs working when no sibling quality gate config exists', async () => {
+    const graph = makeGraph()
+    writeProjectFiles()
+    const graphPath = writeGraphFixture(graph)
+    const suiteDir = join(PROJECT_FIXTURE_ROOT, 'benchmarks', 'ungated-suite')
+    mkdirSync(suiteDir, { recursive: true })
+    const questionsPath = join(suiteDir, 'questions.json')
+    writeFileSync(
+      questionsPath,
+      JSON.stringify([{ question: 'how does login create a session' }], null, 2),
+      'utf8',
+    )
+
+    const result = await executeNativeAgentCompare(
+      {
+        graphPath,
+        questionsPath,
+        outputDir: COMPARE_OUTPUT_ROOT,
+        execTemplate: 'runner --prompt {prompt_file} --mode {mode} --out {output_file}',
+        baselineMode: 'native_agent',
+        now: new Date('2026-04-24T19:30:00.000Z'),
+      },
+      {
+        now: () => new Date('2026-04-24T19:30:00.000Z'),
+        runner: async () => ({
+          exitCode: 0,
+          stdout: makeClaudeStructuredCompareStdout({
+            result: 'SessionManager creates the session.\n',
+            usage: {
+              input_tokens: 100,
+              output_tokens: 20,
+            },
+          }),
+          stderr: '',
+          elapsedMs: 5,
+        }),
+      },
+    )
+
+    expect(result.answer_quality).toBeUndefined()
+    expect(result.reports[0]?.answer_quality).toBeUndefined()
+    expect(formatNativeAgentCompareSummary(result)).not.toContain('Answer quality:')
   })
 
   it('marks invalid compare placeholders as failed runs in persisted reports', async () => {

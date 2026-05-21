@@ -1679,6 +1679,23 @@ export interface NativeAgentCompareReport {
   }
   started_at: string
   completed_at: string
+  answer_quality?: {
+    gate: string
+    prompt: string
+    baseline: {
+      passed: boolean
+      missing_required_terms: string[]
+      forbidden_terms_present: string[]
+    }
+    graphify: {
+      passed: boolean
+      missing_required_terms: string[]
+      forbidden_terms_present: string[]
+    }
+    required_concepts: string[]
+    answer_quality_notes: string[]
+    manual_review_notes: string[]
+  }
   paths: {
     output_dir: string
     report: string
@@ -1693,6 +1710,14 @@ export interface NativeAgentCompareResult {
   graph_path: string
   output_root: string
   reports: NativeAgentCompareReport[]
+  answer_quality?: {
+    questions_checked: number
+    baseline_passed: number
+    graphify_passed: number
+    graphify_required_terms_missing: number
+    graphify_forbidden_terms_present: number
+    manual_review_required: number
+  }
 }
 
 export interface NativeAgentRunnerInput {
@@ -1715,6 +1740,150 @@ export type NativeAgentRunner = (input: NativeAgentRunnerInput) => Promise<Nativ
 export interface ExecuteNativeAgentCompareDependencies {
   runner?: NativeAgentRunner
   now?: () => Date
+}
+
+interface NativeAgentAnswerQualityGate {
+  prompt: string
+  required_answer_terms: string[]
+  forbidden_answer_terms: string[]
+  required_concepts: string[]
+  answer_quality_notes: string[]
+  manual_review_notes: string[]
+}
+
+function normalizeAnswerQualityText(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+function parseAnswerQualityStringArray(
+  gateName: string,
+  fieldName: string,
+  value: unknown,
+  { allowEmpty = false }: { allowEmpty?: boolean } = {},
+): string[] {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string' || entry.trim().length === 0)) {
+    throw new Error(`Malformed quality gate "${gateName}": ${fieldName} must be a string array`)
+  }
+  if (!allowEmpty && value.length === 0) {
+    throw new Error(`Malformed quality gate "${gateName}": ${fieldName} must be a non-empty string array`)
+  }
+  return value.map((entry) => entry.trim())
+}
+
+function parseNativeAgentAnswerQualityGate(gateName: string, value: unknown): NativeAgentAnswerQualityGate {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`Malformed quality gate "${gateName}": expected an object`)
+  }
+  const gate = value as Record<string, unknown>
+  if (typeof gate.prompt !== 'string' || gate.prompt.trim().length === 0) {
+    throw new Error(`Malformed quality gate "${gateName}": prompt must be a non-empty string`)
+  }
+
+  return {
+    prompt: gate.prompt.trim(),
+    required_answer_terms: parseAnswerQualityStringArray(gateName, 'required_answer_terms', gate.required_answer_terms),
+    forbidden_answer_terms: parseAnswerQualityStringArray(gateName, 'forbidden_answer_terms', gate.forbidden_answer_terms, { allowEmpty: true }),
+    required_concepts: parseAnswerQualityStringArray(gateName, 'required_concepts', gate.required_concepts),
+    answer_quality_notes: parseAnswerQualityStringArray(gateName, 'answer_quality_notes', gate.answer_quality_notes),
+    manual_review_notes: parseAnswerQualityStringArray(gateName, 'manual_review_notes', gate.manual_review_notes),
+  }
+}
+
+function loadNativeAgentAnswerQualityGates(
+  questionsPath: string | null | undefined,
+): Map<string, NativeAgentAnswerQualityGate> | null {
+  if (!questionsPath) {
+    return null
+  }
+  const configPath = join(dirname(resolve(questionsPath)), 'quality-gates.json')
+  if (!existsSync(configPath)) {
+    return null
+  }
+
+  const parsed = JSON.parse(readFileSync(configPath, 'utf8')) as unknown
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`Malformed quality gate config: expected a JSON object at ${configPath}`)
+  }
+
+  return new Map(
+    Object.entries(parsed).map(([gateName, gate]) => [gateName, parseNativeAgentAnswerQualityGate(gateName, gate)]),
+  )
+}
+
+function evaluateNativeAgentAnswerQualityRun(
+  gate: NativeAgentAnswerQualityGate,
+  answerText: string,
+): {
+  passed: boolean
+  missing_required_terms: string[]
+  forbidden_terms_present: string[]
+} {
+  const normalizedAnswer = normalizeAnswerQualityText(answerText)
+  const missingRequiredTerms = gate.required_answer_terms.filter((term) => !normalizedAnswer.includes(normalizeAnswerQualityText(term)))
+  const forbiddenTermsPresent = gate.forbidden_answer_terms.filter((term) => normalizedAnswer.includes(normalizeAnswerQualityText(term)))
+  return {
+    passed: missingRequiredTerms.length === 0 && forbiddenTermsPresent.length === 0,
+    missing_required_terms: missingRequiredTerms,
+    forbidden_terms_present: forbiddenTermsPresent,
+  }
+}
+
+function evaluateNativeAgentAnswerQualityReport(
+  gates: ReadonlyMap<string, NativeAgentAnswerQualityGate> | null,
+  question: string,
+  baselineAnswerPath: string,
+  graphifyAnswerPath: string,
+): NativeAgentCompareReport['answer_quality'] | undefined {
+  if (gates === null) {
+    return undefined
+  }
+  const match = [...gates.entries()].find(([gateName, gate]) => gateName === question || gate.prompt === question)
+  if (!match) {
+    return undefined
+  }
+  if (!existsSync(baselineAnswerPath) || !existsSync(graphifyAnswerPath)) {
+    return undefined
+  }
+
+  const [gateName, gate] = match
+  const baselineAnswer = readFileSync(baselineAnswerPath, 'utf8')
+  const graphifyAnswer = readFileSync(graphifyAnswerPath, 'utf8')
+  return {
+    gate: gateName,
+    prompt: gate.prompt,
+    baseline: evaluateNativeAgentAnswerQualityRun(gate, baselineAnswer),
+    graphify: evaluateNativeAgentAnswerQualityRun(gate, graphifyAnswer),
+    required_concepts: gate.required_concepts,
+    answer_quality_notes: gate.answer_quality_notes,
+    manual_review_notes: gate.manual_review_notes,
+  }
+}
+
+function summarizeNativeAgentAnswerQuality(
+  reports: readonly NativeAgentCompareReport[],
+): NativeAgentCompareResult['answer_quality'] | undefined {
+  const checkedReports = reports.filter((report) => report.answer_quality !== undefined)
+  if (checkedReports.length === 0) {
+    return undefined
+  }
+
+  return {
+    questions_checked: checkedReports.length,
+    baseline_passed: checkedReports.filter((report) => report.answer_quality?.baseline.passed).length,
+    graphify_passed: checkedReports.filter((report) => report.answer_quality?.graphify.passed).length,
+    graphify_required_terms_missing: checkedReports.reduce(
+      (total, report) => total + (report.answer_quality?.graphify.missing_required_terms.length ?? 0),
+      0,
+    ),
+    graphify_forbidden_terms_present: checkedReports.reduce(
+      (total, report) => total + (report.answer_quality?.graphify.forbidden_terms_present.length ?? 0),
+      0,
+    ),
+    manual_review_required: checkedReports.reduce(
+      (total, report) => total + (report.answer_quality?.manual_review_notes.length ?? 0),
+      0,
+    ),
+  }
 }
 
 function isAnthropicUsageBlock(value: unknown): value is AnthropicUsageBlock {
@@ -2032,6 +2201,7 @@ export async function executeNativeAgentCompare(
   const outputRoot = createCompareOutputRoot(outputDir, timestamp)
   const runner = dependencies.runner ?? defaultNativeAgentRunner
   const reports: NativeAgentCompareReport[] = []
+  const answerQualityGates = loadNativeAgentAnswerQualityGates(input.questionsPath)
 
   for (const [index, question] of questions.entries()) {
     const questionDir = questions.length === 1 ? outputRoot : join(outputRoot, `question-${String(index + 1).padStart(3, '0')}`)
@@ -2243,16 +2413,27 @@ export async function executeNativeAgentCompare(
             ? 'mixed'
             : 'unknown'
     }
+    const answerQuality = evaluateNativeAgentAnswerQualityReport(
+      answerQualityGates,
+      question,
+      baselineAnswerPath,
+      graphifyAnswerPath,
+    )
+    if (answerQuality !== undefined) {
+      reportShell.answer_quality = answerQuality
+    }
 
     reportShell.completed_at = now().toISOString()
     writeNativeAgentReport(reportShell)
     reports.push(reportShell)
   }
 
+  const answerQualitySummary = summarizeNativeAgentAnswerQuality(reports)
   return {
     graph_path: graphPath,
     output_root: resolve(outputRoot),
     reports,
+    ...(answerQualitySummary ? { answer_quality: answerQualitySummary } : {}),
   }
 }
 
@@ -2331,6 +2512,11 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
       ),
     )
   }
+  if (result.answer_quality) {
+    lines.push(
+      `- Answer quality: graphify ${result.answer_quality.graphify_passed}/${result.answer_quality.questions_checked} passed deterministic gates · baseline ${result.answer_quality.baseline_passed}/${result.answer_quality.questions_checked} passed deterministic gates · ${formatCount(result.answer_quality.manual_review_required, 'manual-review note', 'manual-review notes')}`,
+    )
+  }
   for (const report of result.reports) {
     if (isNativeAgentRunFailure(report.baseline) || isNativeAgentRunFailure(report.graphify)) {
       lines.push(`- "${report.question}" → runner error (see ${portablePath(report.paths.report)})`)
@@ -2365,6 +2551,19 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
         `    uncached_input_tokens (Anthropic-reported): baseline ${baseline.uncached_input_tokens_anthropic_exact} → graphify ${graphify.uncached_input_tokens_anthropic_exact}${formatDirectionalDelta(baseline.uncached_input_tokens_anthropic_exact, graphify.uncached_input_tokens_anthropic_exact, 'less', 'more')}`,
         `    cache_creation_input_tokens (Anthropic-reported): baseline ${baseline.usage.cache_creation_input_tokens} → graphify ${graphify.usage.cache_creation_input_tokens}${formatDirectionalDelta(baseline.usage.cache_creation_input_tokens, graphify.usage.cache_creation_input_tokens, 'less', 'more')}`,
         `    cache_read_input_tokens (Anthropic-reported): baseline ${baseline.usage.cache_read_input_tokens} → graphify ${graphify.usage.cache_read_input_tokens}${formatDirectionalDelta(baseline.usage.cache_read_input_tokens, graphify.usage.cache_read_input_tokens, 'less', 'more')}`,
+      )
+    }
+    if (report.answer_quality) {
+      const baselineFindings = [
+        ...report.answer_quality.baseline.missing_required_terms.map((term) => `missing ${term}`),
+        ...report.answer_quality.baseline.forbidden_terms_present.map((term) => `forbidden ${term}`),
+      ]
+      const graphifyFindings = [
+        ...report.answer_quality.graphify.missing_required_terms.map((term) => `missing ${term}`),
+        ...report.answer_quality.graphify.forbidden_terms_present.map((term) => `forbidden ${term}`),
+      ]
+      lines.push(
+        `    answer quality: baseline ${report.answer_quality.baseline.passed ? 'PASS' : `FAIL (${baselineFindings.join(', ')})`} · graphify ${report.answer_quality.graphify.passed ? 'PASS' : `FAIL (${graphifyFindings.join(', ')})`}${report.answer_quality.manual_review_notes.length > 0 ? ` · manual review: ${formatCount(report.answer_quality.manual_review_notes.length, 'note', 'notes')}` : ''}`,
       )
     }
     lines.push(`    provider/runtime proof: Anthropic reported input, cache, and total tokens for both runs`)
