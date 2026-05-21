@@ -4,6 +4,15 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-05-21
+
+### Docs
+
+- **0.23.0 release docs are easier to discover**: the README now surfaces `graphify-ts summary`, the core MCP `graph_summary` tool, `execution_slice`, share-safe compare artifacts, and `compare --baseline-mode pack_only` in the main product story instead of leaving them mostly to the changelog and proof docs.
+- **SPI guidance is explicit**: the public docs now explain that `--spi` is still opt-in, when framework-heavy TypeScript/JavaScript repos should use it, and why it helps with storage-oriented prompts, Next.js App Router boundaries, and cached reruns.
+- **The getting-started walkthrough matches current behavior**: the sample flow now includes a bounded `summary` step, an optional `generate --spi` branch, pack-only compare usage, and notes that queue-backed runtime questions may surface `execution_slice` plus `report.share-safe.json`.
+- **Capability docs translate semantics into user value**: the language matrix now explains how Python FastAPI semantics, queue-worker `enqueues_job` edges, SPI `storage_operation` hints, and Next.js `runtime_boundary` metadata improve real retrieval answers.
+
 ## [0.23.0] - 2026-05-21
 
 ### Added
