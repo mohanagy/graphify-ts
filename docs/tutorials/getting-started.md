@@ -5,8 +5,10 @@ Use this walkthrough when you want to evaluate `graphify-ts` end to end without 
 ## 1. Install graphify-ts
 
 ```bash
-npm install -g @mohammednagy/graphify-ts
+npm install -g madar
 ```
+
+Both `madar` and `graphify-ts` work during the migration.
 
 If you are working from this repository instead of a published npm install, run `npm run build` from the repository root first so the local CLI is up to date.
 

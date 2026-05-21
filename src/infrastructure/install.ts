@@ -2,7 +2,11 @@ import { existsSync, mkdirSync, readFileSync, rmdirSync, rmSync, statSync, unlin
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { getBuiltInSkillContent } from './install-skill-templates.js'
-import { findPackageRoot as resolvePackageRoot, readPackageVersion as resolvePackageVersion } from '../shared/package-metadata.js'
+import {
+  findPackageRoot as resolvePackageRoot,
+  readPackageName as resolvePackageName,
+  readPackageVersion as resolvePackageVersion,
+} from '../shared/package-metadata.js'
 
 export const SKILL_INSTALL_PLATFORMS = ['claude', 'gemini', 'codex', 'opencode', 'aider', 'claw', 'droid', 'trae', 'trae-cn', 'copilot', 'windows'] as const
 
@@ -388,7 +392,9 @@ IMPORTANT: This project has a graphify-ts knowledge graph. Use strict compact MC
 
 const SKILL_REGISTRATION_MARKER = '- **graphify-ts**'
 const LOCAL_SKILL_ASSET_DIRECTORY = join('assets', 'skills')
-const CLI_BIN_NAME = 'graphify-ts'
+const PRIMARY_CLI_BIN_NAME = 'madar'
+const LEGACY_CLI_BIN_NAME = 'graphify-ts'
+const CLI_BIN_NAMES = [PRIMARY_CLI_BIN_NAME, LEGACY_CLI_BIN_NAME] as const
 const OPENCODE_PLUGIN_RELATIVE_PATH = '.opencode/plugins/graphify-ts.js'
 const OPENCODE_JSON_CONFIG_PATH = 'opencode.json'
 const OPENCODE_JSONC_CONFIG_PATH = 'opencode.jsonc'
@@ -1290,6 +1296,10 @@ function readPackageVersion(packageRoot: string): string {
   return resolvePackageVersion(packageRoot)
 }
 
+function readPackageName(packageRoot: string): string {
+  return resolvePackageName(packageRoot)
+}
+
 function resolvePackageCliPath(packageRoot = findPackageRoot()): string {
   const packageJsonPath = join(packageRoot, 'package.json')
   const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'))
@@ -1302,16 +1312,18 @@ function resolvePackageCliPath(packageRoot = findPackageRoot()): string {
   if (typeof bin === 'string') {
     relativeBinPath = bin
   } else if (isRecord(bin)) {
-    const namedBin = bin[CLI_BIN_NAME]
-    if (typeof namedBin === 'string') {
-      relativeBinPath = namedBin
-    } else {
-      relativeBinPath = Object.values(bin).find((value): value is string => typeof value === 'string')
+    for (const cliBinName of CLI_BIN_NAMES) {
+      const namedBin = bin[cliBinName]
+      if (typeof namedBin === 'string') {
+        relativeBinPath = namedBin
+        break
+      }
     }
+    relativeBinPath ??= Object.values(bin).find((value): value is string => typeof value === 'string')
   }
 
   if (!relativeBinPath) {
-    throw new Error(`Could not locate ${CLI_BIN_NAME} bin entry in ${packageJsonPath}`)
+    throw new Error(`Could not locate a ${CLI_BIN_NAMES.join(' or ')} bin entry in ${packageJsonPath}`)
   }
 
   const cliPath = join(packageRoot, relativeBinPath)
@@ -1322,7 +1334,7 @@ function resolvePackageCliPath(packageRoot = findPackageRoot()): string {
     cliPathIsFile = false
   }
   if (!cliPathIsFile) {
-    throw new Error(`Could not locate ${CLI_BIN_NAME} CLI at ${cliPath} declared by ${packageJsonPath}`)
+    throw new Error(`Could not locate a ${CLI_BIN_NAMES.join(' or ')} CLI at ${cliPath} declared by ${packageJsonPath}`)
   }
   return cliPath
 }
@@ -1378,8 +1390,6 @@ function registerHomeClaudeSkill(homeDir: string): string {
 }
 
 type McpConfigTarget = 'claude' | 'cursor' | 'copilot'
-const NPM_PACKAGE_NAME = '@mohammednagy/graphify-ts'
-
 const MCP_CONFIG_PATHS: Record<McpConfigTarget, string> = {
   claude: '.mcp.json',
   cursor: join('.cursor', 'mcp.json'),
@@ -1387,12 +1397,13 @@ const MCP_CONFIG_PATHS: Record<McpConfigTarget, string> = {
 }
 
 function installPackageSpecifier(packageRoot = findPackageRoot()): string {
+  const packageName = readPackageName(packageRoot)
   const version = readPackageVersion(packageRoot)
-  if (version === 'unknown') {
-    throw new Error(`Could not determine graphify-ts package version from ${join(packageRoot, 'package.json')}`)
+  if (packageName === 'unknown' || version === 'unknown') {
+    throw new Error(`Could not determine package name and version from ${join(packageRoot, 'package.json')}`)
   }
 
-  return `${NPM_PACKAGE_NAME}@${version}`
+  return `${packageName}@${version}`
 }
 
 function installMcpServer(

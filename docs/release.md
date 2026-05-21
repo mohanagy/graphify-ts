@@ -1,6 +1,6 @@
 # Release checklist
 
-Use this checklist when preparing a new `graphify-ts` release. It is intentionally manual: the goal is to keep each version easy to verify without hiding the release steps behind automation.
+Use this checklist when preparing a new `madar` release. It is intentionally manual: the goal is to keep each version easy to verify without hiding the release steps behind automation.
 
 ## 1. Prepare the release commit
 
@@ -19,25 +19,27 @@ npm run typecheck
 npm run build
 npm run test:run
 npm pack --dry-run
+npm run compat:pack:dry-run
 ```
 
-If the change touches packaging or installer behavior, keep the `npm pack --dry-run` output with the release notes or pull request for easy review.
+If the change touches packaging or installer behavior, keep both the main `npm pack --dry-run` output and the legacy `compat:pack:dry-run` output with the release notes or pull request for easy review.
 
 ## 3. Run manual CLI smoke checks
 
 These checks verify that the published surface still matches the docs and changelog:
 
 ```bash
+madar --version
 graphify-ts --version
-graphify-ts generate .
-graphify-ts claude install
-graphify-ts codex install
+madar generate .
+madar claude install
+madar codex install
 ```
 
 Recommended follow-up checks:
 
-- confirm `graphify-ts --version` prints the version you are about to publish
-- confirm `graphify-ts generate .` completes and refreshes `graphify-out/graph.json`
+- confirm `madar --version` and `graphify-ts --version` print the version you are about to publish
+- confirm `madar generate .` completes and refreshes `graphify-out/graph.json`
 - confirm install commands write the expected project files and instructions
 - uninstall any agent profile you enabled during the smoke test so the workspace returns to a clean state
 
@@ -47,8 +49,9 @@ After the verification steps are green:
 
 1. Push the release branch or merge commit.
 2. Publish from the verified tree with `npm publish --access public` when you are ready.
-3. Create the matching Git tag if `npm version` did not already do so in your workflow.
-4. Draft or publish the GitHub release notes from the changelog entry.
+3. Publish the legacy compatibility package with `npm run compat:publish:public`.
+4. Create the matching Git tag if `npm version` did not already do so in your workflow.
+5. Draft or publish the GitHub release notes from the changelog entry.
 
 ## 5. Post-release verification
 
@@ -58,10 +61,14 @@ After the package is live:
 2. Install the released version in a clean shell and re-run:
 
 ```bash
+madar --version
 graphify-ts --version
+madar generate .
 graphify-ts generate .
+madar claude install
 graphify-ts claude install
 ```
 
-3. Verify the README, changelog, and install docs still describe the released behavior accurately.
-4. If anything is wrong, document the gap immediately and prepare a follow-up patch release instead of silently relying on tribal knowledge.
+3. Verify the README, changelog, and install docs still describe the released behavior accurately, including the dual-command migration window.
+4. Verify the legacy `@mohammednagy/graphify-ts` package still installs and exposes the `graphify-ts` command.
+5. If anything is wrong, document the gap immediately and prepare a follow-up patch release instead of silently relying on tribal knowledge.

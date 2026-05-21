@@ -4,12 +4,15 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 interface PackageManifest {
+  bin?: Record<string, string>
   description?: string
   dependencies?: Record<string, string>
   devDependencies?: Record<string, string>
   keywords?: string[]
   license?: string
+  name?: string
   overrides?: Record<string, string>
+  scripts?: Record<string, string>
   version?: string
 }
 
@@ -117,6 +120,22 @@ describe('package metadata', () => {
 
     expect(packageLock.version).toBe(manifest.version)
     expect(packageLock.packages?.['']?.version).toBe(manifest.version)
+  })
+
+  it('keeps the renamed package metadata aligned with the compatibility transition', () => {
+    const manifest = loadPackageManifest()
+
+    expect(manifest.name).toBe('madar')
+    expect(manifest.bin).toMatchObject({
+      madar: 'dist/src/cli/bin.js',
+      'graphify-ts': 'dist/src/cli/bin.js',
+    })
+    expect(manifest.scripts).toMatchObject({
+      'compat:prepare': expect.any(String),
+      'compat:pack:dry-run': expect.any(String),
+      'compat:publish:dry-run': expect.any(String),
+      'compat:publish:public': expect.any(String),
+    })
   })
 
   it('documents the current package version in the changelog', () => {

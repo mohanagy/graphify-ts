@@ -2,7 +2,7 @@
 
 **Stop making AI agents re-read your repo.** A local **context plane** and **context compiler** for Claude Code, Codex CLI, Copilot CLI, Cursor, Windsurf, and Aider — turn your TypeScript/Node workspace and PR diffs into compact, verifiable context packs.
 
-[![npm](https://img.shields.io/npm/v/@mohammednagy/graphify-ts)](https://www.npmjs.com/package/@mohammednagy/graphify-ts)
+[![npm](https://img.shields.io/npm/v/madar)](https://www.npmjs.com/package/madar)
 [![node >=20](https://img.shields.io/badge/node-%E2%89%A520-3c873a)](https://nodejs.org/)
 [![Local first](https://img.shields.io/badge/local--first-no%20cloud%20required-0f766e)](#trust--limitations)
 [![No API keys](https://img.shields.io/badge/API%20keys-none%20required-111827)](#trust--limitations)
@@ -26,7 +26,11 @@ https://github.com/user-attachments/assets/a502185f-fa12-4a8f-80d2-172847f209fd
 ## Quickstart
 
 ```bash
-npm install -g @mohammednagy/graphify-ts
+npm install -g madar
+
+# During the migration, both CLI names work:
+#   madar ...
+#   graphify-ts ...
 
 cd your-project
 graphify-ts generate .          # builds graphify-out/graph.json (no API key, no cloud)

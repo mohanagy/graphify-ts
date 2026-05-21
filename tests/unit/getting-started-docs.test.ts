@@ -8,7 +8,8 @@ describe('getting started tutorial', () => {
     const tutorial = readFileSync(resolve('docs/tutorials/getting-started.md'), 'utf8')
     const readme = readFileSync(resolve('README.md'), 'utf8')
 
-    expect(tutorial).toContain('npm install -g @mohammednagy/graphify-ts')
+    expect(tutorial).toContain('npm install -g madar')
+    expect(tutorial).toContain('Both `madar` and `graphify-ts` work during the migration')
     expect(tutorial).toContain('graphify-ts generate examples/sample-workspace --no-html')
     expect(tutorial).toContain('graphify-ts pack')
     expect(tutorial).toContain('graphify-ts prompt')

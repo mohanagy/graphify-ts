@@ -38,7 +38,7 @@ import { buildGraphSummary, type GraphSummary } from '../runtime/graph-summary.j
 import { serveGraphStdio } from '../runtime/stdio-server.js'
 import { getNeighbors, getNode, loadGraph, queryGraph, shortestPath } from '../runtime/serve.js'
 import { formatTimeTravelResult } from '../runtime/time-travel.js'
-import { findPackageRoot, readPackageVersion } from '../shared/package-metadata.js'
+import { findPackageRoot, readPackageName, readPackageVersion } from '../shared/package-metadata.js'
 import { getUpdateNotification } from '../shared/update-notifier.js'
 import {
   parseBenchmarkArgs,
@@ -246,7 +246,7 @@ const DEFAULT_DEPENDENCIES: CliDependencies = {
   agentsInstall,
   agentsUninstall,
   notifyUpdate: async () => await getUpdateNotification({
-    packageName: '@mohammednagy/graphify-ts',
+  packageName: readPackageName(findPackageRoot()),
     currentVersion: readPackageVersion(findPackageRoot()),
   }),
   readInstalledVersion: () => readPackageVersion(findPackageRoot()),

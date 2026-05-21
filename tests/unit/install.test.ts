@@ -403,7 +403,7 @@ describe('install helpers', () => {
     })
   })
 
-  it('pins the Claude MCP server package to the installed graphify-ts version', () => {
+  it('pins the Claude MCP server package to the installed madar version', () => {
     withTempDir((projectDir) => {
       claudeInstall(projectDir)
 
@@ -416,7 +416,7 @@ describe('install helpers', () => {
       }
       const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }
 
-      expect(mcpConfig.mcpServers?.['graphify-ts']?.args?.[1]).toBe(`@mohammednagy/graphify-ts@${packageJson.version}`)
+      expect(mcpConfig.mcpServers?.['graphify-ts']?.args?.[1]).toBe(`madar@${packageJson.version}`)
     })
   })
 
@@ -845,7 +845,7 @@ describe('install helpers', () => {
 
       withTempDir((projectDir) => {
         expect(() => agentsInstall(projectDir, 'opencode', { packageRoot })).toThrow(
-          `Could not locate graphify-ts CLI at ${join(packageRoot, PACKAGE_CLI_RELATIVE_PATH)} declared by ${join(packageRoot, 'package.json')}`,
+          `Could not locate a madar or graphify-ts CLI at ${join(packageRoot, PACKAGE_CLI_RELATIVE_PATH)} declared by ${join(packageRoot, 'package.json')}`,
         )
       })
     })
