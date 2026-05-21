@@ -175,7 +175,7 @@ For practical multi-agent workflows across Claude Code, Codex, Copilot, Cursor, 
 
 ## MCP tools
 
-These seven MCP tools handle the most common agent workflows in the default **core** profile. The full surface is 26 tools, opt-in via `GRAPHIFY_TOOL_PROFILE=full` or `--profile full` on install. `--profile strict` still uses the lean core tool surface, but changes the installed guidance so the agent starts with one `context_pack` call and expands only when the pack diagnostics say evidence is missing. Start with `graph_summary` for a bounded deterministic first-turn overview, then use `retrieve` or `context_pack` when you need task-specific evidence.
+These seven MCP tools handle the most common agent workflows in the default **core** profile. The full surface is 26 tools, opt-in via `GRAPHIFY_TOOL_PROFILE=full` or `--profile full` on install. `--profile strict` still uses the lean core tool surface, but changes the installed guidance so the agent starts with one `context_pack` call and expands only when the pack diagnostics say evidence is missing. Start with `graph_summary` for a bounded deterministic first-turn overview, then use `retrieve` or `context_pack` when you need task-specific evidence. It is intentionally a compact at-a-glance summary, not a full runtime trace.
 
 | Tool | When the agent uses it |
 |---|---|
