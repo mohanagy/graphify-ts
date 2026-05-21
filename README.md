@@ -100,7 +100,7 @@ That means the same selected nodes can render differently for `explain`, `review
 - PR review via `pr_impact` and `review-compare` — turns the *current git diff* into ranked review risks, structural hotspots, and likely test files (measured 7.25× smaller review prompt on a real PR).
 - Local-first by design: tree-sitter AST, BM25 retrieval, optional ONNX embeddings — all on your machine. Your code never leaves the laptop unless you explicitly invoke a model.
 
-> Deepest extraction is **TypeScript/JavaScript** with framework-aware passes for Express, NestJS, Next.js, React Router, Redux Toolkit, **Hono, Fastify, tRPC, Prisma** (9 substrates via `--spi`). Python, Ruby, Go, Java, Rust use tree-sitter AST. C / Kotlin / C# / Scala / PHP / Swift / Zig use a generic structural extractor. Full matrix: [`docs/language-capability-matrix.md`](docs/language-capability-matrix.md).
+> Deepest extraction is still **TypeScript/JavaScript** with framework-aware passes for Express, NestJS, Next.js, React Router, Redux Toolkit, **Hono, Fastify, tRPC, Prisma** (9 substrates via `--spi`). Python now has a first semantic layer for cross-file import/call resolution plus first-pass FastAPI route/dependency semantics. Ruby, Go, Java, and Rust still use the tree-sitter AST baseline. C / Kotlin / C# / Scala / PHP / Swift / Zig use a generic structural extractor. Full matrix: [`docs/language-capability-matrix.md`](docs/language-capability-matrix.md).
 
 ---
 
@@ -214,7 +214,7 @@ Everything stays local by default. No telemetry, no cloud upload, no API key req
 **Limitations to know:**
 
 1. **Cold-start sessions add a one-time MCP/tool-schema cost.** Core profile is ~3,200 bytes / ~800 tokens (still down about 25% from the original 4,270-byte surface). Multi-question sessions amortize this and end up cheaper.
-2. **Deep extraction is best on JS/TS.** Python / Ruby / Go / Java / Rust use tree-sitter AST. C / Kotlin / C# / Scala / PHP / Swift / Zig use a generic structural extractor.
+2. **Deep extraction is still best on JS/TS.** Python now has cross-file import/call resolution and first-pass FastAPI route/dependency semantics, but Ruby / Go / Java / Rust still use the tree-sitter AST baseline. C / Kotlin / C# / Scala / PHP / Swift / Zig use a generic structural extractor.
 3. **Static analysis can't resolve every dynamic runtime behavior.** Runtime-generated routes, heavy meta-programmed decorators, and string-built imports fall back to the base AST graph. SPI can tag common Prisma model operations and repository read/write methods so persistence-oriented prompts prefer likely storage endpoints, but that remains first-pass static coverage rather than full ORM/dataflow understanding.
 4. **Token reduction depends on project + task.** "How does auth work?" benefits more than "fix this typo." Always validate important code changes with tests and review.
 5. **Some workflows still need full file reads** — large multi-file refactors, generated-code spelunking. graphify narrows the agent's first read; it doesn't replace its ability to read.

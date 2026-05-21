@@ -4,7 +4,7 @@ import { basename, dirname, extname, resolve } from 'node:path'
 import ts from 'typescript'
 
 import type { ExtractionData, ExtractionNode } from '../../contracts/types.js'
-import { _makeId, addUniqueEdge, createEdge, normalizeLabel, stripHashComment } from './core.js'
+import { _makeId, addNode, addUniqueEdge, createEdge, createNode, normalizeLabel, stripHashComment } from './core.js'
 import { unparenthesizeExpression } from './typescript-utils.js'
 
 export interface ResolveCrossFilePythonImportsOptions {
@@ -14,6 +14,18 @@ export interface ResolveCrossFilePythonImportsOptions {
 interface ImportedPythonSymbol {
   localName: string
   targetId: string
+  callable: boolean
+}
+
+interface PythonImportableSymbolIndex {
+  nodeIdsByModuleAndName: Map<string, string>
+  callableNodeIds: Set<string>
+}
+
+interface FastApiOwnerRecord {
+  id: string
+  prefix: string
+  frameworkRole: 'fastapi_router' | 'fastapi_app'
 }
 
 interface JsExportDefinition {
@@ -24,6 +36,7 @@ interface JsExportDefinition {
 }
 
 const JS_TS_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'] as const
+const FASTAPI_ROUTE_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head'])
 const JS_TS_EXTENSION_FALLBACKS: Readonly<Record<string, readonly string[]>> = {
   '.js': ['.js', '.ts', '.tsx', '.jsx'],
   '.jsx': ['.jsx', '.tsx'],
@@ -377,13 +390,168 @@ function isPythonClassNode(node: ExtractionNode): boolean {
   return extname(node.source_file).toLowerCase() === '.py' && node.file_type === 'code' && node.label !== basename(node.source_file) && !node.label.includes('(')
 }
 
-function resolveImportedPythonClassTarget(moduleSpecifier: string, importedName: string, classNodeIdsByModuleAndName: ReadonlyMap<string, string>): string | null {
+function pythonImportableSymbolName(node: ExtractionNode): string | null {
+  if (extname(node.source_file).toLowerCase() !== '.py' || node.file_type !== 'code') {
+    return null
+  }
+
+  if (node.label === basename(node.source_file) || node.label.startsWith('.')) {
+    return null
+  }
+
+  return node.label.endsWith('()') ? node.label.slice(0, -2) : node.label
+}
+
+function isPythonCallableNode(node: ExtractionNode): boolean {
+  return extname(node.source_file).toLowerCase() === '.py' && node.file_type === 'code' && node.label.endsWith('()') && !node.label.startsWith('.')
+}
+
+function buildPythonImportableSymbolIndex(searchableNodes: readonly ExtractionNode[]): PythonImportableSymbolIndex {
+  const nodeIdsByModuleAndName = new Map<string, string>()
+  const callableNodeIds = new Set<string>()
+
+  for (const node of searchableNodes) {
+    const symbolName = pythonImportableSymbolName(node)
+    if (!symbolName) {
+      continue
+    }
+
+    const moduleStem = basename(node.source_file, extname(node.source_file))
+    nodeIdsByModuleAndName.set(`${normalizeLabel(moduleStem)}:${normalizeLabel(symbolName)}`, node.id)
+    if (isPythonCallableNode(node)) {
+      callableNodeIds.add(node.id)
+    }
+  }
+
+  return { nodeIdsByModuleAndName, callableNodeIds }
+}
+
+function resolveImportedPythonTarget(moduleSpecifier: string, importedName: string, nodeIdsByModuleAndName: ReadonlyMap<string, string>): string | null {
   const moduleStem = moduleSpecifier.replace(/^\.+/, '').split('.').filter(Boolean).at(-1)
   if (!moduleStem) {
     return null
   }
 
-  return classNodeIdsByModuleAndName.get(`${normalizeLabel(moduleStem)}:${normalizeLabel(importedName)}`) ?? null
+  return nodeIdsByModuleAndName.get(`${normalizeLabel(moduleStem)}:${normalizeLabel(importedName)}`) ?? null
+}
+
+function resolvePythonLocalOrImportedTarget(
+  moduleStem: string,
+  localName: string,
+  importedTargets: ReadonlyMap<string, string>,
+  nodeIdsByModuleAndName: ReadonlyMap<string, string>,
+): string | null {
+  return importedTargets.get(localName) ?? nodeIdsByModuleAndName.get(`${normalizeLabel(moduleStem)}:${normalizeLabel(localName)}`) ?? null
+}
+
+function escapedRegExpText(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function normalizeFastApiPath(path: string): string {
+  const normalized = path.trim().replace(/\\/g, '/')
+  const withLeadingSlash = normalized.startsWith('/') ? normalized : `/${normalized}`
+  const collapsed = withLeadingSlash.replace(/\/{2,}/g, '/')
+  return collapsed.length > 1 && collapsed.endsWith('/') ? collapsed.slice(0, -1) : collapsed
+}
+
+function joinFastApiRoutePath(prefix: string, path: string): string {
+  const normalizedPath = normalizeFastApiPath(path)
+  const normalizedPrefix = prefix ? normalizeFastApiPath(prefix) : ''
+  if (!normalizedPrefix || normalizedPrefix === '/') {
+    return normalizedPath
+  }
+  if (normalizedPath === '/') {
+    return normalizedPrefix
+  }
+  return normalizeFastApiPath(`${normalizedPrefix}/${normalizedPath.replace(/^\//, '')}`)
+}
+
+function quotedPythonArgumentValue(argumentText: string, key?: string): string | null {
+  const pattern = key
+    ? new RegExp(`\\b${escapedRegExpText(key)}\\s*=\\s*(['"])(.*?)\\1`)
+    : /(['"])(.*?)\1/
+  const match = argumentText.match(pattern)
+  return match?.[2] ?? null
+}
+
+function fastApiDependencyNames(sourceText: string, dependsBindings: ReadonlySet<string>, moduleAliases: ReadonlySet<string>): string[] {
+  const dependencyNames = new Set<string>()
+  for (const binding of dependsBindings) {
+    const pattern = new RegExp(`\\b${escapedRegExpText(binding)}\\s*\\(\\s*([A-Za-z_][A-Za-z0-9_]*)`, 'g')
+    for (const match of sourceText.matchAll(pattern)) {
+      if (match[1]) {
+        dependencyNames.add(match[1])
+      }
+    }
+  }
+
+  for (const moduleAlias of moduleAliases) {
+    const pattern = new RegExp(`\\b${escapedRegExpText(moduleAlias)}\\.Depends\\s*\\(\\s*([A-Za-z_][A-Za-z0-9_]*)`, 'g')
+    for (const match of sourceText.matchAll(pattern)) {
+      if (match[1]) {
+        dependencyNames.add(match[1])
+      }
+    }
+  }
+
+  return [...dependencyNames]
+}
+
+function fastApiOwnerAssignment(
+  trimmed: string,
+  routerFactoryBindings: ReadonlySet<string>,
+  appFactoryBindings: ReadonlySet<string>,
+  fastApiModuleAliases: ReadonlySet<string>,
+): { ownerName: string; prefix: string; frameworkRole: FastApiOwnerRecord['frameworkRole'] } | null {
+  const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:([A-Za-z_][A-Za-z0-9_]*)\.)?([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$/)
+  if (!match?.[1] || !match[3]) {
+    return null
+  }
+
+  const ownerName = match[1]
+  const moduleAlias = match[2]
+  const calleeName = match[3]
+  const argumentText = match[4] ?? ''
+  const matchesQualifiedBinding = Boolean(moduleAlias && fastApiModuleAliases.has(moduleAlias) && (calleeName === 'APIRouter' || calleeName === 'FastAPI'))
+  const matchesLocalBinding = routerFactoryBindings.has(calleeName) || appFactoryBindings.has(calleeName)
+  if (!matchesQualifiedBinding && !matchesLocalBinding) {
+    return null
+  }
+
+  if (calleeName === 'FastAPI' || appFactoryBindings.has(calleeName)) {
+    return { ownerName, prefix: '', frameworkRole: 'fastapi_app' }
+  }
+
+  return {
+    ownerName,
+    prefix: quotedPythonArgumentValue(argumentText, 'prefix') ?? '',
+    frameworkRole: 'fastapi_router',
+  }
+}
+
+function fastApiRouteDecorator(
+  decoratorText: string,
+  routerOwners: ReadonlyMap<string, FastApiOwnerRecord>,
+): { ownerName: string; method: string; routePath: string } | null {
+  const match = decoratorText.match(/^@([A-Za-z_][A-Za-z0-9_]*)\.(get|post|put|patch|delete|options|head)\((.*)\)$/)
+  if (!match?.[1] || !match[2]) {
+    return null
+  }
+
+  const ownerName = match[1]
+  const method = match[2].toLowerCase()
+  if (!FASTAPI_ROUTE_METHODS.has(method) || !routerOwners.has(ownerName)) {
+    return null
+  }
+
+  const argumentText = match[3] ?? ''
+  const routePath = quotedPythonArgumentValue(argumentText, 'path') ?? quotedPythonArgumentValue(argumentText)
+  if (!routePath) {
+    return null
+  }
+
+  return { ownerName, method: method.toUpperCase(), routePath }
 }
 
 export function resolveCrossFilePythonImports(files: readonly string[], extraction: ExtractionData, options: ResolveCrossFilePythonImportsOptions = {}): ExtractionData {
@@ -393,15 +561,8 @@ export function resolveCrossFilePythonImports(files: readonly string[], extracti
   }
 
   const searchableNodes = options.contextNodes && options.contextNodes.length > 0 ? [...extraction.nodes, ...options.contextNodes] : extraction.nodes
-  const classNodeIdsByModuleAndName = new Map<string, string>()
-  for (const node of searchableNodes) {
-    if (!isPythonClassNode(node)) {
-      continue
-    }
-
-    const moduleStem = basename(node.source_file, extname(node.source_file))
-    classNodeIdsByModuleAndName.set(`${normalizeLabel(moduleStem)}:${normalizeLabel(node.label)}`, node.id)
-  }
+  const searchableNodeIds = new Set(searchableNodes.map((node) => node.id))
+  const { nodeIdsByModuleAndName, callableNodeIds } = buildPythonImportableSymbolIndex(searchableNodes)
 
   const edges = [...extraction.edges]
   const existingEdges = new Set(edges.map((edge) => `${edge.source}|${edge.target}|${edge.relation}`))
@@ -419,6 +580,7 @@ export function resolveCrossFilePythonImports(files: readonly string[], extracti
     }
 
     const classStack: Array<{ indent: number; id: string }> = []
+    const functionStack: Array<{ indent: number; id: string }> = []
     const importedSymbols: ImportedPythonSymbol[] = []
 
     for (let index = 0; index < lines.length; index += 1) {
@@ -432,6 +594,9 @@ export function resolveCrossFilePythonImports(files: readonly string[], extracti
       const indent = line.length - line.trimStart().length
       while (classStack.length > 0 && indent <= (classStack[classStack.length - 1]?.indent ?? -1)) {
         classStack.pop()
+      }
+      while (functionStack.length > 0 && indent <= (functionStack[functionStack.length - 1]?.indent ?? -1)) {
+        functionStack.pop()
       }
 
       const importFromMatch = trimmed.match(/^from\s+([A-Za-z0-9_\.]+)\s+import\s+(.+)$/)
@@ -450,7 +615,7 @@ export function resolveCrossFilePythonImports(files: readonly string[], extracti
             continue
           }
 
-          const targetId = resolveImportedPythonClassTarget(moduleSpecifier, importedName, classNodeIdsByModuleAndName)
+          const targetId = resolveImportedPythonTarget(moduleSpecifier, importedName, nodeIdsByModuleAndName)
           if (!targetId) {
             continue
           }
@@ -458,6 +623,7 @@ export function resolveCrossFilePythonImports(files: readonly string[], extracti
           importedSymbols.push({
             localName: aliasPart?.trim() || importedName,
             targetId,
+            callable: callableNodeIds.has(targetId),
           })
         }
         continue
@@ -484,18 +650,36 @@ export function resolveCrossFilePythonImports(files: readonly string[], extracti
         continue
       }
 
-      const currentClass = classStack[classStack.length - 1]
-      if (!currentClass) {
+      const functionMatch = trimmed.match(/^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/)
+      if (functionMatch?.[1]) {
+        const currentClass = classStack[classStack.length - 1]
+        const functionId = currentClass ? _makeId(currentClass.id, functionMatch[1]) : _makeId(stem, functionMatch[1])
+        functionStack.push({ indent, id: functionId })
         continue
       }
 
+      const currentClass = classStack[classStack.length - 1]
+      const currentFunction = functionStack[functionStack.length - 1]
+      if (!currentClass && !currentFunction) {
+        continue
+        }
+
       for (const importedSymbol of importedSymbols) {
-        const symbolPattern = new RegExp(`\\b${importedSymbol.localName.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`)
+        const symbolPattern = new RegExp(`\\b${escapedRegExpText(importedSymbol.localName)}\\b`)
         if (!symbolPattern.test(trimmed)) {
           continue
         }
 
-        addUniqueEdge(edges, existingEdges, createEdge(currentClass.id, importedSymbol.targetId, 'uses', filePath, lineNumber, 'INFERRED'))
+        if (currentFunction && searchableNodeIds.has(currentFunction.id) && importedSymbol.callable) {
+          const callPattern = new RegExp(`\\b${escapedRegExpText(importedSymbol.localName)}\\s*\\(`)
+          if (callPattern.test(trimmed)) {
+            addUniqueEdge(edges, existingEdges, createEdge(currentFunction.id, importedSymbol.targetId, 'calls', filePath, lineNumber, 'INFERRED'))
+          }
+        }
+
+        if (currentClass) {
+          addUniqueEdge(edges, existingEdges, createEdge(currentClass.id, importedSymbol.targetId, 'uses', filePath, lineNumber, 'INFERRED'))
+        }
       }
     }
   }
@@ -503,6 +687,233 @@ export function resolveCrossFilePythonImports(files: readonly string[], extracti
   return {
     ...extraction,
     nodes: [...extraction.nodes],
+    edges,
+  }
+}
+
+export function resolvePythonFastApiSemantics(
+  files: readonly string[],
+  extraction: ExtractionData,
+  options: ResolveCrossFilePythonImportsOptions = {},
+): ExtractionData {
+  const pythonFiles = files.filter((filePath) => extname(filePath).toLowerCase() === '.py')
+  if (pythonFiles.length === 0) {
+    return extraction
+  }
+
+  const searchableNodes = options.contextNodes && options.contextNodes.length > 0 ? [...extraction.nodes, ...options.contextNodes] : extraction.nodes
+  const searchableNodeIds = new Set(searchableNodes.map((node) => node.id))
+  const { nodeIdsByModuleAndName } = buildPythonImportableSymbolIndex(searchableNodes)
+  const nodes = extraction.nodes.map((node) => ({ ...node }))
+  const nodeIndicesById = new Map(nodes.map((node, index) => [node.id, index] as const))
+  const seenNodeIds = new Set(nodes.map((node) => node.id))
+  const edges = [...extraction.edges]
+  const existingEdges = new Set(edges.map((edge) => `${edge.source}|${edge.target}|${edge.relation}`))
+
+  const setNodeAttributes = (nodeId: string, attributes: Partial<ExtractionNode>): void => {
+    const nodeIndex = nodeIndicesById.get(nodeId)
+    if (nodeIndex === undefined) {
+      return
+    }
+
+    nodes[nodeIndex] = {
+      ...nodes[nodeIndex]!,
+      ...attributes,
+      id: nodes[nodeIndex]!.id,
+    }
+  }
+
+  const addDerivedNode = (node: ExtractionNode): void => {
+    if (seenNodeIds.has(node.id)) {
+      return
+    }
+    addNode(nodes, seenNodeIds, node)
+    nodeIndicesById.set(node.id, nodes.length - 1)
+  }
+
+  for (const filePath of pythonFiles) {
+    const stem = basename(filePath, extname(filePath))
+    const fileNodeId = _makeId(stem)
+    let lines: string[]
+    try {
+      lines = readFileSync(filePath, 'utf8').split(/\r?\n/)
+    } catch {
+      if (process.env.DEBUG) {
+        console.warn(`[graphify extract] Skipping unreadable Python file during FastAPI linking: ${filePath}`)
+      }
+      continue
+    }
+
+    const importedTargets = new Map<string, string>()
+    const fastApiModuleAliases = new Set<string>()
+    const routerFactoryBindings = new Set<string>()
+    const appFactoryBindings = new Set<string>()
+    const dependsBindings = new Set<string>()
+    const routerOwners = new Map<string, FastApiOwnerRecord>()
+    const classStack: Array<{ indent: number; id: string }> = []
+    const pendingDecorators: Array<{ text: string; line: number }> = []
+
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index] ?? ''
+      const lineNumber = index + 1
+      const trimmed = stripHashComment(line).trim()
+      if (!trimmed) {
+        continue
+      }
+
+      const indent = line.length - line.trimStart().length
+      while (classStack.length > 0 && indent <= (classStack[classStack.length - 1]?.indent ?? -1)) {
+        classStack.pop()
+      }
+
+      const fromFastApiMatch = trimmed.match(/^from\s+fastapi\s+import\s+(.+)$/)
+      if (fromFastApiMatch?.[1]) {
+        for (const rawEntry of fromFastApiMatch[1].replace(/[()]/g, '').split(',')) {
+          const entry = rawEntry.trim()
+          if (!entry) {
+            continue
+          }
+          const [importedNamePart, aliasPart] = entry.split(/\s+as\s+/)
+          const importedName = importedNamePart?.trim()
+          const localName = aliasPart?.trim() || importedName
+          if (!importedName || !localName) {
+            continue
+          }
+          if (importedName === 'APIRouter') {
+            routerFactoryBindings.add(localName)
+          } else if (importedName === 'FastAPI') {
+            appFactoryBindings.add(localName)
+          } else if (importedName === 'Depends') {
+            dependsBindings.add(localName)
+          }
+        }
+        continue
+      }
+
+      const importFastApiMatch = trimmed.match(/^import\s+fastapi(?:\s+as\s+([A-Za-z_][A-Za-z0-9_]*))?$/)
+      if (importFastApiMatch) {
+        fastApiModuleAliases.add(importFastApiMatch[1] ?? 'fastapi')
+        continue
+      }
+
+      const importFromMatch = trimmed.match(/^from\s+([A-Za-z0-9_\.]+)\s+import\s+(.+)$/)
+      if (importFromMatch?.[1] && importFromMatch[2]) {
+        const moduleSpecifier = importFromMatch[1]
+        const importedList = importFromMatch[2].replace(/[()]/g, '')
+        for (const rawEntry of importedList.split(',')) {
+          const entry = rawEntry.trim()
+          if (!entry) {
+            continue
+          }
+          const [importedNamePart, aliasPart] = entry.split(/\s+as\s+/)
+          const importedName = importedNamePart?.trim()
+          const localName = aliasPart?.trim() || importedName
+          if (!importedName || !localName) {
+            continue
+          }
+
+          const targetId = resolveImportedPythonTarget(moduleSpecifier, importedName, nodeIdsByModuleAndName)
+          if (targetId) {
+            importedTargets.set(localName, targetId)
+          }
+        }
+        continue
+      }
+
+      const classMatch = trimmed.match(/^class\s+([A-Za-z_][A-Za-z0-9_]*)(?:\(([^)]+)\))?:/)
+      if (classMatch?.[1]) {
+        classStack.push({ indent, id: _makeId(stem, classMatch[1]) })
+        pendingDecorators.length = 0
+        continue
+      }
+
+      const ownerAssignment = fastApiOwnerAssignment(trimmed, routerFactoryBindings, appFactoryBindings, fastApiModuleAliases)
+      if (ownerAssignment) {
+        const ownerId = _makeId(stem, ownerAssignment.ownerName, ownerAssignment.frameworkRole)
+        routerOwners.set(ownerAssignment.ownerName, {
+          id: ownerId,
+          prefix: ownerAssignment.prefix,
+          frameworkRole: ownerAssignment.frameworkRole,
+        })
+        addDerivedNode({
+          ...createNode(ownerId, ownerAssignment.ownerName, filePath, lineNumber),
+          node_kind: 'router',
+          framework: 'fastapi',
+          framework_role: ownerAssignment.frameworkRole,
+          route_path: ownerAssignment.prefix || undefined,
+        })
+        addUniqueEdge(edges, existingEdges, createEdge(fileNodeId, ownerId, 'declares', filePath, lineNumber))
+        pendingDecorators.length = 0
+        continue
+      }
+
+      if (trimmed.startsWith('@')) {
+        pendingDecorators.push({ text: trimmed, line: lineNumber })
+        continue
+      }
+
+      const functionMatch = trimmed.match(/^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/)
+      if (functionMatch?.[1]) {
+        const currentClass = classStack[classStack.length - 1]
+        const functionId = currentClass ? _makeId(currentClass.id, functionMatch[1]) : _makeId(stem, functionMatch[1])
+        const routeDecorator = pendingDecorators
+          .map((decorator) => ({ ...decorator, parsed: fastApiRouteDecorator(decorator.text, routerOwners) }))
+          .find((decorator): decorator is { text: string; line: number; parsed: { ownerName: string; method: string; routePath: string } } => Boolean(decorator.parsed))
+        pendingDecorators.length = 0
+        if (!routeDecorator || !searchableNodeIds.has(functionId)) {
+          continue
+        }
+
+        const owner = routerOwners.get(routeDecorator.parsed.ownerName)
+        if (!owner) {
+          continue
+        }
+
+        const fullRoutePath = joinFastApiRoutePath(owner.prefix, routeDecorator.parsed.routePath)
+        const routeId = _makeId(stem, routeDecorator.parsed.ownerName, routeDecorator.parsed.method, fullRoutePath, 'fastapi_route')
+        addDerivedNode({
+          ...createNode(routeId, `${routeDecorator.parsed.method} ${fullRoutePath}`, filePath, routeDecorator.line),
+          node_kind: 'route',
+          framework: 'fastapi',
+          framework_role: 'fastapi_route',
+          http_method: routeDecorator.parsed.method,
+          route_path: fullRoutePath,
+        })
+        setNodeAttributes(functionId, {
+          framework: 'fastapi',
+          framework_role: 'fastapi_endpoint',
+        })
+        addUniqueEdge(edges, existingEdges, createEdge(fileNodeId, routeId, 'declares', filePath, routeDecorator.line))
+        addUniqueEdge(edges, existingEdges, createEdge(owner.id, routeId, 'registers_route', filePath, routeDecorator.line))
+        addUniqueEdge(edges, existingEdges, createEdge(functionId, routeId, 'handles_route', filePath, routeDecorator.line))
+        addUniqueEdge(edges, existingEdges, createEdge(routeId, functionId, 'depends_on', filePath, routeDecorator.line))
+
+        const dependencyNames = new Set([
+          ...fastApiDependencyNames(routeDecorator.text, dependsBindings, fastApiModuleAliases),
+          ...fastApiDependencyNames(trimmed, dependsBindings, fastApiModuleAliases),
+        ])
+        for (const dependencyName of dependencyNames) {
+          const dependencyId = resolvePythonLocalOrImportedTarget(stem, dependencyName, importedTargets, nodeIdsByModuleAndName)
+          if (!dependencyId || !searchableNodeIds.has(dependencyId)) {
+            continue
+          }
+
+          setNodeAttributes(dependencyId, {
+            framework: 'fastapi',
+            framework_role: 'fastapi_dependency',
+          })
+          addUniqueEdge(edges, existingEdges, createEdge(functionId, dependencyId, 'depends_on', filePath, routeDecorator.line))
+        }
+        continue
+      }
+
+      pendingDecorators.length = 0
+    }
+  }
+
+  return {
+    ...extraction,
+    nodes,
     edges,
   }
 }

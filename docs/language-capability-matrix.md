@@ -13,7 +13,8 @@ The registry lives in `src/infrastructure/capabilities.ts`. The extractor bindin
 | Coverage tier | Extensions | Primary path | Fallback / notes |
 |---|---|---|---|
 | TypeScript / JavaScript AST | `.ts` `.tsx` `.js` `.jsx` | TypeScript compiler API + framework-semantic pass | Best code-structure coverage in the repo today, including deep framework-aware semantics for mainstream Express, Redux Toolkit, React Router, NestJS, and Next.js patterns; MCP `retrieve`/`impact` now return compact payloads by default, with `verbose: true` as the legacy escape hatch |
-| Tree-sitter primary | `.py` `.rb` | Tree-sitter WASM parser | Falls back to language-specific legacy extractor if the parser is unavailable |
+| Tree-sitter + semantic resolution | `.py` | Tree-sitter WASM parser + Python cross-file import/call resolution + first-pass FastAPI route/dependency semantics | Falls back to the language-specific legacy extractor if the parser is unavailable |
+| Tree-sitter primary | `.rb` | Tree-sitter WASM parser | Falls back to language-specific legacy extractor if the parser is unavailable |
 | Tree-sitter primary | `.go` `.java` `.rs` | Tree-sitter WASM parser | Falls back to the generic structural extractor if the parser is unavailable |
 | Generic structural extractor | `.c` `.cc` `.cpp` `.cxx` `.h` `.hpp` `.kt` `.kts` `.cs` `.scala` `.php` `.swift` `.zig` | Generic extractor | Heuristic structure, import, inheritance, and call extraction |
 | Lightweight language-specific scanners | `.lua` `.ex` `.exs` `.jl` `.ps1` `.m` `.mm` `.toc` | Purpose-built scanners | Useful coverage, but less semantic depth than AST-backed paths |

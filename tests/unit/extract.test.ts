@@ -1357,36 +1357,124 @@ describe('extract', () => {
     const root = createTempRoot()
     try {
       const modelsPath = join(root, 'models.py')
+      const helpersPath = join(root, 'helpers.py')
       const authPath = join(root, 'auth.py')
 
       writeFileSync(modelsPath, ['class Response:', '    pass', '', 'class BaseAuth:', '    pass'].join('\n'), 'utf8')
+      writeFileSync(helpersPath, ['def normalize_token(value):', '    return value.strip().lower()'].join('\n'), 'utf8')
 
       writeFileSync(
         authPath,
         [
           'from .models import Response as ApiResponse, BaseAuth',
+          'from .helpers import normalize_token',
           '',
           'class DigestAuth(BaseAuth):',
-          '    def build(self) -> ApiResponse:',
+          '    def build(self, token) -> ApiResponse:',
+          '        normalize_token(token)',
           '        return ApiResponse()',
         ].join('\n'),
         'utf8',
       )
 
-      const result = extract([authPath, modelsPath])
+      const result = extract([authPath, modelsPath, helpersPath])
       const digestAuthId = result.nodes.find((node) => node.label === 'DigestAuth')?.id
       const responseId = result.nodes.find((node) => node.label === 'Response')?.id
       const baseAuthId = result.nodes.find((node) => node.label === 'BaseAuth')?.id
+      const buildId = result.nodes.find((node) => node.label === '.build()' && node.source_file === authPath)?.id
+      const normalizeTokenId = result.nodes.find((node) => node.label === 'normalize_token()')?.id
 
       expect(digestAuthId).toBeTruthy()
       expect(responseId).toBeTruthy()
       expect(baseAuthId).toBeTruthy()
+      expect(buildId).toBeTruthy()
+      expect(normalizeTokenId).toBeTruthy()
       expect(result.edges.some((edge) => edge.source === digestAuthId && edge.target === responseId && edge.relation === 'uses' && edge.confidence === 'INFERRED')).toBe(
         true,
       )
       expect(
         result.edges.some((edge) => edge.source === digestAuthId && edge.target === baseAuthId && edge.relation === 'inherits' && edge.confidence === 'INFERRED'),
       ).toBe(true)
+      expect(
+        result.edges.some(
+          (edge) => edge.source === buildId && edge.target === normalizeTokenId && edge.relation === 'calls' && edge.confidence === 'INFERRED',
+        ),
+      ).toBe(true)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('extracts FastAPI router, route, endpoint, and dependency edges across python files', () => {
+    const root = createTempRoot()
+    try {
+      const depsPath = join(root, 'deps.py')
+      const apiPath = join(root, 'api.py')
+
+      writeFileSync(depsPath, ['def get_db():', '    return "db"'].join('\n'), 'utf8')
+      writeFileSync(
+        apiPath,
+        [
+          'from fastapi import APIRouter, Depends',
+          'from .deps import get_db',
+          '',
+          'router = APIRouter(prefix="/api")',
+          '',
+          '@router.get("/users")',
+          'async def list_users(db = Depends(get_db)):',
+          '    return {"db": db}',
+        ].join('\n'),
+        'utf8',
+      )
+
+      const result = extract([apiPath, depsPath])
+      const routerId = result.nodes.find((node) => node.label === 'router' && node.framework_role === 'fastapi_router')?.id
+      const routeId = result.nodes.find((node) => node.label === 'GET /api/users' && node.framework_role === 'fastapi_route')?.id
+      const endpointId = result.nodes.find((node) => node.label === 'list_users()')?.id
+      const dependencyId = result.nodes.find((node) => node.label === 'get_db()' && node.source_file === depsPath)?.id
+
+      expect(routerId).toBeTruthy()
+      expect(routeId).toBeTruthy()
+      expect(endpointId).toBeTruthy()
+      expect(dependencyId).toBeTruthy()
+      expect(result.nodes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: routerId,
+            label: 'router',
+            framework: 'fastapi',
+            framework_role: 'fastapi_router',
+            node_kind: 'router',
+          }),
+          expect.objectContaining({
+            id: routeId,
+            label: 'GET /api/users',
+            framework: 'fastapi',
+            framework_role: 'fastapi_route',
+            node_kind: 'route',
+            route_path: '/api/users',
+            http_method: 'GET',
+          }),
+          expect.objectContaining({
+            id: endpointId,
+            framework: 'fastapi',
+            framework_role: 'fastapi_endpoint',
+          }),
+          expect.objectContaining({
+            id: dependencyId,
+            framework: 'fastapi',
+            framework_role: 'fastapi_dependency',
+          }),
+        ]),
+      )
+      expect(result.edges).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ source: routerId, target: routeId, relation: 'registers_route' }),
+          expect.objectContaining({ source: endpointId, target: routeId, relation: 'handles_route' }),
+          expect.objectContaining({ source: routeId, target: endpointId, relation: 'depends_on' }),
+          expect.objectContaining({ source: endpointId, target: dependencyId, relation: 'depends_on' }),
+        ]),
+      )
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
