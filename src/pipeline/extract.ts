@@ -10,7 +10,7 @@ import { builtinCapabilityRegistry } from '../infrastructure/capabilities.js'
 import { CODE_EXTENSIONS, FileType, classifyFile, detect } from './detect.js'
 import { mergeExtractionFragments, resolveSourceNodeReferences } from './extract/combine.js'
 import { addPendingCall, addResolvedCalls, braceDelta, normalizeImportTarget, type PendingCall, type PendingCallInput } from './extract/call-resolution.js'
-import { resolveCrossFilePythonImports, resolveCrossFileRelativeJsImports, resolveJsxRendersProxies } from './extract/cross-file.js'
+import { resolveCrossFilePythonImports, resolveCrossFileRelativeJsImports, resolveJsxRendersProxies, resolvePythonFastApiSemantics } from './extract/cross-file.js'
 import { dispatchSingleFileExtraction, type ExtractionFragment, type ExtractorHandlerMap } from './extract/dispatch.js'
 import { applyJsFrameworkAdapters } from './extract/frameworks/core.js'
 import { extractGenericCode, normalizeTypeName } from './extract/generic.js'
@@ -3599,6 +3599,10 @@ export function extract(files: string[], options: ExtractOptions = {}): Extracti
   combined = options.contextNodes
     ? resolveCrossFilePythonImports(files, combined, { contextNodes: options.contextNodes })
     : resolveCrossFilePythonImports(files, combined)
+
+  combined = options.contextNodes
+    ? resolvePythonFastApiSemantics(files, combined, { contextNodes: options.contextNodes })
+    : resolvePythonFastApiSemantics(files, combined)
 
   combined = options.contextNodes
     ? resolveCrossFileRelativeJsImports(files, combined, { contextNodes: options.contextNodes })

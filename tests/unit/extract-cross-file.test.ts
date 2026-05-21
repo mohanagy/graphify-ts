@@ -10,6 +10,93 @@ function createTempRoot(): string {
 }
 
 describe('resolveCrossFilePythonImports', () => {
+  it('adds inferred cross-file calls for imported python functions', () => {
+    const root = createTempRoot()
+    try {
+      const helpersPath = join(root, 'helpers.py')
+      const authPath = join(root, 'auth.py')
+
+      writeFileSync(helpersPath, ['def normalize_token(value):', '    return value.strip().lower()'].join('\n'), 'utf8')
+      writeFileSync(
+        authPath,
+        [
+          'from .helpers import normalize_token',
+          '',
+          'class DigestAuth:',
+          '    def build(self, token):',
+          '        return normalize_token(token)',
+        ].join('\n'),
+        'utf8',
+      )
+
+      const resolved = resolveCrossFilePythonImports([authPath, helpersPath], {
+        nodes: [
+          { id: 'auth_digestauth', label: 'DigestAuth', file_type: 'code', source_file: authPath },
+          { id: 'auth_digestauth_build', label: '.build()', file_type: 'code', source_file: authPath },
+          { id: 'helpers_normalize_token', label: 'normalize_token()', file_type: 'code', source_file: helpersPath },
+        ],
+        edges: [
+          { source: 'auth_digestauth', target: 'auth_digestauth_build', relation: 'method', confidence: 'EXTRACTED', source_file: authPath },
+        ],
+        input_tokens: 0,
+        output_tokens: 0,
+      })
+
+      expect(resolved.edges).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            source: 'auth_digestauth_build',
+            target: 'helpers_normalize_token',
+            relation: 'calls',
+            confidence: 'INFERRED',
+          }),
+        ]),
+      )
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('skips inferred cross-file calls when the nested python function node is missing', () => {
+    const root = createTempRoot()
+    try {
+      const helpersPath = join(root, 'helpers.py')
+      const authPath = join(root, 'auth.py')
+
+      writeFileSync(helpersPath, ['def normalize_token(value):', '    return value.strip().lower()'].join('\n'), 'utf8')
+      writeFileSync(
+        authPath,
+        [
+          'from .helpers import normalize_token',
+          '',
+          'def outer(token):',
+          '    def inner():',
+          '        return normalize_token(token)',
+          '    return inner()',
+        ].join('\n'),
+        'utf8',
+      )
+
+      const resolved = resolveCrossFilePythonImports([authPath, helpersPath], {
+        nodes: [
+          { id: 'auth_outer', label: 'outer()', file_type: 'code', source_file: authPath },
+          { id: 'helpers_normalize_token', label: 'normalize_token()', file_type: 'code', source_file: helpersPath },
+        ],
+        edges: [],
+        input_tokens: 0,
+        output_tokens: 0,
+      })
+
+      expect(
+        resolved.edges.some(
+          (edge) => edge.source === 'auth_inner' && edge.target === 'helpers_normalize_token' && edge.relation === 'calls',
+        ),
+      ).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('adds inferred inherits and uses edges across python files', () => {
     const root = createTempRoot()
     try {
