@@ -35,6 +35,7 @@ export type {
   RetrievalGateDecision,
   RetrievalExcludedDomain,
   RetrievalGateSignals,
+  RetrievalGenerationDebugSignals,
   RetrievalGenerationIntent,
   RetrievalIntent,
   RetrievalLevel,
@@ -244,9 +245,6 @@ function detectGenerationIntent(prompt: string): {
     return { intent: 'runtime_generation', debug }
   }
   if (genericGenerationShaped && explanationShaped && !displayShaped && !buildStaticShaped) {
-    return { intent: 'runtime_generation', debug }
-  }
-  if (genericGenerationShaped && !displayShaped && !buildStaticShaped && strongRuntimeShaped) {
     return { intent: 'runtime_generation', debug }
   }
   if (displayShaped) {

@@ -594,12 +594,10 @@ describe('SPI realistic Nest DI runtime-call fixture', () => {
     expect(result.retrieval_gate?.signals.generation_intent).toBe('display_rendering')
     expect(result.retrieval_gate?.signals.target_domain_hint).toBe('frontend_display')
     expect(labels).toEqual(expect.arrayContaining(['ReportFooter()', 'pickGeneratedAt()']))
-    expect(labels).not.toEqual(expect.arrayContaining([
-      '.generateFromProblem()',
-      '.startPipeline()',
-      '.addJob()',
-      '.process()',
-    ]))
+    expect(labels).not.toContain('.generateFromProblem()')
+    expect(labels).not.toContain('.startPipeline()')
+    expect(labels).not.toContain('.addJob()')
+    expect(labels).not.toContain('.process()')
     expect(sourceFiles.some((sourceFile) => sourceFile.includes('platform/src/features/idea-detail/components/ReportFooter.tsx'))).toBe(true)
   })
 
@@ -617,12 +615,10 @@ describe('SPI realistic Nest DI runtime-call fixture', () => {
     expect(result.retrieval_gate?.signals.generation_intent).toBe('display_rendering')
     expect(result.retrieval_gate?.signals.target_domain_hint).toBe('frontend_display')
     expect(labels).toEqual(expect.arrayContaining(['ReportFooter()', 'pickGeneratedAt()', 'pickPipelineLabel()']))
-    expect(labels).not.toEqual(expect.arrayContaining([
-      '.generateFromProblem()',
-      '.startPipeline()',
-      '.addJob()',
-      '.process()',
-    ]))
+    expect(labels).not.toContain('.generateFromProblem()')
+    expect(labels).not.toContain('.startPipeline()')
+    expect(labels).not.toContain('.addJob()')
+    expect(labels).not.toContain('.process()')
     expect(sourceFiles.some((sourceFile) => sourceFile.includes('platform/src/features/idea-detail/components/ReportFooter.tsx'))).toBe(true)
   })
 })
