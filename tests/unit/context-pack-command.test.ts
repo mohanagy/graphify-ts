@@ -94,8 +94,8 @@ describe('context-pack-command', () => {
         ]),
       }),
       phase_coverage: {
-        expected: ['controller', 'service', 'queue', 'worker', 'persistence'],
-        observed: expect.arrayContaining(['controller', 'service', 'queue', 'worker', 'persistence']),
+        expected: ['controller', 'queue', 'worker', 'persistence'],
+        observed: ['controller', 'service', 'queue', 'worker', 'persistence'],
         missing: [],
       },
     }))

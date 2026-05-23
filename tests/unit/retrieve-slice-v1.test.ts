@@ -270,8 +270,8 @@ describe('retrieveContext retrievalStrategy=slice-v1', () => {
         expect.objectContaining({ to: 'LoginValidator.validate' }),
       ]),
       phase_coverage: {
-        expected: ['controller', 'service', 'queue', 'worker', 'persistence'],
-        observed: expect.arrayContaining(['controller', 'service', 'queue', 'worker', 'persistence']),
+        expected: ['controller', 'queue', 'worker', 'persistence'],
+        observed: ['controller', 'service', 'queue', 'worker', 'persistence'],
         missing: [],
       },
     }))
@@ -368,6 +368,20 @@ describe('retrieveContext retrievalStrategy=slice-v1', () => {
     expect(compact.execution_slice?.status).toBe('complete')
     expect(compact.execution_slice?.phase_coverage).toEqual({
       expected: ['queue', 'worker', 'persistence'],
+      observed: ['queue', 'worker', 'persistence'],
+      missing: [],
+    })
+  })
+
+  it('does not infer controller or service phases from generic request wording on worker questions', () => {
+    const compact = compactFor(
+      'Why do requests fail after `QueueRegistry.addJob` in the worker runtime pipeline?',
+      buildWorkerSegmentGraph(),
+    )
+
+    expect(compact.execution_slice?.status).toBe('complete')
+    expect(compact.execution_slice?.phase_coverage).toEqual({
+      expected: ['queue', 'worker'],
       observed: ['queue', 'worker', 'persistence'],
       missing: [],
     })

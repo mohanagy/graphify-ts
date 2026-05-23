@@ -1254,17 +1254,13 @@ function promptWantsControllerStep(question: string): boolean {
   const questionTokens = tokenizeQuestion(question)
   const hasRoutePath = containsUrlLikeRoutePath(question)
   const hasRouteKeyword = includesAnyToken(questionTokens, [
-    'route', 'routes', 'router', 'controller', 'controllers', 'handler', 'handlers', 'endpoint', 'endpoints', 'request', 'requests',
+    'route', 'routes', 'router', 'controller', 'controllers', 'handler', 'handlers', 'endpoint', 'endpoints',
   ])
 
   return hasRoutePath || hasHttpVerbIntent(question, questionTokens, hasRoutePath, hasRouteKeyword) || hasRouteKeyword
 }
 
 function promptWantsServiceStep(question: string): boolean {
-  if (promptWantsControllerStep(question)) {
-    return true
-  }
-
   const questionTokens = tokenizeQuestion(question)
   return includesAnyToken(questionTokens, ['service', 'services', 'provider', 'providers', 'usecase', 'usecases', 'application', 'applications'])
     || /\b(?:use-case|orchestrator)\b/i.test(question)
@@ -1906,6 +1902,7 @@ function phaseCoverageForPath(
   boundaries: readonly ContextPackExecutionSliceBoundary[],
   question: string,
 ): { expected: ExecutionPhase[]; observed: ExecutionPhase[]; missing: ExecutionPhase[] } {
+  const phaseOrder: ExecutionPhase[] = ['controller', 'service', 'queue', 'worker', 'persistence']
   const expected = expectedExecutionPhases(question)
   const observed = new Set<ExecutionPhase>()
   for (const step of steps) {
@@ -1919,10 +1916,7 @@ function phaseCoverageForPath(
       observed.add('worker')
     }
   }
-  const orderedObserved = [
-    ...expected.filter((phase) => observed.has(phase)),
-    ...[...observed].filter((phase) => !expected.includes(phase)),
-  ]
+  const orderedObserved = phaseOrder.filter((phase) => observed.has(phase))
   const missing = expected.filter((phase) => !observed.has(phase))
   return { expected, observed: orderedObserved, missing }
 }
