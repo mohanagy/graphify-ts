@@ -1326,7 +1326,7 @@ function readPackageName(packageRoot: string): string {
   return resolvePackageName(packageRoot)
 }
 
-function resolvePackageCliPath(packageRoot = findPackageRoot()): string {
+function readPackageCliDeclaration(packageRoot = findPackageRoot()): { packageJsonPath: string, cliPath: string | undefined } {
   const packageJsonPath = join(packageRoot, 'package.json')
   const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'))
   if (!isRecord(packageJson)) {
@@ -1349,10 +1349,18 @@ function resolvePackageCliPath(packageRoot = findPackageRoot()): string {
   }
 
   if (!relativeBinPath) {
-    throw new Error(`Could not locate a ${CLI_BIN_NAMES.join(' or ')} bin entry in ${packageJsonPath}`)
+    return { packageJsonPath, cliPath: undefined }
   }
 
-  const cliPath = join(packageRoot, relativeBinPath)
+  return { packageJsonPath, cliPath: join(packageRoot, relativeBinPath) }
+}
+
+function findPackageCliPath(packageRoot = findPackageRoot()): string | undefined {
+  const { cliPath } = readPackageCliDeclaration(packageRoot)
+  if (!cliPath) {
+    return undefined
+  }
+
   let cliPathIsFile = false
   try {
     cliPathIsFile = existsSync(cliPath) && statSync(cliPath).isFile()
@@ -1360,6 +1368,17 @@ function resolvePackageCliPath(packageRoot = findPackageRoot()): string {
     cliPathIsFile = false
   }
   if (!cliPathIsFile) {
+    return undefined
+  }
+  return cliPath
+}
+
+function resolvePackageCliPath(packageRoot = findPackageRoot()): string {
+  const { packageJsonPath, cliPath } = readPackageCliDeclaration(packageRoot)
+  if (!cliPath) {
+    throw new Error(`Could not locate a ${CLI_BIN_NAMES.join(' or ')} bin entry in ${packageJsonPath}`)
+  }
+  if (!existsSync(cliPath) || !statSync(cliPath).isFile()) {
     throw new Error(`Could not locate a ${CLI_BIN_NAMES.join(' or ')} CLI at ${cliPath} declared by ${packageJsonPath}`)
   }
   return cliPath
@@ -1437,6 +1456,7 @@ function installMcpServer(
   target: McpConfigTarget = 'claude',
   nodePlatform = process.platform,
   options: McpInstallOptions = {},
+  packageRoot = findPackageRoot(),
 ): string {
   const mcpJsonPath = join(projectDir, MCP_CONFIG_PATHS[target])
   ensureParentDirectory(mcpJsonPath)
@@ -1454,6 +1474,9 @@ function installMcpServer(
 
   const npxCommand = nodePlatform === 'win32' ? 'npx.cmd' : 'npx'
   const npxArgs = ['--yes', installPackageSpecifier(), 'serve', '--stdio', graphPath]
+  const directCliPath = isVscode ? findPackageCliPath(packageRoot) : undefined
+  const command = directCliPath ? process.execPath : npxCommand
+  const args = directCliPath ? [directCliPath, 'serve', '--stdio', graphPath] : npxArgs
   // Default to the lean MCP tool surface ("core" = 6 tools). Reduces cache_creation
   // overhead per session vs. advertising all tools. Users can opt into the full
   // 25-tool surface by setting MADAR_TOOL_PROFILE=full in this env block.
@@ -1468,7 +1491,7 @@ function installMcpServer(
     ? { ...existingEnv, MADAR_TOOL_PROFILE: envProfile }
     : { MADAR_TOOL_PROFILE: 'core', ...existingEnv }
   const serverConfig = isVscode
-    ? { type: 'stdio', command: npxCommand, args: npxArgs, env }
+    ? { type: 'stdio', command, args, env }
     : { command: npxCommand, args: npxArgs, env }
 
   mcpServers[SKILL_SLUG] = serverConfig
@@ -1868,8 +1891,8 @@ export function geminiUninstall(projectDir = '.', options: Pick<InstallSkillOpti
   return messages.join('\n')
 }
 
-export function installCopilotMcp(projectDir = '.', options: McpInstallOptions = {}): string {
-  const message = installMcpServer(resolve(projectDir), 'copilot', process.platform, options)
+export function installCopilotMcp(projectDir = '.', options: McpInstallOptions = {}, packageRoot = findPackageRoot()): string {
+  const message = installMcpServer(resolve(projectDir), 'copilot', process.platform, options, packageRoot)
   if (options.profile === 'strict') {
     return `${message}\n\nGitHub Copilot will now use the madar strict compact MCP profile: call context_pack once, answer from the pack when coverage is complete, and expand only when diagnostics show missing evidence.`
   }

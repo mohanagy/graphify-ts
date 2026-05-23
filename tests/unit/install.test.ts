@@ -20,7 +20,7 @@ import {
   uninstallCopilotMcp,
   uninstallSkill,
 } from '../../src/infrastructure/install.js'
-import { normalizeAssertionPath } from './helpers/platform.js'
+import { normalizeAssertionPath, normalizeAssertionPaths } from './helpers/platform.js'
 
 const PACKAGE_CLI_RELATIVE_PATH = join('dist', 'src', 'cli', 'bin.js')
 
@@ -564,6 +564,38 @@ describe('install helpers', () => {
       }
 
       expect(mcpConfig.servers?.['madar']?.env?.MADAR_TOOL_PROFILE).toBe('core')
+    })
+  })
+
+  it('writes the VS Code Copilot MCP server as a direct CLI launch instead of npx', () => {
+    withOpenCodePackageRoot((packageRoot, cliPath) => {
+      withTempDir((projectDir) => {
+        const installCopilotWithPackageRoot = installCopilotMcp as (
+          projectDir?: string,
+          options?: { profile?: 'core' | 'full' | 'strict' },
+          packageRoot?: string,
+        ) => string
+        installCopilotWithPackageRoot(projectDir, {}, packageRoot)
+
+        const mcpConfig = JSON.parse(readFileSync(join(projectDir, '.vscode', 'mcp.json'), 'utf8')) as {
+          servers?: {
+            'madar'?: {
+              type?: string
+              command?: string
+              args?: string[]
+            }
+          }
+        }
+
+        expect(mcpConfig.servers?.['madar']?.type).toBe('stdio')
+        expect(normalizeAssertionPath(mcpConfig.servers?.['madar']?.command ?? '')).toBe(normalizeAssertionPath(process.execPath))
+        expect(normalizeAssertionPaths(mcpConfig.servers?.['madar']?.args ?? [])).toEqual([
+          normalizeAssertionPath(cliPath),
+          'serve',
+          '--stdio',
+          normalizeAssertionPath(join(projectDir, 'out', 'graph.json')),
+        ])
+      })
     })
   })
 
