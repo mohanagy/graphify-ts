@@ -1892,7 +1892,7 @@ export function geminiUninstall(projectDir = '.', options: Pick<InstallSkillOpti
 }
 
 export function installCopilotMcp(projectDir = '.', options: McpInstallOptions = {}, packageRoot = findPackageRoot()): string {
-  const message = installMcpServer(resolve(projectDir), 'copilot', process.platform, options, packageRoot)
+  const message = installMcpServer(resolve(projectDir), 'copilot', process.platform, options, resolve(packageRoot))
   if (options.profile === 'strict') {
     return `${message}\n\nGitHub Copilot will now use the madar strict compact MCP profile: call context_pack once, answer from the pack when coverage is complete, and expand only when diagnostics show missing evidence.`
   }

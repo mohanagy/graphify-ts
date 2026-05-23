@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import * as ts from 'typescript'
 
 import {
@@ -595,6 +595,29 @@ describe('install helpers', () => {
           '--stdio',
           normalizeAssertionPath(join(projectDir, 'out', 'graph.json')),
         ])
+      })
+    })
+  })
+
+  it('resolves a relative Copilot packageRoot before writing the CLI launcher path', () => {
+    withOpenCodePackageRoot((packageRoot, cliPath) => {
+      withTempDir((projectDir) => {
+        const installCopilotWithPackageRoot = installCopilotMcp as (
+          projectDir?: string,
+          options?: { profile?: 'core' | 'full' | 'strict' },
+          packageRoot?: string,
+        ) => string
+        installCopilotWithPackageRoot(projectDir, {}, normalizeAssertionPath(relative(process.cwd(), packageRoot)))
+
+        const mcpConfig = JSON.parse(readFileSync(join(projectDir, '.vscode', 'mcp.json'), 'utf8')) as {
+          servers?: {
+            'madar'?: {
+              args?: string[]
+            }
+          }
+        }
+
+        expect(normalizeAssertionPaths(mcpConfig.servers?.['madar']?.args ?? []).at(0)).toBe(normalizeAssertionPath(cliPath))
       })
     })
   })
