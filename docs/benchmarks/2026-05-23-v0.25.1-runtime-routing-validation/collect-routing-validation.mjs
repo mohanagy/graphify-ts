@@ -7,26 +7,48 @@ import { spawnSync } from 'node:child_process'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(scriptDir, '../../..')
+const usage = 'Usage: node collect-routing-validation.mjs --graph /absolute/path/to/graph.json [--prompts prompts.json] [--output routing-validation.json] [--budget 4000]'
 
 function parseArgs(argv) {
   const out = {
     graph: null,
     prompts: resolve(scriptDir, 'prompts.json'),
     output: resolve(scriptDir, 'routing-validation.json'),
-    budget: '4000',
+    budget: 4000,
+  }
+
+  const readValue = (arg, next) => {
+    if (typeof next !== 'string' || next.length === 0 || next.startsWith('-')) {
+      throw new Error(`Missing value for ${arg}`)
+    }
+    return next
   }
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]
-    if (arg === '--graph') out.graph = argv[++i] ?? null
-    else if (arg === '--prompts') out.prompts = resolve(process.cwd(), argv[++i] ?? '')
-    else if (arg === '--output') out.output = resolve(process.cwd(), argv[++i] ?? '')
-    else if (arg === '--budget') out.budget = argv[++i] ?? out.budget
+    const next = argv[i + 1]
+    if (arg === '--graph') {
+      out.graph = readValue(arg, next)
+      i += 1
+    } else if (arg === '--prompts') {
+      out.prompts = resolve(process.cwd(), readValue(arg, next))
+      i += 1
+    } else if (arg === '--output') {
+      out.output = resolve(process.cwd(), readValue(arg, next))
+      i += 1
+    } else if (arg === '--budget') {
+      const parsedBudget = Number(readValue(arg, next))
+      if (!Number.isFinite(parsedBudget) || !Number.isInteger(parsedBudget) || parsedBudget <= 0) {
+        throw new Error(`--budget must be a positive integer, received: ${next ?? ''}`)
+      }
+      out.budget = parsedBudget
+      i += 1
+    }
     else throw new Error(`Unknown argument: ${arg}`)
   }
 
   if (!out.graph) {
-    throw new Error('Usage: node collect-routing-validation.mjs --graph /absolute/path/to/graph.json [--output routing-validation.json]')
+    throw new Error(`Missing required --graph.\n${usage}`)
   }
 
   out.graph = resolve(process.cwd(), out.graph)
@@ -51,7 +73,7 @@ function inferActualDomain(targetDomainHint) {
 function runPack(cliPath, graphPath, budget, question) {
   const result = spawnSync(
     'node',
-    [cliPath, 'pack', question, '--task', 'explain', '--graph', graphPath, '--budget', budget],
+    [cliPath, 'pack', question, '--task', 'explain', '--graph', graphPath, '--budget', String(budget)],
     {
       cwd: repoRoot,
       encoding: 'utf8',
@@ -97,58 +119,71 @@ function evaluatePrompt(prompt, payload) {
   }
 }
 
-const { graph, prompts, output, budget } = parseArgs(process.argv.slice(2))
-const promptList = JSON.parse(readFileSync(prompts, 'utf8'))
-const workspaceRoot = resolve(dirname(graph), '..')
-const cliPath = resolve(repoRoot, 'dist/src/cli/bin.js')
+function main() {
+  const { graph, prompts, output, budget } = parseArgs(process.argv.slice(2))
+  const promptList = JSON.parse(readFileSync(prompts, 'utf8'))
+  const workspaceRoot = resolve(dirname(graph), '..')
+  const cliPath = resolve(repoRoot, 'dist/src/cli/bin.js')
 
-const records = promptList.map((prompt) => {
-  const payload = runPack(cliPath, graph, budget, prompt.question)
-  const pack = payload.pack ?? {}
-  const gate = payload.retrieval_gate ?? pack.retrieval_gate ?? {}
-  const signals = gate.signals ?? {}
-  const evaluation = evaluatePrompt(prompt, payload)
+  const records = promptList.map((prompt) => {
+    const payload = runPack(cliPath, graph, budget, prompt.question)
+    const pack = payload.pack ?? {}
+    const gate = payload.retrieval_gate ?? pack.retrieval_gate ?? {}
+    const signals = gate.signals ?? {}
+    const evaluation = evaluatePrompt(prompt, payload)
 
-  return {
-    id: prompt.id,
-    class: prompt.class,
-    question: prompt.question,
-    expected_domain: prompt.expected_domain,
-    retrieval_gate: {
-      intent: gate.intent ?? null,
-      generation_intent: signals.generation_intent ?? 'unknown',
-      target_domain_hint: signals.target_domain_hint ?? 'unknown',
-    },
-    retrieval_strategy: pack.retrieval_strategy ?? 'default',
-    pack_token_count: pack.token_count ?? null,
-    matched_nodes: Array.isArray(pack.matched_nodes)
-      ? pack.matched_nodes.map((node) => ({
-          label: node.label,
-          source_file: sanitizeSourceFile(node.source_file, workspaceRoot),
-        }))
-      : [],
-    relationship_count: Array.isArray(pack.relationships) ? pack.relationships.length : 0,
-    has_execution_slice: pack.execution_slice !== undefined,
-    execution_slice_status: pack.execution_slice?.status ?? null,
-    execution_slice_phase_coverage: pack.execution_slice?.phase_coverage ?? null,
-    execution_slice_steps: Array.isArray(pack.execution_slice?.steps)
-      ? pack.execution_slice.steps.map((step) => step.label)
-      : [],
-    routing_judgment: evaluation,
+    return {
+      id: prompt.id,
+      class: prompt.class,
+      question: prompt.question,
+      expected_domain: prompt.expected_domain,
+      retrieval_gate: {
+        intent: gate.intent ?? null,
+        generation_intent: signals.generation_intent ?? 'unknown',
+        target_domain_hint: signals.target_domain_hint ?? 'unknown',
+      },
+      retrieval_strategy: pack.retrieval_strategy ?? 'default',
+      pack_token_count: pack.token_count ?? null,
+      matched_nodes: Array.isArray(pack.matched_nodes)
+        ? pack.matched_nodes.map((node) => ({
+            label: node.label,
+            source_file: sanitizeSourceFile(node.source_file, workspaceRoot),
+          }))
+        : [],
+      relationship_count: Array.isArray(pack.relationships) ? pack.relationships.length : 0,
+      has_execution_slice: pack.execution_slice !== undefined,
+      execution_slice_status: pack.execution_slice?.status ?? null,
+      execution_slice_phase_coverage: pack.execution_slice?.phase_coverage ?? null,
+      execution_slice_steps: Array.isArray(pack.execution_slice?.steps)
+        ? pack.execution_slice.steps.map((step) => step.label)
+        : [],
+      routing_judgment: evaluation,
+    }
+  })
+
+  const summary = {
+    total_prompts: records.length,
+    passed_prompts: records.filter((record) => record.routing_judgment.passed).length,
+    failed_prompts: records.filter((record) => !record.routing_judgment.passed).map((record) => record.id),
   }
-})
 
-const summary = {
-  total_prompts: records.length,
-  passed_prompts: records.filter((record) => record.routing_judgment.passed).length,
-  failed_prompts: records.filter((record) => !record.routing_judgment.passed).map((record) => record.id),
+  writeFileSync(output, `${JSON.stringify({
+    generated_at: new Date().toISOString(),
+    graph_path: '<workspace-root>/out/graph.json',
+    workspace_root: '<workspace-root>',
+    budget,
+    summary,
+    prompts: records,
+  }, null, 2)}\n`)
 }
 
-writeFileSync(output, `${JSON.stringify({
-  generated_at: new Date().toISOString(),
-  graph_path: '<workspace-root>/out/graph.json',
-  workspace_root: '<workspace-root>',
-  budget: Number(budget),
-  summary,
-  prompts: records,
-}, null, 2)}\n`)
+try {
+  main()
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error)
+  console.error(message)
+  if (!message.includes(usage)) {
+    console.error(usage)
+  }
+  process.exit(1)
+}
