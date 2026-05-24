@@ -99,7 +99,7 @@ export const TASK_INTENT_DEFINITIONS: TaskIntentDefinition[] = [
         score: 7,
         keyword_groups: [
           ['add', 'build', 'create', 'fix', 'support', 'wire'],
-          ['feature', 'flow', 'behavior', 'integration', 'context', 'command', 'pipeline', 'task', 'issue', 'support'],
+          ['feature', 'flow', 'behavior', 'integration', 'context', 'command', 'pipeline', 'task', 'issue'],
         ],
       },
     ],

@@ -140,6 +140,13 @@ describe('task-intent', () => {
       ])
     })
 
+    it('does not let one support token satisfy both implement keyword groups', () => {
+      const classification = classifyTaskIntent('Need support')
+
+      expect(classification.kind).toBe('explain')
+      expect(classification.matched_rules).not.toContain('implement-keywords')
+    })
+
     it('falls back to explain when no roadmap signal matches', () => {
       const classification = classifyTaskIntent('Need help with the graph.')
 

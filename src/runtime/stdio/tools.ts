@@ -135,7 +135,7 @@ function isStoredContextPackHandle(value: unknown): value is StoredContextPackHa
   if (typeof candidate.prompt !== 'string') {
     return false
   }
-  if (candidate.task !== 'explain' && candidate.task !== 'review' && candidate.task !== 'impact') {
+  if (!isContextPackTaskKind(candidate.task)) {
     return false
   }
   if (typeof candidate.task_intent !== 'string') {
@@ -147,7 +147,7 @@ function isStoredContextPackHandle(value: unknown): value is StoredContextPackHa
 
   const followUp = candidate.follow_up as Record<string, unknown>
   return followUp.kind === 'context_pack'
-    && typeof followUp.task_kind === 'string'
+    && isContextPackTaskKind(followUp.task_kind)
     && typeof followUp.evidence_class === 'string'
     && Array.isArray(followUp.focus_files)
     && Array.isArray(followUp.focus_ranges)
