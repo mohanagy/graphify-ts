@@ -7,6 +7,7 @@ describe('roadmap documentation', () => {
   it('documents the public roadmap page and links it from the README', () => {
     const roadmap = readFileSync(resolve('docs/roadmap.md'), 'utf8')
     const readme = readFileSync(resolve('README.md'), 'utf8')
+    const contributing = readFileSync(resolve('CONTRIBUTING.md'), 'utf8')
 
     expect(roadmap).toContain('# Public roadmap')
     expect(roadmap).toContain('## Recently shipped')
@@ -27,5 +28,7 @@ describe('roadmap documentation', () => {
     expect(roadmap).toContain('TypeScript and Node.js framework coverage')
     expect(roadmap).toContain('MCP/session efficiency')
     expect(readme).toContain('docs/roadmap.md')
+    expect(contributing).toContain('docs/roadmap.md')
+    expect(contributing).not.toContain('issues/155')
   })
 })
