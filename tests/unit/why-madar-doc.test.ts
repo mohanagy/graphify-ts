@@ -70,9 +70,9 @@ describe('public marketing copy honesty', () => {
     })
 
     it('describes execution_slice as a static hypothesis rather than a live trace', () => {
-      expect(lower).toContain('static')
-      expect(lower).toContain('hypothesis')
-      expect(lower).toContain('not a live trace')
+      expect(lower).toMatch(
+        /execution_slice[\s\S]{0,220}static runtime-path hypothesis[\s\S]{0,220}not a live trace/i,
+      )
     })
 
     it('explains when users should opt into --spi', () => {
