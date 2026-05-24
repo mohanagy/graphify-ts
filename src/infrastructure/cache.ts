@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync, mkdirSync } from 'node:fs'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { join, resolve, basename } from 'node:path'
 
 import { binaryIngestSidecarPath } from '../shared/binary-ingest-sidecar.js'
@@ -63,7 +63,7 @@ export function saveCached(filePath: string, result: Record<string, unknown>, ro
   }
   const directory = cacheDir(root)
   const entryPath = join(directory, `${hash}.json`)
-  const tempPath = `${entryPath}.tmp`
+  const tempPath = join(directory, `${hash}.${process.pid}.${randomUUID()}.json.tmp`)
 
   try {
     writeFileSync(tempPath, JSON.stringify(result))

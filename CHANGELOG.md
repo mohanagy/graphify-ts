@@ -4,6 +4,18 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.26.1] - 2026-05-24
+
+### Added
+
+- **Implementation-mode context-pack guidance**: `context_pack` prompts and completions now advertise implement mode consistently and include compact implementation guidance when the task is to build or modify behavior.
+- **Task applicability gating for non-code prompts**: install-time guidance now classifies prompts that do not need local repository source-code context so Claude/Codex-facing instructions can skip Madar by default and explain the skip in debug mode.
+
+### Changed
+
+- **Consumer installs no longer run a postinstall hook**: the published package removes the automatic `postinstall` reminder and keeps the platform reinstall hint in normal CLI help text instead of install-time execution.
+- **Release dependency posture is cleaner and better documented**: the production lockfile now fixes the transitive `protobufjs` audit finding, and the shipped Socket review documents the remaining semantic-stack supply-chain tradeoffs plus the follow-up tracked in #290.
+
 ## [0.26.0] - 2026-05-24
 
 ### Added

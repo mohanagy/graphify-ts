@@ -1,8 +1,8 @@
-# Socket dependency review for `@lubab/madar@0.26.0`
+# Socket dependency review for `@lubab/madar@0.26.1`
 
 ## Scope
 
-This review covers the production dependency surface for `@lubab/madar@0.26.0` as installed from `package.json` / `package-lock.json` on the `0.26.0` line.
+This review covers the production dependency surface for `@lubab/madar@0.26.1` as installed from `package.json` / `package-lock.json` on the `0.26.1` line.
 
 Commands used during triage:
 
