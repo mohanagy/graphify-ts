@@ -33,6 +33,7 @@ import { collectRelationships, compactRetrieveResult, contextPackFromRetrieveRes
 import { computeContextPackDiagnostics } from '../context-pack-diagnostics.js'
 import { collectPackNodeIds, computeDeltaContextPack } from '../context-pack-delta.js'
 import { applyContextPackResolution, type ContextPackResolution } from '../context-pack-resolution.js'
+import { buildImplementationPackGuidance } from '../implementation-pack.js'
 import { resolveTaskSelection } from '../task-intent.js'
 import { riskMap } from '../risk-map.js'
 import { buildTaskContextPlan } from '../task-context-planner.js'
@@ -1105,6 +1106,12 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
       const fullPack = contextPackFromRetrieveResult(retrieval)
       const compactPack = compactRetrieveResult(retrieval)
       const metadata = contextMetadata(retrieval)
+      const implementation = task === 'implement'
+        ? buildImplementationPackGuidance(graph, retrieval, {
+            budget: resolvedBudget,
+            taskIntent: initialPlan.evidence.recipe_id,
+          })
+        : undefined
       storeExpandableHandles(prompt, task, initialPlan.evidence.recipe_id, metadata.expandable, helpers)
       // Slice #78: emit context-pack quality diagnostics so callers can
       // detect bad runs (missing required evidence, zero claims, weak
@@ -1188,6 +1195,7 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
           ...(includeSelectionDiagnostics && deltaResult.delta_pack.selection_diagnostics
             ? { selection_diagnostics: deltaResult.delta_pack.selection_diagnostics }
             : {}),
+          ...(implementation ? { implementation } : {}),
           ...metadata,
         })))
       }
@@ -1206,6 +1214,7 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
         ...(includeSelectionDiagnostics && fullPack.selection_diagnostics
           ? { selection_diagnostics: fullPack.selection_diagnostics }
           : {}),
+        ...(implementation ? { implementation } : {}),
         ...metadata,
       }
       if (!cacheKey || !cacheGraphVersion) {

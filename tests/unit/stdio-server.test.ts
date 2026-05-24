@@ -1247,6 +1247,10 @@ describe('stdio runtime', () => {
       expect(packPayload.expandable).toEqual(expect.arrayContaining([
         expect.objectContaining({ handle_id: expect.any(String) }),
       ]))
+      expect(packPayload.implementation).toEqual(expect.objectContaining({
+        likely_edit_files: expect.any(Array),
+        validation_commands: expect.any(Array),
+      }))
 
       const expanded = await Promise.resolve(handleStdioRequest(graphPath, {
         id: 2,

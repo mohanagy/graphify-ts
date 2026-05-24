@@ -1,4 +1,6 @@
 import { KnowledgeGraph } from '../contracts/graph.js'
+import type { ContextPackTaskKind } from '../contracts/context-pack.js'
+import type { TaskIntentKind } from '../contracts/task-intent.js'
 import { godNodes, workspaceBridges } from '../pipeline/analyze.js'
 import { communitiesFromGraph } from './serve.js'
 import { analyzeImpact } from './impact.js'
@@ -6,7 +8,10 @@ import { featureMap, type FeatureMapOptions } from './feature-map.js'
 import { retrieveContext } from './retrieve.js'
 import { relativizeSourceFile } from '../shared/source-path.js'
 
-export interface RiskMapOptions extends FeatureMapOptions {}
+export interface RiskMapOptions extends FeatureMapOptions {
+  taskKind?: ContextPackTaskKind
+  taskIntent?: TaskIntentKind
+}
 
 export type RiskSeverity = 'high' | 'medium' | 'low'
 
@@ -134,6 +139,8 @@ export function riskMap(graph: KnowledgeGraph, options: RiskMapOptions): RiskMap
     budget: options.budget,
     ...(options.community !== undefined ? { community: options.community } : {}),
     ...(options.fileType ? { fileType: options.fileType } : {}),
+    ...(options.taskKind ? { taskKind: options.taskKind } : {}),
+    ...(options.taskIntent ? { taskIntent: options.taskIntent } : {}),
   })
   const communities = communitiesFromGraph(graph)
   const communityLabels = storedCommunityLabels(graph)

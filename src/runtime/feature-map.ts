@@ -1,5 +1,7 @@
 import { KnowledgeGraph } from '../contracts/graph.js'
 import type { ContextPackClaim, ContextPackCoverage, ContextPackEvidenceClass, ContextPackExpandableRef } from '../contracts/context-pack.js'
+import type { ContextPackTaskKind } from '../contracts/context-pack.js'
+import type { TaskIntentKind } from '../contracts/task-intent.js'
 import { relativizeSourceFile } from '../shared/source-path.js'
 import { relevantFiles, type RelevantFileEntry } from './relevant-files.js'
 import { retrieveContext, type RetrieveMatchedNode } from './retrieve.js'
@@ -10,6 +12,8 @@ export interface FeatureMapOptions {
   limit?: number
   community?: number
   fileType?: string
+  taskKind?: ContextPackTaskKind
+  taskIntent?: TaskIntentKind
 }
 
 export interface FeatureMapCommunity {
@@ -109,6 +113,8 @@ export function featureMap(graph: KnowledgeGraph, options: FeatureMapOptions): F
     budget: options.budget,
     ...(options.community !== undefined ? { community: options.community } : {}),
     ...(options.fileType ? { fileType: options.fileType } : {}),
+    ...(options.taskKind ? { taskKind: options.taskKind } : {}),
+    ...(options.taskIntent ? { taskIntent: options.taskIntent } : {}),
   })
   const limit = options.limit ?? 5
 
@@ -118,6 +124,8 @@ export function featureMap(graph: KnowledgeGraph, options: FeatureMapOptions): F
     limit,
     ...(options.community !== undefined ? { community: options.community } : {}),
     ...(options.fileType ? { fileType: options.fileType } : {}),
+    ...(options.taskKind ? { taskKind: options.taskKind } : {}),
+    ...(options.taskIntent ? { taskIntent: options.taskIntent } : {}),
   }).relevant_files
 
   const communityContext = new Map(retrieveResult.community_context.map((community) => [community.id, community] as const))

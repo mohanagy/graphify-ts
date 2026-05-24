@@ -2049,6 +2049,37 @@ describe('retrieve', () => {
       expect(result.matched_nodes.find((node) => node.label === 'SessionCoordinator')?.relevance_band).toBe('related')
     })
 
+    it('orders tied lexical seed matches deterministically instead of by insertion order', () => {
+      const graph = new KnowledgeGraph()
+      graph.addNode('zeta_login', {
+        label: 'ZetaLogin',
+        source_file: '/src/zeta-login.ts',
+        line_number: 1,
+        node_kind: 'function',
+        file_type: 'code',
+        community: 0,
+      })
+      graph.addNode('alpha_login', {
+        label: 'AlphaLogin',
+        source_file: '/src/alpha-login.ts',
+        line_number: 1,
+        node_kind: 'function',
+        file_type: 'code',
+        community: 0,
+      })
+
+      const result = retrieveContext(graph, {
+        question: 'login',
+        budget: 5000,
+        fileType: 'code',
+      })
+
+      expect(result.matched_nodes.slice(0, 2).map((node) => node.label)).toEqual([
+        'AlphaLogin',
+        'ZetaLogin',
+      ])
+    })
+
     it('includes neighbors of matched nodes', () => {
       const graph = buildTestGraph()
       const result = retrieveContext(graph, { question: 'auth', budget: 5000 })

@@ -171,6 +171,47 @@ export interface ContextPackRuntimeGenerationAnswerContract {
   confidence?: 'high' | 'medium' | 'low'
 }
 
+export interface ImplementationPackFileHint {
+  path: string
+  why: string
+  matched_symbols: string[]
+}
+
+export interface ImplementationPackSurfaceHint {
+  label: string
+  source_file: string
+  line_number: number
+  kind: 'contract' | 'public_surface' | 'pattern'
+  why: string
+}
+
+export interface ImplementationPackRiskBoundary {
+  label: string
+  severity: 'high' | 'medium' | 'low'
+  reason: string
+  affected_files: string[]
+  affected_communities: string[]
+}
+
+export interface ImplementationPackRuntimeContext {
+  summary: string
+  execution_slice?: ContextPackExecutionSlice
+  answer_contract?: ContextPackRuntimeGenerationAnswerContract
+}
+
+export interface ImplementationPackGuidance {
+  summary: string
+  likely_edit_files: ImplementationPackFileHint[]
+  likely_test_files: ImplementationPackFileHint[]
+  contracts_and_public_surfaces: ImplementationPackSurfaceHint[]
+  existing_patterns: ImplementationPackSurfaceHint[]
+  risk_boundaries: ImplementationPackRiskBoundary[]
+  validation_commands: string[]
+  acceptance_criteria_summary: string[]
+  cautions: string[]
+  runtime_context_if_relevant?: ImplementationPackRuntimeContext
+}
+
 export type ContextRepresentationType =
   | 'detail'
   | 'summary'

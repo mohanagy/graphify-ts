@@ -1,5 +1,7 @@
 import { KnowledgeGraph } from '../contracts/graph.js'
 import type { ContextPackClaim, ContextPackCoverage, ContextPackEvidenceClass, ContextPackExpandableRef } from '../contracts/context-pack.js'
+import type { ContextPackTaskKind } from '../contracts/context-pack.js'
+import type { TaskIntentKind } from '../contracts/task-intent.js'
 import { relativizeSourceFile } from '../shared/source-path.js'
 import { retrieveContext } from './retrieve.js'
 
@@ -9,6 +11,8 @@ export interface RelevantFilesOptions {
   limit?: number
   community?: number
   fileType?: string
+  taskKind?: ContextPackTaskKind
+  taskIntent?: TaskIntentKind
 }
 
 export interface RelevantFileEntry {
@@ -82,6 +86,8 @@ export function relevantFiles(graph: KnowledgeGraph, options: RelevantFilesOptio
     budget: options.budget,
     ...(options.community !== undefined ? { community: options.community } : {}),
     ...(options.fileType ? { fileType: options.fileType } : {}),
+    ...(options.taskKind ? { taskKind: options.taskKind } : {}),
+    ...(options.taskIntent ? { taskIntent: options.taskIntent } : {}),
   })
 
   const byPath = new Map<string, FileAggregate>()

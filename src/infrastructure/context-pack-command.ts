@@ -4,6 +4,7 @@ import type {
   ContextPackCoverage,
   ContextPackEvidenceClass,
   ContextPackExpandableRef,
+  ImplementationPackGuidance,
   ContextPackNode,
   ContextPackRoutingDebug,
 } from '../contracts/context-pack.js'
@@ -19,6 +20,7 @@ import { analyzePrImpact, compactPrImpactResult, type PrImpactResult } from '../
 import { buildTaskContextPlan } from '../runtime/task-context-planner.js'
 import { resolveTaskSelection } from '../runtime/task-intent.js'
 import { compactRetrieveResult, retrieveContext, type RetrieveResult } from '../runtime/retrieve.js'
+import { buildImplementationPackGuidance } from '../runtime/implementation-pack.js'
 import { buildRoutingDebug } from '../runtime/routing-debug.js'
 import { communitiesFromGraph, loadGraph } from '../runtime/serve.js'
 
@@ -55,6 +57,7 @@ interface ContextPlaneMetadata {
 
 export interface ExplainPackPayload extends ContextPlaneMetadata {
   pack: ReturnType<typeof compactRetrieveResult>
+  implementation?: ImplementationPackGuidance
   routing?: ContextPackRoutingDebug
 }
 
@@ -99,9 +102,11 @@ export function buildExplainPackPayload(
     coverage: ContextPackCoverage
     retrieval_gate: RetrievalGateDecision
   }>,
+  implementation?: ImplementationPackGuidance,
 ): ExplainPackPayload {
   return {
     pack,
+    ...(implementation ? { implementation } : {}),
     ...contextMetadata(retrieval),
   }
 }
@@ -306,9 +311,15 @@ export async function runContextPackCommand(
       ? { retrievalStrategy: effectivePackRetrievalStrategy }
       : {}),
   })
+  const implementation = resolvedTask.task_kind === 'implement'
+    ? buildImplementationPackGuidance(graph, retrieval, {
+        budget: plannerBudget,
+        taskIntent: initialPlan.evidence.recipe_id,
+      })
+    : undefined
   return JSON.stringify({
     ...baseResponse(options, initialPlan, plannerBudget, resolvedTask.task_kind),
-    ...buildExplainPackPayload(dependencies.compactRetrieveResult(retrieval), retrieval),
+    ...buildExplainPackPayload(dependencies.compactRetrieveResult(retrieval), retrieval, implementation),
     ...(options.why ? { routing: buildRoutingDebug(retrieval) } : {}),
   })
 }
