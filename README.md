@@ -66,13 +66,13 @@ Want a broader local-first walkthrough that also covers install, `prompt`, and a
 
 ---
 
-## What's new in 0.25.1
+## What's new in 0.26.0
 
-- Natural-language runtime-generation prompts like `How idea report is being generated` now route to behavior-slice retrieval automatically, so users do not need special trace phrasing to get backend runtime answers.
-- `madar pack --task explain` now defaults to `slice-v1` for those runtime-generation prompts, which means `execution_slice` shows up without asking users to discover the extra retrieval flag. Treat that slice as a static runtime-path hypothesis from the graph, not a live trace.
-- `madar compare` now uses the same runtime-generation defaults as `madar pack`, so compare artifacts stay aligned with the actual CLI behavior.
+- Runtime-generation packs are more explicit and reviewable: compact retrieval now carries a structured answer contract, `execution_slice` includes confidence plus confidence reasons, and `madar pack --why` / `madar compare --why` can surface the routing decision behind the generated pack.
+- Runtime-generation routing is less noisy: broad report-generation prompts recover downstream generation-core evidence more reliably, while UI/display and build-time prompts are less likely to false-positive into backend runtime slices.
+- Python support is broader but still conservative: madar now handles FastAPI router composition, router-level/decorator/`Annotated[..., Depends(...)]` dependencies, and first-pass Django URL-conf route-to-view mapping without pretending Python has JS/TS parity.
 
-The larger **0.25.0** feature release is still the main capability jump: richer backend `execution_slice` output plus first-pass Go semantic indexing for handler → service → repository style flows. See the [`0.25.0` changelog entry](CHANGELOG.md#0250---2026-05-23) for that broader release.
+See the [`0.26.0` changelog entry](CHANGELOG.md#0260---2026-05-24) for the full release notes.
 
 The larger **What's new in 0.23.0** additions are still part of the main flow too: `madar summary`, the core MCP `graph_summary` tool, runtime `execution_slice` output, share-safe `report.share-safe.json` compare artifacts, and `compare --baseline-mode pack_only`.
 
@@ -80,7 +80,7 @@ If you want the broader proof-oriented workflow behind the current surfaces, sta
 
 ### When to use `--spi`
 
-`--spi` is **still opt-in** in 0.25.1. Use it when your repo is framework-heavy TypeScript/JavaScript and you want the extra framework-shaped metadata plus disk cache behavior.
+`--spi` is **still opt-in** in 0.26.0. Use it when your repo is framework-heavy TypeScript/JavaScript and you want the extra framework-shaped metadata plus disk cache behavior.
 
 `--spi` is usually worth it for NestJS, Next.js App Router, Prisma, tRPC, Hono, Fastify, and similar repos where users ask storage-oriented prompts, client/server boundary questions, or request-flow questions. The default pipeline is still fine for simpler repos, non-JS/TS workspaces, or quick first runs when you do not need the extra framework detail yet.
 

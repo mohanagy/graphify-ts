@@ -4,6 +4,19 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-05-24
+
+### Added
+
+- **Runtime-generation answer contracts and routing explanations**: retrieval and compiled packs now carry a structured answer contract for runtime-generation prompts, and `madar pack --why` / `madar compare --why` can expose deterministic routing metadata from retrieval-gate signals, anchors, exclusions, and diagnostics.
+- **Broader conservative Python semantics**: Python extraction now handles FastAPI router composition, router-level/decorator/`Annotated[..., Depends(...)]` dependency linking, cycle-safe `include_router()` traversal, triple-quoted route/prefix strings, and a first-pass Django URL-conf route-to-view mapping pass.
+
+### Changed
+
+- **Runtime-generation routing is sharper and more transparent**: broad report-generation prompts now keep downstream generation-core evidence, UI/display and build-time prompts are less likely to false-positive into backend runtime slices, and routing validation artifacts document the current mixed-but-improving runtime-routing behavior conservatively.
+- **`execution_slice` output is more trustworthy for runtime questions**: runtime packs now include deterministic confidence levels plus confidence reasons, richer prompt-scoped phase coverage for auth/validation/report-generation flows, and clearer static-model guidance so users do not mistake graph-derived hypotheses for live traces.
+- **Public roadmap/docs now reflect the current post-0.25 line**: contributor-facing roadmap guidance, capability docs, and README notes now align with the current runtime-routing and Python support surface instead of the older narrower wording.
+
 ## [0.25.1] - 2026-05-23
 
 ### Changed
