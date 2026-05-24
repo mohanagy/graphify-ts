@@ -453,4 +453,27 @@ describe('retrieveContext production retrieval regressions', () => {
       '.generateTitle()',
     ]))
   })
+
+  it('surfaces richer report-generation phases when graph evidence covers planner, research, assembly, scoring, and rendering', () => {
+    const compact = compactRetrieveResult(retrieveContext(buildBroadReportGenerationGraph(), {
+      question: 'How idea report is being generated',
+      budget: 4000,
+      retrievalLevel: 4,
+      retrievalStrategy: 'slice-v1',
+    }))
+
+    expect(compact.execution_slice?.phase_coverage).toEqual(expect.objectContaining({
+      expected: ['planner', 'external_research_or_api', 'report_builder', 'scoring', 'persistence'],
+      observed: expect.arrayContaining([
+        'planner',
+        'external_research_or_api',
+        'report_builder',
+        'scoring',
+        'quality_gate',
+        'renderer_or_synthesis',
+        'persistence',
+      ]),
+      missing: [],
+    }))
+  })
 })

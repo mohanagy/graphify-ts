@@ -40,7 +40,7 @@ madar pack "how does password reset request enqueue the reset email" \
   --task explain
 ```
 
-This is the fastest way to confirm the route → service → job flow is represented in the graph. On runtime-generation questions like this one, newer reports can also preserve an `execution_slice` so you can inspect ordered steps without reading the whole raw slice. Treat it as a static runtime-path hypothesis from the graph, not a live trace.
+This is the fastest way to confirm the route → service → job flow is represented in the graph. On runtime-generation questions like this one, newer reports can also preserve an `execution_slice` so you can inspect ordered steps without reading the whole raw slice. Treat it as a static runtime-path hypothesis from the graph, not a live trace. The nested `phase_coverage` is also static and prompt-scoped, so broader report-generation questions may show planner/research/report-builder/scoring/renderer/persistence phases when the graph supports them.
 
 ## 5. Compile a provider-ready prompt
 

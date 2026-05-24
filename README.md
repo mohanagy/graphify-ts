@@ -193,7 +193,7 @@ Full-profile additions: `context_pack`, `context_expand`, `context_prompt`, `con
 
 Within one MCP stdio session, identical `context_pack` requests for `task=explain` are reused automatically when the graph version and relevant prompt/options match. The cache is memory-only, skips delta-session packs, and invalidates itself when `graph.json` changes.
 
-When the selected question is a runtime-generation flow, the shared compact response can also carry an `execution_slice` section with ordered steps and partial-path signaling. That gives agents a stable "what happens next" sketch without forcing them to read the full raw slice first. It is a static runtime-path hypothesis from graph evidence, not a live trace.
+When the selected question is a runtime-generation flow, the shared compact response can also carry an `execution_slice` section with ordered steps and partial-path signaling. That gives agents a stable "what happens next" sketch without forcing them to read the full raw slice first. It is a static runtime-path hypothesis from graph evidence, not a live trace. Its nested `phase_coverage` is the same kind of static, prompt-scoped model, so broad report-generation questions can surface planner/research/report-builder/scoring/renderer/persistence phases without implying live instrumentation.
 
 ---
 
