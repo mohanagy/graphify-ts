@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
@@ -115,11 +116,57 @@ function readJsoncConfig(filePath: string): OpenCodeConfig {
 }
 
 function decodeHookPayloads(content: string): string {
-  return [...content.matchAll(/'([A-Za-z0-9+/=]{40,})'/g)]
-    .map((match) => match[1])
-    .filter((value): value is string => typeof value === 'string')
-    .map((b64) => Buffer.from(b64, 'base64').toString('utf8'))
-    .join('\n')
+  const decodedPayloads: string[] = []
+  const seen = new Set<string>()
+  const queue = [content]
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+    if (!current) {
+      continue
+    }
+
+    for (const match of current.matchAll(/'([A-Za-z0-9+/=]{40,})'/g)) {
+      const value = match[1]
+      if (typeof value !== 'string' || seen.has(value)) {
+        continue
+      }
+
+      seen.add(value)
+      const decoded = Buffer.from(value, 'base64').toString('utf8')
+      decodedPayloads.push(decoded)
+      queue.push(decoded)
+    }
+  }
+
+  return decodedPayloads.join('\n')
+}
+
+function extractHookCommand(settingsJson: string, eventName: string): string {
+  const parsed = JSON.parse(settingsJson) as {
+    hooks?: Record<string, Array<{ hooks?: Array<{ command?: string }> }>>
+  }
+  return parsed.hooks?.[eventName]?.[0]?.hooks?.[0]?.command ?? ''
+}
+
+function runHookCommand(
+  command: string,
+  cwd: string,
+  input: Record<string, unknown>,
+  env: Record<string, string> = {},
+): string {
+  const result = spawnSync('/bin/sh', ['-lc', command], {
+    cwd,
+    input: JSON.stringify(input),
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  })
+
+  if (result.status !== 0) {
+    throw new Error(result.stderr || `hook command failed with exit code ${result.status ?? 'unknown'}`)
+  }
+
+  return result.stdout
 }
 
 describe('install helpers', () => {
@@ -298,6 +345,7 @@ describe('install helpers', () => {
           expect(readFileSync(join(projectDir, 'GEMINI.md'), 'utf8')).toContain('risk_map')
           expect(readFileSync(join(projectDir, 'GEMINI.md'), 'utf8')).toContain('implementation_checklist')
           expect(readFileSync(join(projectDir, 'GEMINI.md'), 'utf8')).toContain('impact')
+          expect(readFileSync(join(projectDir, 'GEMINI.md'), 'utf8')).toContain('Only use madar when the task needs local repository source-code context.')
           expect(readFileSync(join(projectDir, '.gemini', 'settings.json'), 'utf8')).toContain('out')
 
           const uninstallMessage = geminiUninstall(projectDir, { homeDir })
@@ -396,10 +444,66 @@ describe('install helpers', () => {
       expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toContain('risk_map')
       expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toContain('implementation_checklist')
       expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toContain('impact')
+      expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toContain('Only use madar when the task needs local repository source-code context.')
 
       const uninstallMessage = claudeUninstall(projectDir)
       expect(uninstallMessage).toMatch(/madar section removed|CLAUDE\.md was empty after removal/)
       expect(existsSync(join(projectDir, 'CLAUDE.md'))).toBe(false)
+    })
+  })
+
+  it('keeps the Claude prompt hook silent for GitHub Projects roadmap review prompts', () => {
+    withTempDir((projectDir) => {
+      mkdirSync(join(projectDir, 'out'), { recursive: true })
+      writeFileSync(join(projectDir, 'out', 'graph.json'), '{}', 'utf8')
+      claudeInstall(projectDir)
+
+      const settings = readFileSync(join(projectDir, '.claude', 'settings.json'), 'utf8')
+      const command = extractHookCommand(settings, 'UserPromptSubmit')
+      const output = runHookCommand(command, projectDir, {
+        prompt: 'I need you to access https://github.com/users/mohanagy/projects/9/views/3 and to review the roadmap, do not take any action for now',
+      })
+
+      expect(output).toBe('')
+    })
+  })
+
+  it('injects Claude prompt guidance only for local code tasks', () => {
+    withTempDir((projectDir) => {
+      mkdirSync(join(projectDir, 'out'), { recursive: true })
+      writeFileSync(join(projectDir, 'out', 'graph.json'), '{}', 'utf8')
+      claudeInstall(projectDir)
+
+      const settings = readFileSync(join(projectDir, '.claude', 'settings.json'), 'utf8')
+      const command = extractHookCommand(settings, 'UserPromptSubmit')
+      const output = runHookCommand(command, projectDir, {
+        prompt: 'Implement issue #275 by collecting implementation context for changed files',
+      })
+
+      expect(output).toContain('retrieve')
+      expect(output).toContain('3x fewer turns')
+    })
+  })
+
+  it('emits the Claude skip reason in debug mode', () => {
+    withTempDir((projectDir) => {
+      mkdirSync(join(projectDir, 'out'), { recursive: true })
+      writeFileSync(join(projectDir, 'out', 'graph.json'), '{}', 'utf8')
+      claudeInstall(projectDir)
+
+      const settings = readFileSync(join(projectDir, '.claude', 'settings.json'), 'utf8')
+      const command = extractHookCommand(settings, 'UserPromptSubmit')
+      const output = runHookCommand(
+        command,
+        projectDir,
+        {
+          prompt: 'Review the Product Hunt launch copy and marketing headline for tomorrow',
+        },
+        { MADAR_HOOK_DEBUG: '1' },
+      )
+
+      expect(output).toContain('Skipped Madar:')
+      expect(output).toContain('marketing copy review')
     })
   })
 
@@ -700,7 +804,7 @@ describe('install helpers', () => {
       expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toBe(firstClaudeMd)
       expect(readFileSync(join(projectDir, '.claude', 'settings.json'), 'utf8')).toBe(firstSettings)
       expect(countOccurrences(firstClaudeMd, '## madar')).toBe(1)
-      expect(countOccurrences(firstSettings, 'out')).toBeGreaterThan(0)
+      expect(countOccurrences(firstSettings, 'UserPromptSubmit')).toBeGreaterThan(0)
     })
   })
 
