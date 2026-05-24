@@ -793,6 +793,16 @@ function normalizeIdentifier(value: string): string {
   return normalizeSeedText(value.replace(/\(\)$/, ''))
 }
 
+function compareStableText(left: string, right: string): number {
+  if (left < right) {
+    return -1
+  }
+  if (left > right) {
+    return 1
+  }
+  return 0
+}
+
 function parseSymbolReference(value: string): SymbolReference {
   const trimmed = value.trim().replace(/`/g, '')
   const withoutCall = trimmed.replace(/\(\)$/, '')
@@ -994,7 +1004,10 @@ function compareScoredNodes(graph: KnowledgeGraph, left: ScoredNode, right: Scor
     right.frameworkBoost - left.frameworkBoost ||
     right.score - left.score ||
     Number(left.fileNodeLike) - Number(right.fileNodeLike) ||
-    graph.degree(right.id) - graph.degree(left.id)
+    graph.degree(right.id) - graph.degree(left.id) ||
+    compareStableText(left.label, right.label) ||
+    compareStableText(left.sourceFile, right.sourceFile) ||
+    compareStableText(left.id, right.id)
   )
 }
 
@@ -1202,7 +1215,10 @@ function rankedSeedCandidateIds(
     .sort((left, right) => (
       scoreForCandidate(right) - scoreForCandidate(left) ||
       right.seedScore.total - left.seedScore.total ||
-      graph.degree(right.id) - graph.degree(left.id)
+      graph.degree(right.id) - graph.degree(left.id) ||
+      compareStableText(left.label, right.label) ||
+      compareStableText(left.sourceFile, right.sourceFile) ||
+      compareStableText(left.id, right.id)
     ))
     .map((candidate) => candidate.id)
 }
