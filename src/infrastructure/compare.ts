@@ -242,7 +242,63 @@ function promptWantsReportGenerationCore(prompt: string): boolean {
   return /\b(?:report(?:\s+generation)?|generated\s+report|validation\s+report|final\s+report|assembly|assemble|synthesis|renderer|render|planner|research|metrics?|scor(?:e|ing)|quality(?:\s|-)?gate)\b/i.test(prompt)
 }
 
+function answerContractInstructions(retrieval: RetrieveResult): string[] {
+  const answerContract = retrieval.answer_contract
+  if (!answerContract) {
+    return []
+  }
+
+  const instructions = [
+    'Treat HTTP/controller entrypoints as trigger context, not the full answer.',
+  ]
+
+  const requiredElements = new Set(answerContract.required_elements)
+  const phaseLabels = [
+    ['planner_phase', 'planner'],
+    ['research_phase', 'research'],
+    ['assembly_phase', 'assembly'],
+    ['scoring_phase', 'scoring'],
+    ['report_builder_phase', 'rendering'],
+  ] as const satisfies ReadonlyArray<readonly [string, string]>
+  const selectedPhaseLabels: string[] = phaseLabels.flatMap(([key, label]) => requiredElements.has(key) ? [label] : [])
+  if (selectedPhaseLabels.length > 0 || requiredElements.has('persistence_or_artifact_storage')) {
+    const segments = [...selectedPhaseLabels]
+    if (requiredElements.has('persistence_or_artifact_storage')) {
+      segments.push('persistence')
+    }
+    instructions.push(`Follow ${segments.join(', ')} evidence before concluding the flow.`)
+  } else if (requiredElements.has('main_pipeline_phases')) {
+    instructions.push('Cover the main runtime pipeline phases instead of stopping at the entrypoint.')
+  }
+
+  if (requiredElements.has('queue_worker_handoff')) {
+    instructions.push('Describe queue-to-worker handoffs explicitly when the flow crosses an enqueues_job boundary.')
+  }
+
+  if (answerContract.do_not_claim.includes('direct_producer_to_worker_calls_without_enqueues_boundary')) {
+    instructions.push('Do not collapse producer-to-worker handoffs into direct calls when the evidence is an enqueues_job boundary.')
+  }
+
+  if (
+    answerContract.uncertainty_notes?.includes('mention missing or uncertain phases when the execution slice is partial')
+    || answerContract.do_not_claim.includes('full_runtime_certainty_when_slice_is_partial')
+  ) {
+    instructions.push('Mention missing or uncertain phases when the execution slice is partial.')
+  }
+
+  if (answerContract.do_not_claim.includes('irrelevant_model_or_provider_details')) {
+    instructions.push('Do not mention model or provider details unless they are directly relevant to the question.')
+  }
+
+  return instructions
+}
+
 function generationCoreInstructions(question: string, retrieval: RetrieveResult): string[] {
+  const contractInstructions = answerContractInstructions(retrieval)
+  if (contractInstructions.length > 0) {
+    return contractInstructions
+  }
+
   if (
     retrieval.retrieval_gate?.signals.generation_intent !== 'runtime_generation'
     || retrieval.retrieval_gate?.signals.target_domain_hint !== 'backend_runtime'

@@ -2472,6 +2472,44 @@ describe('retrieve', () => {
       expect(compactReview.matched_nodes[0]).not.toHaveProperty('file_type')
     })
 
+    it('preserves answer_contract when materializing a compiled context pack', () => {
+      const result: Parameters<typeof contextPackFromRetrieveResult>[0] = {
+        question: 'How is the validation report generated?',
+        token_count: 64,
+        matched_nodes: [
+          {
+            node_id: 'idea_controller',
+            label: 'IdeaGenerationController.generateFromProblem',
+            source_file: '/src/modules/ideas/interface/http/idea-generation.controller.ts',
+            line_number: 58,
+            node_kind: 'method',
+            file_type: 'code',
+            snippet: null,
+            match_score: 9,
+            relevance_band: 'direct',
+            community: 0,
+            community_label: 'Pipeline',
+          },
+        ],
+        relationships: [],
+        community_context: [{ id: 0, label: 'Pipeline', node_count: 1 }],
+        graph_signals: { god_nodes: [], bridge_nodes: [] },
+        answer_contract: {
+          version: 1,
+          answer_focus: 'runtime_generation',
+          entrypoint_scope: 'setup_context',
+          required_elements: ['main_pipeline_phases', 'queue_worker_handoff'],
+          do_not_claim: ['direct_producer_to_worker_calls_without_enqueues_boundary'],
+          observed_phases: ['controller', 'service', 'queue'],
+          missing_phases: ['worker', 'persistence'],
+        },
+      }
+
+      const pack = contextPackFromRetrieveResult(result)
+
+      expect(pack.answer_contract).toEqual(result.answer_contract)
+    })
+
     it('compacts repeated node metadata for default payloads', () => {
       const graph = buildTestGraph()
       graph.graph.community_labels = { 0: 'Auth', 1: 'Data', 2: 'Observability' }

@@ -58,6 +58,15 @@ describe('context-pack-command', () => {
 
     const payload = JSON.parse(output) as {
       pack?: {
+        answer_contract?: {
+          version?: number
+          answer_focus?: string
+          entrypoint_scope?: string
+          required_elements?: string[]
+          do_not_claim?: string[]
+          observed_phases?: string[]
+          missing_phases?: string[]
+        }
         execution_slice?: {
           status?: string
           steps?: Array<{ label?: string }>
@@ -98,6 +107,22 @@ describe('context-pack-command', () => {
         observed: ['controller', 'service', 'queue', 'worker', 'persistence'],
         missing: [],
       },
+    }))
+    expect(payload.pack?.answer_contract).toEqual(expect.objectContaining({
+      version: 1,
+      answer_focus: 'runtime_generation',
+      entrypoint_scope: 'setup_context',
+      required_elements: expect.arrayContaining([
+        'main_pipeline_phases',
+        'queue_worker_handoff',
+        'persistence_or_artifact_storage',
+      ]),
+      do_not_claim: expect.arrayContaining([
+        'direct_producer_to_worker_calls_without_enqueues_boundary',
+        'irrelevant_model_or_provider_details',
+      ]),
+      observed_phases: ['controller', 'service', 'queue', 'worker', 'persistence'],
+      missing_phases: [],
     }))
   })
 

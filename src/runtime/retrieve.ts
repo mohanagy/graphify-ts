@@ -7,6 +7,7 @@ import type {
   ContextPackExecutionSliceBranch,
   ContextPackExecutionSliceOmittedBranch,
   ContextPackExecutionSliceStep,
+  ContextPackRuntimeGenerationAnswerContract,
   CompiledContextPack,
   ContextPackClaim,
   ContextPackCoverage,
@@ -147,6 +148,7 @@ export interface RetrieveResult {
   retrieval_strategy?: ContextPackRetrievalStrategy
   slice?: ContextPackSliceMetadata
   execution_slice?: ContextPackExecutionSlice
+  answer_contract?: ContextPackRuntimeGenerationAnswerContract
 }
 
 export interface CompactRetrieveMatchedNode extends Omit<RetrieveMatchedNode, 'community_label' | 'file_type' | 'framework_boost'> {
@@ -2311,6 +2313,121 @@ function walkExecutionSlice(
   return orderedPathIds
 }
 
+function runtimeGenerationAnswerContractWantsReportGenerationCore(question: string): boolean {
+  return /\b(?:report(?:\s+generation)?|generated\s+report|validation\s+report|final\s+report|assembly|assemble|synthesis|renderer|render|planner|research|metrics?|scor(?:e|ing)|quality(?:\s|-)?gate)\b/i.test(question)
+}
+
+function runtimeGenerationStepText(
+  value: Pick<ContextPackExecutionSliceStep, 'label' | 'source_file' | 'node_kind' | 'framework_role'>,
+): string {
+  return `${value.label} ${value.source_file} ${value.node_kind ?? ''} ${value.framework_role ?? ''}`.toLowerCase()
+}
+
+function runtimeGenerationContractPhaseElements(
+  question: string,
+  matchedNodes: readonly Pick<RetrieveMatchedNode, 'label' | 'source_file' | 'node_kind' | 'framework_role'>[],
+  executionSlice: ContextPackExecutionSlice,
+): string[] {
+  const elements = new Set<string>(['main_pipeline_phases'])
+  const evidenceText = [
+    ...matchedNodes.map((node) =>
+      `${node.label} ${node.source_file} ${node.node_kind ?? ''} ${node.framework_role ?? ''}`.toLowerCase(),
+    ),
+    ...executionSlice.steps.map(runtimeGenerationStepText),
+  ].join('\n')
+
+  if (
+    executionSlice.primary_path?.boundaries?.some((boundary) => boundary.relation === 'enqueues_job')
+    || (executionSlice.phase_coverage?.observed.includes('queue') && executionSlice.phase_coverage?.observed.includes('worker'))
+  ) {
+    elements.add('queue_worker_handoff')
+  }
+
+  if (
+    executionSlice.phase_coverage?.observed.includes('persistence')
+    || executionSlice.phase_coverage?.missing.includes('persistence')
+    || /\b(?:persist|repository|database|db|storage|store|save|write|artifact)\b/i.test(evidenceText)
+  ) {
+    elements.add('persistence_or_artifact_storage')
+  }
+
+  if (executionSlice.status === 'partial') {
+    elements.add('missing_or_uncertain_phases')
+  }
+
+  if (runtimeGenerationAnswerContractWantsReportGenerationCore(question)) {
+    if (/\b(?:planner|\.plan\(|plan\(\)|planning)\b/i.test(evidenceText)) {
+      elements.add('planner_phase')
+    }
+    if (/\b(?:research|search\(\)|processsection|processsection\(\)|section[-_\s]?research)\b/i.test(evidenceText)) {
+      elements.add('research_phase')
+    }
+    if (/\b(?:assembly|assemble|synthesis)\b/i.test(evidenceText)) {
+      elements.add('assembly_phase')
+    }
+    if (/\b(?:score|scoring|metrics?)\b/i.test(evidenceText)) {
+      elements.add('scoring_phase')
+    }
+    if (/\b(?:render|renderer|report builder|reportbuilder|final report)\b/i.test(evidenceText)) {
+      elements.add('report_builder_phase')
+    }
+  }
+
+  return [...elements]
+}
+
+function executionSliceConfidence(
+  executionSlice: ContextPackExecutionSlice,
+): ContextPackRuntimeGenerationAnswerContract['confidence'] | undefined {
+  const value = (executionSlice as { confidence?: unknown }).confidence
+  return value === 'high' || value === 'medium' || value === 'low' ? value : undefined
+}
+
+function buildRuntimeGenerationAnswerContract(
+  taskContract: ContextPackTaskContract,
+  retrievalGate: RetrievalGateDecision,
+  question: string,
+  matchedNodes: readonly Pick<RetrieveMatchedNode, 'label' | 'source_file' | 'node_kind' | 'framework_role'>[],
+  executionSlice: ContextPackExecutionSlice | undefined,
+  sliceMetadata: ContextPackSliceMetadata | undefined,
+): ContextPackRuntimeGenerationAnswerContract | undefined {
+  if (!runtimeGenerationExecutionSliceApplies(taskContract, retrievalGate, sliceMetadata) || !executionSlice) {
+    return undefined
+  }
+
+  const doNotClaim = new Set<string>([
+    'direct_producer_to_worker_calls_without_enqueues_boundary',
+    'irrelevant_model_or_provider_details',
+  ])
+  const missingPhases = [...(executionSlice.phase_coverage?.missing ?? [])]
+  if (executionSlice.status === 'partial') {
+    doNotClaim.add('full_runtime_certainty_when_slice_is_partial')
+  }
+
+  const answerContract: ContextPackRuntimeGenerationAnswerContract = {
+    version: 1,
+    answer_focus: 'runtime_generation',
+    entrypoint_scope: 'setup_context',
+    required_elements: runtimeGenerationContractPhaseElements(question, matchedNodes, executionSlice),
+    do_not_claim: [...doNotClaim],
+    observed_phases: [...(executionSlice.phase_coverage?.observed ?? [])],
+    missing_phases: missingPhases,
+  }
+
+  if (executionSlice.status === 'partial' || missingPhases.length > 0) {
+    answerContract.uncertainty_notes = [
+      'mention missing or uncertain phases when the execution slice is partial',
+    ]
+  }
+
+  const confidence = executionSliceConfidence(executionSlice)
+  if (confidence) {
+    answerContract.confidence = confidence
+  }
+
+  return answerContract
+}
+
 function buildExecutionSlice(
   graph: KnowledgeGraph,
   taskContract: ContextPackTaskContract,
@@ -2964,6 +3081,7 @@ export function contextPackFromRetrieveResult(
     ...(result.retrieval_strategy ? { retrieval_strategy: result.retrieval_strategy } : {}),
     ...(result.slice ? { slice: result.slice } : {}),
     ...(result.execution_slice ? { execution_slice: result.execution_slice } : {}),
+    ...(result.answer_contract ? { answer_contract: result.answer_contract } : {}),
     ...(result.retrieval_gate ? { retrieval_gate: result.retrieval_gate } : {}),
   }
 }
@@ -3094,11 +3212,20 @@ function buildRetrieveResultFromOrderedCandidates(
     selection_strategy: options.selectionStrategy ?? 'value-per-token',
     retrieval_gate: retrievalGate,
   })
+  const matchedNodes = pack.nodes as RetrieveMatchedNode[]
+  const answerContract = buildRuntimeGenerationAnswerContract(
+    taskContract,
+    retrievalGate,
+    options.question,
+    matchedNodes,
+    executionSlice,
+    sliceMetadata,
+  )
 
   return {
     question: options.question,
     token_count: pack.token_count,
-    matched_nodes: pack.nodes as RetrieveMatchedNode[],
+    matched_nodes: matchedNodes,
     relationships: pack.relationships,
     community_context: pack.community_context,
     graph_signals: pack.graph_signals ?? { god_nodes: [], bridge_nodes: [] },
@@ -3111,6 +3238,7 @@ function buildRetrieveResultFromOrderedCandidates(
     retrieval_strategy: options.retrievalStrategy ?? 'default',
     ...(sliceMetadata ? { slice: sliceMetadata } : {}),
     ...(executionSlice ? { execution_slice: executionSlice } : {}),
+    ...(answerContract ? { answer_contract: answerContract } : {}),
   }
 }
 
@@ -3874,6 +4002,7 @@ export function compactRetrieveResult(result: RetrieveResult): CompactRetrieveRe
     retrieval_strategy: result.retrieval_strategy ?? 'default',
     ...(result.slice ? { slice: result.slice } : {}),
     ...(executionSlice ? { execution_slice: executionSlice } : {}),
+    ...(result.answer_contract ? { answer_contract: result.answer_contract } : {}),
     ...(result.retrieval_gate ? { retrieval_gate: result.retrieval_gate } : {}),
   }
 }
@@ -3922,6 +4051,7 @@ export function compactRetrieveResultForStdio(result: RetrieveResult): RetrieveR
     retrieval_strategy: result.retrieval_strategy ?? 'default',
     ...(result.slice ? { slice: result.slice } : {}),
     ...(compactResult.execution_slice ? { execution_slice: compactResult.execution_slice } : {}),
+    ...(result.answer_contract ? { answer_contract: result.answer_contract } : {}),
     ...(result.retrieval_gate ? { retrieval_gate: result.retrieval_gate } : {}),
   }
 }

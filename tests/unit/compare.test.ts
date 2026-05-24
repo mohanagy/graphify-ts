@@ -30,6 +30,7 @@ import { sanitizeShareSafeText } from '../../src/shared/share-safe-artifacts.js'
 const PROJECT_FIXTURE_ROOT = resolve('out', 'test-runtime', 'compare-runtime-project')
 const GRAPH_FIXTURE_ROOT = join(PROJECT_FIXTURE_ROOT, 'out')
 const COMPARE_OUTPUT_ROOT = resolve('out', 'compare', 'test-runtime')
+type MadarPromptPackRetrieval = Parameters<typeof buildMadarPromptPack>[0]['retrieval']
 
 function makeGraph(): KnowledgeGraph {
   const graph = new KnowledgeGraph()
@@ -863,37 +864,124 @@ describe('compare runtime', () => {
   })
 
   it('tells broad runtime-generation answers not to stop at the HTTP trigger when downstream generation core evidence exists', () => {
-    const pack = buildMadarPromptPack({
+    const retrieval: MadarPromptPackRetrieval = {
       question: 'How idea report is being generated',
-      retrieval: {
-        question: 'How idea report is being generated',
-        token_count: 120,
-        matched_nodes: [],
-        relationships: [],
-        community_context: [],
-        graph_signals: {
-          god_nodes: [],
-          bridge_nodes: [],
-        },
-        retrieval_gate: {
-          level: 3,
-          reason: 'runtime generation intent — behavior slice retrieval',
-          skipped_retrieval: false,
-          intent: 'unknown',
-          signals: {
-            has_pr_diff: false,
-            has_stack_trace: false,
-            mentioned_paths: [],
-            mentioned_symbols: [],
-            generation_intent: 'runtime_generation',
-            target_domain_hint: 'backend_runtime',
-          },
+      token_count: 120,
+      matched_nodes: [],
+      relationships: [],
+      community_context: [],
+      graph_signals: {
+        god_nodes: [],
+        bridge_nodes: [],
+      },
+      retrieval_gate: {
+        level: 3,
+        reason: 'runtime generation intent — behavior slice retrieval',
+        skipped_retrieval: false,
+        intent: 'unknown',
+        signals: {
+          has_pr_diff: false,
+          has_stack_trace: false,
+          mentioned_paths: [],
+          mentioned_symbols: [],
+          generation_intent: 'runtime_generation',
+          target_domain_hint: 'backend_runtime',
         },
       },
+    }
+
+    const pack = buildMadarPromptPack({
+      question: 'How idea report is being generated',
+      retrieval,
     })
 
     expect(pack.prompt).toContain('Treat HTTP/controller entrypoints as trigger context, not the full answer, when downstream generation-core evidence is present.')
     expect(pack.prompt).toContain('Follow planner, research, assembly, scoring, rendering, and persistence evidence before concluding the flow.')
+  })
+
+  it('includes a runtime-generation answer contract in the prompt core and tells partial slices to mention uncertainty', () => {
+    const retrieval: MadarPromptPackRetrieval = {
+      question: 'How idea report is being generated',
+      token_count: 120,
+      matched_nodes: [],
+      relationships: [],
+      community_context: [],
+      graph_signals: {
+        god_nodes: [],
+        bridge_nodes: [],
+      },
+      retrieval_gate: {
+        level: 3,
+        reason: 'runtime generation intent — behavior slice retrieval',
+        skipped_retrieval: false,
+        intent: 'unknown',
+        signals: {
+          has_pr_diff: false,
+          has_stack_trace: false,
+          mentioned_paths: [],
+          mentioned_symbols: [],
+          generation_intent: 'runtime_generation',
+          target_domain_hint: 'backend_runtime',
+        },
+      },
+      execution_slice: {
+        status: 'partial',
+        boundary_reason: 'slice stops before expected persistence step',
+        steps: [
+          {
+            label: 'IdeaGenerationController.generateFromProblem',
+            source_file: 'src/modules/ideas/interface/http/idea-generation.controller.ts',
+            line_number: 58,
+            node_kind: 'method',
+          },
+          {
+            label: 'PipelineTriggerService.startPipeline',
+            source_file: 'src/modules/pipeline/infrastructure/pipeline-trigger.service.ts',
+            line_number: 24,
+            node_kind: 'method',
+          },
+          {
+            label: 'QueueRegistry.addJob',
+            source_file: 'src/modules/pipeline/infrastructure/queue-registry.service.ts',
+            line_number: 16,
+            node_kind: 'method',
+          },
+        ],
+        phase_coverage: {
+          expected: ['controller', 'queue', 'worker', 'persistence'],
+          observed: ['controller', 'service', 'queue'],
+          missing: ['worker', 'persistence'],
+        },
+      },
+      answer_contract: {
+        version: 1,
+        answer_focus: 'runtime_generation',
+        entrypoint_scope: 'setup_context',
+        required_elements: [
+          'main_pipeline_phases',
+          'queue_worker_handoff',
+          'missing_or_uncertain_phases',
+        ],
+        do_not_claim: [
+          'direct_producer_to_worker_calls_without_enqueues_boundary',
+          'full_runtime_certainty_when_slice_is_partial',
+        ],
+        observed_phases: ['controller', 'service', 'queue'],
+        missing_phases: ['worker', 'persistence'],
+      },
+    }
+
+    const pack = buildMadarPromptPack({
+      question: 'How idea report is being generated',
+      retrieval,
+    })
+
+    expect(pack.prompt).toContain('"answer_contract"')
+    expect(pack.prompt).toContain('"entrypoint_scope": "setup_context"')
+    expect(pack.prompt).toContain('"missing_phases": [')
+    expect(pack.prompt).toContain('"worker"')
+    expect(pack.prompt).toContain('"persistence"')
+    expect(pack.prompt).toContain('Mention missing or uncertain phases when the execution slice is partial.')
   })
 
   it('computes prompt token counts from the exact prompt text', () => {

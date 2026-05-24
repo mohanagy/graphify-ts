@@ -109,6 +109,18 @@ export interface ContextPackExecutionSlice {
   phase_coverage?: ContextPackExecutionSlicePhaseCoverage
 }
 
+export interface ContextPackRuntimeGenerationAnswerContract {
+  version: 1
+  answer_focus: 'runtime_generation'
+  entrypoint_scope: 'setup_context'
+  required_elements: string[]
+  do_not_claim: string[]
+  observed_phases: string[]
+  missing_phases: string[]
+  uncertainty_notes?: string[]
+  confidence?: 'high' | 'medium' | 'low'
+}
+
 export type ContextRepresentationType =
   | 'detail'
   | 'summary'
@@ -261,6 +273,7 @@ export interface CompiledContextPack<
   retrieval_strategy?: ContextPackRetrievalStrategy
   slice?: ContextPackSliceMetadata
   execution_slice?: ContextPackExecutionSlice
+  answer_contract?: ContextPackRuntimeGenerationAnswerContract
   /**
    * Retrieval-gate decision (#75) attached when the caller invoked the
    * gate before building the pack. Carries `level`, `reason`, `intent`,
