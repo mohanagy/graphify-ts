@@ -3081,6 +3081,7 @@ export function contextPackFromRetrieveResult(
     ...(result.retrieval_strategy ? { retrieval_strategy: result.retrieval_strategy } : {}),
     ...(result.slice ? { slice: result.slice } : {}),
     ...(result.execution_slice ? { execution_slice: result.execution_slice } : {}),
+    ...(result.answer_contract ? { answer_contract: result.answer_contract } : {}),
     ...(result.retrieval_gate ? { retrieval_gate: result.retrieval_gate } : {}),
   }
 }
