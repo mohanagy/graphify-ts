@@ -59,6 +59,23 @@ export interface ContextPackSliceMetadata {
   selected_paths: ContextPackSlicePath[]
 }
 
+export type ContextPackExecutionPhase =
+  | 'controller'
+  | 'service'
+  | 'validation'
+  | 'auth_guard'
+  | 'orchestrator'
+  | 'planner'
+  | 'queue'
+  | 'worker'
+  | 'external_research_or_api'
+  | 'report_builder'
+  | 'scoring'
+  | 'quality_gate'
+  | 'renderer_or_synthesis'
+  | 'persistence'
+  | 'notification_or_event'
+
 export interface ContextPackExecutionSliceStep {
   node_id?: string
   label: string
@@ -93,9 +110,9 @@ export interface ContextPackExecutionSlicePrimaryPath {
 }
 
 export interface ContextPackExecutionSlicePhaseCoverage {
-  expected: string[]
-  observed: string[]
-  missing: string[]
+  expected: ContextPackExecutionPhase[]
+  observed: ContextPackExecutionPhase[]
+  missing: ContextPackExecutionPhase[]
 }
 
 export interface ContextPackExecutionSlice {
@@ -117,8 +134,8 @@ export interface ContextPackRuntimeGenerationAnswerContract {
   entrypoint_scope: 'setup_context'
   required_elements: string[]
   do_not_claim: string[]
-  observed_phases: string[]
-  missing_phases: string[]
+  observed_phases: ContextPackExecutionPhase[]
+  missing_phases: ContextPackExecutionPhase[]
   uncertainty_notes?: string[]
   confidence?: 'high' | 'medium' | 'low'
 }

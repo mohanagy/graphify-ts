@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 
 import type {
+  ContextPackExecutionPhase,
   ContextPackExecutionSlice,
   ContextPackExecutionSliceBoundary,
   ContextPackExecutionSliceBranch,
@@ -1276,6 +1277,43 @@ function promptWantsReportGenerationCore(question: string): boolean {
   return /\b(?:report(?:\s+generation)?|generated\s+report|validation\s+report|final\s+report|assembly|assemble|synthesis|renderer|render|planner|research|metrics?|scor(?:e|ing)|quality(?:\s|-)?gate)\b/i.test(question)
 }
 
+function promptHasExplicitExecutionAnchor(question: string): boolean {
+  return containsUrlLikeRoutePath(question)
+    || /`[^`]+`/.test(question)
+    || /\b[A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*\b/.test(question)
+}
+
+function promptWantsDetailedReportGenerationPhases(question: string): boolean {
+  return promptWantsReportGenerationCore(question) && !promptHasExplicitExecutionAnchor(question)
+}
+
+function promptWantsAuthGuardPhase(question: string): boolean {
+  return /\b(?:auth|guard|guards|authorize|authorized|authorization|permissions?|roles?|plan enforcement)\b/i.test(question)
+}
+
+function promptWantsValidationPhase(question: string): boolean {
+  return /\b(?:validate|validator|validators|schema|schemas|dto|dtos|pipe|pipes)\b/i.test(question)
+    || (
+      /\bvalidation\b/i.test(question)
+      && !/\bvalidation\s+report\b/i.test(question)
+    )
+}
+
+function promptWantsNotificationOrEventPhase(question: string): boolean {
+  return /\b(?:notify|notification|notifications|event|events|emit|emits|broadcast|webhook|publish)\b/i.test(question)
+}
+
+function promptExplicitlyWantsRuntimeHandoff(question: string): boolean {
+  return /\b(?:runtime|pipeline|job|jobs|queue|worker|workers|enqueue|enqueues|enqueued|processed|processing|orchestrator)\b/i.test(question)
+}
+
+function promptUsesExpandedExecutionTaxonomy(question: string): boolean {
+  return promptWantsDetailedReportGenerationPhases(question)
+    || promptWantsAuthGuardPhase(question)
+    || promptWantsValidationPhase(question)
+    || promptWantsNotificationOrEventPhase(question)
+}
+
 function methodLikeLabel(label: string): boolean {
   return /(?:[.#:]|^\.)[A-Za-z_$][\w$]*\(?\)?$/u.test(label)
 }
@@ -1728,6 +1766,8 @@ function executionSliceFlowRelation(relation: string): boolean {
     || relation === 'controller_route'
     || relation === 'route_handler'
     || relation === 'method'
+    || relation === 'uses_guard'
+    || relation === 'guarded_by'
 }
 
 function executionSliceEdgePriority(relation: string): number {
@@ -1806,7 +1846,7 @@ function executionSliceStepFromGraph(
   }
 }
 
-type ExecutionPhase = 'controller' | 'service' | 'queue' | 'worker' | 'persistence'
+type ExecutionPhase = ContextPackExecutionPhase
 
 interface ExecutionFlowEdge {
   fromId: string
@@ -1823,6 +1863,7 @@ function collectExecutionSliceScope(
   graph: KnowledgeGraph,
   sliceMetadata: ContextPackSliceMetadata,
   anchorIds: readonly string[],
+  question: string,
   resolveNodeId: (nodeId: string | undefined, label: string) => string | undefined,
 ): { orderedIds: string[]; idSet: ReadonlySet<string> } {
   const orderedIds: string[] = []
@@ -1849,6 +1890,36 @@ function collectExecutionSliceScope(
     addNodeId(resolveNodeId(path.to_id, path.to))
     if (idSet.size > beforeSize) {
       addedSelectedFlowPath = true
+    }
+  }
+
+  if (promptWantsAuthGuardPhase(question) || promptWantsValidationPhase(question)) {
+    const helperRelations = new Set(['uses_guard', 'guarded_by', 'calls'])
+    const wantsRequestedHelper = (nodeId: string): boolean => {
+      const attributes = graph.nodeAttributes(nodeId)
+      const step = {
+        label: String(attributes.label ?? nodeId),
+        source_file: String(attributes.source_file ?? ''),
+        ...(typeof attributes.node_kind === 'string' ? { node_kind: attributes.node_kind } : {}),
+        ...(typeof attributes.framework_role === 'string' ? { framework_role: attributes.framework_role } : {}),
+      }
+      return (promptWantsAuthGuardPhase(question) && authGuardLikeExecutionStep(step))
+        || (promptWantsValidationPhase(question) && validationLikeExecutionStep(step))
+    }
+
+    for (const nodeId of [...orderedIds]) {
+      for (const successorId of graph.successors(nodeId)) {
+        const relation = String(graph.edgeAttributes(nodeId, successorId).relation ?? 'related_to')
+        if (helperRelations.has(relation) && wantsRequestedHelper(successorId)) {
+          addNodeId(successorId)
+        }
+      }
+      for (const predecessorId of graph.predecessors(nodeId)) {
+        const relation = String(graph.edgeAttributes(predecessorId, nodeId).relation ?? 'related_to')
+        if (helperRelations.has(relation) && wantsRequestedHelper(predecessorId)) {
+          addNodeId(predecessorId)
+        }
+      }
     }
   }
 
@@ -1902,6 +1973,37 @@ function serviceLikeExecutionStep(
   return /\b(?:service|provider|application|usecase|use-case|trigger|orchestrator)\b/.test(lower)
 }
 
+function authGuardLikeExecutionStep(
+  node: Pick<ContextPackExecutionSliceStep, 'label' | 'source_file' | 'node_kind' | 'framework_role'>,
+): boolean {
+  const lower = `${node.label} ${node.node_kind ?? ''} ${node.framework_role ?? ''}`.toLowerCase()
+  return /\b(?:guard|permission|role|rbac|acl|authorize|authorization|plan enforcement)\b/.test(lower)
+    || /\bauth(?:[\s_-]?guard)\b/.test(lower)
+}
+
+function validationLikeExecutionStep(
+  node: Pick<ContextPackExecutionSliceStep, 'label' | 'source_file' | 'node_kind' | 'framework_role'>,
+): boolean {
+  const lower = `${node.label} ${node.source_file} ${node.node_kind ?? ''} ${node.framework_role ?? ''}`.toLowerCase()
+  return /\b(?:validation|validate|validator|schema|dto|pipe)\b/.test(lower)
+    && !qualityGateLikeExecutionStep(node)
+}
+
+function orchestratorLikeExecutionStep(
+  node: Pick<ContextPackExecutionSliceStep, 'label' | 'source_file' | 'node_kind' | 'framework_role'>,
+): boolean {
+  const lower = `${node.label} ${node.source_file} ${node.node_kind ?? ''} ${node.framework_role ?? ''}`.toLowerCase()
+  return /\b(?:orchestrator|workflow|coordinator)\b/.test(lower)
+}
+
+function plannerLikeExecutionStep(
+  node: Pick<ContextPackExecutionSliceStep, 'label' | 'source_file' | 'node_kind' | 'framework_role'>,
+): boolean {
+  const lower = `${node.label} ${node.source_file} ${node.node_kind ?? ''} ${node.framework_role ?? ''}`.toLowerCase()
+  return /\b(?:planner|planning)\b/.test(lower)
+    || /(?:^|[.#])plan[A-Za-z_$\w]*\(?\)?$/i.test(node.label)
+}
+
 function queueLikeExecutionStep(
   node: Pick<ContextPackExecutionSliceStep, 'label' | 'source_file' | 'node_kind' | 'framework_role'>,
 ): boolean {
@@ -1916,6 +2018,48 @@ function workerLikeExecutionStep(
   return /\b(?:worker|processor|process(?:[-_/]\w+))\b/.test(lower)
 }
 
+function externalResearchOrApiLikeExecutionStep(
+  node: Pick<ContextPackExecutionSliceStep, 'label' | 'source_file' | 'node_kind' | 'framework_role'>,
+): boolean {
+  const lower = `${node.label} ${node.source_file} ${node.node_kind ?? ''} ${node.framework_role ?? ''}`.toLowerCase()
+  return /\b(?:research|search|fetch|crawler|crawl|scrape|api|client)\b/.test(lower)
+}
+
+function reportBuilderLikeExecutionStep(
+  node: Pick<ContextPackExecutionSliceStep, 'label' | 'source_file' | 'node_kind' | 'framework_role'>,
+): boolean {
+  const lower = `${node.label} ${node.source_file} ${node.node_kind ?? ''} ${node.framework_role ?? ''}`.toLowerCase()
+  return /\b(?:assembly|assemble|report builder|reportbuilder|extractor|extract)\b/.test(lower)
+}
+
+function scoringLikeExecutionStep(
+  node: Pick<ContextPackExecutionSliceStep, 'label' | 'source_file' | 'node_kind' | 'framework_role'>,
+): boolean {
+  const lower = `${node.label} ${node.source_file} ${node.node_kind ?? ''} ${node.framework_role ?? ''}`.toLowerCase()
+  return /\b(?:score|scoring|metric|metrics)\b/.test(lower)
+}
+
+function qualityGateLikeExecutionStep(
+  node: Pick<ContextPackExecutionSliceStep, 'label' | 'source_file' | 'node_kind' | 'framework_role'>,
+): boolean {
+  const lower = `${node.label} ${node.source_file} ${node.node_kind ?? ''} ${node.framework_role ?? ''}`.toLowerCase()
+  return /\b(?:quality(?:\s|-)?gate|guardrail|validate(?:report|output))\b/.test(lower)
+}
+
+function rendererOrSynthesisLikeExecutionStep(
+  node: Pick<ContextPackExecutionSliceStep, 'label' | 'source_file' | 'node_kind' | 'framework_role'>,
+): boolean {
+  const lower = `${node.label} ${node.source_file} ${node.node_kind ?? ''} ${node.framework_role ?? ''}`.toLowerCase()
+  return /\b(?:renderer|render|synthesis|synthesizer)\b/.test(lower)
+}
+
+function notificationOrEventLikeExecutionStep(
+  node: Pick<ContextPackExecutionSliceStep, 'label' | 'source_file' | 'node_kind' | 'framework_role'>,
+): boolean {
+  const lower = `${node.label} ${node.source_file} ${node.node_kind ?? ''} ${node.framework_role ?? ''}`.toLowerCase()
+  return /\b(?:notify|notification|webhook|publish|emit|event|broadcast)\b/.test(lower)
+}
+
 function lowValueExecutionStep(
   node: Pick<ContextPackExecutionSliceStep, 'label' | 'source_file' | 'node_kind' | 'framework_role'>,
 ): boolean {
@@ -1924,6 +2068,19 @@ function lowValueExecutionStep(
     || /(?:^|[.#])(?:get|list|status|validate|suggest)[A-Za-z_$\w]*\(?\)?$/i.test(node.label)
     || /^process\(\)$/i.test(node.label)
     || /^\.add\(\)$/i.test(node.label)
+}
+
+function lowValueExecutionStepForQuestion(
+  node: Pick<ContextPackExecutionSliceStep, 'label' | 'source_file' | 'node_kind' | 'framework_role'>,
+  question: string,
+): boolean {
+  if (promptWantsAuthGuardPhase(question) && authGuardLikeExecutionStep(node)) {
+    return false
+  }
+  if (promptWantsValidationPhase(question) && validationLikeExecutionStep(node)) {
+    return false
+  }
+  return lowValueExecutionStep(node)
 }
 
 function terminalBoundaryExecutionStep(
@@ -1937,36 +2094,130 @@ function terminalBoundaryExecutionStep(
 function executionPhasesForStep(step: ContextPackExecutionSliceStep): Set<ExecutionPhase> {
   const phases = new Set<ExecutionPhase>()
   if (controllerLikeExecutionStep(step)) phases.add('controller')
+  if (authGuardLikeExecutionStep(step)) phases.add('auth_guard')
+  if (validationLikeExecutionStep(step)) phases.add('validation')
   if (serviceLikeExecutionStep(step)) phases.add('service')
+  if (orchestratorLikeExecutionStep(step)) phases.add('orchestrator')
+  if (plannerLikeExecutionStep(step)) phases.add('planner')
   if (queueLikeExecutionStep(step)) phases.add('queue')
   if (workerLikeExecutionStep(step)) phases.add('worker')
+  if (externalResearchOrApiLikeExecutionStep(step)) phases.add('external_research_or_api')
+  if (reportBuilderLikeExecutionStep(step)) phases.add('report_builder')
+  if (scoringLikeExecutionStep(step)) phases.add('scoring')
+  if (qualityGateLikeExecutionStep(step)) phases.add('quality_gate')
+  if (rendererOrSynthesisLikeExecutionStep(step)) phases.add('renderer_or_synthesis')
   if (persistenceLikeExecutionStep(step)) phases.add('persistence')
+  if (notificationOrEventLikeExecutionStep(step)) phases.add('notification_or_event')
   return phases
 }
 
-function expectedExecutionPhases(question: string): ExecutionPhase[] {
+function executionPhaseOrder(question: string): ExecutionPhase[] {
+  const enabled = new Set<ExecutionPhase>(['controller', 'service', 'queue', 'worker', 'persistence'])
+  if (promptWantsAuthGuardPhase(question)) enabled.add('auth_guard')
+  if (promptWantsValidationPhase(question)) enabled.add('validation')
+  if (promptWantsDetailedReportGenerationPhases(question)) {
+    enabled.add('orchestrator')
+    enabled.add('planner')
+    enabled.add('external_research_or_api')
+    enabled.add('report_builder')
+    enabled.add('scoring')
+    enabled.add('quality_gate')
+    enabled.add('renderer_or_synthesis')
+  }
+  if (promptWantsNotificationOrEventPhase(question)) enabled.add('notification_or_event')
+
+  const phaseOrder: ExecutionPhase[] = [
+    'controller',
+    'auth_guard',
+    'validation',
+    'service',
+    'orchestrator',
+    'planner',
+    'queue',
+    'worker',
+    'external_research_or_api',
+    'report_builder',
+    'scoring',
+    'quality_gate',
+    'renderer_or_synthesis',
+    'persistence',
+    'notification_or_event',
+  ]
+  return phaseOrder.filter((phase) => enabled.has(phase))
+}
+
+function scopeHasExecutionPhase(
+  steps: readonly ContextPackExecutionSliceStep[],
+  phase: ExecutionPhase,
+): boolean {
+  return steps.some((step) => executionPhasesForStep(step).has(phase))
+}
+
+function expectedExecutionPhases(
+  question: string,
+  scopeSteps: readonly ContextPackExecutionSliceStep[] = [],
+): ExecutionPhase[] {
   const phases: ExecutionPhase[] = []
   if (promptWantsControllerStep(question)) {
     phases.push('controller')
   }
+  if (promptWantsAuthGuardPhase(question)) {
+    phases.push('auth_guard')
+  }
+  if (promptWantsValidationPhase(question)) {
+    phases.push('validation')
+  }
   if (promptWantsServiceStep(question)) {
     phases.push('service')
   }
-  if (promptWantsRuntimePipeline(question)) {
+  if (promptWantsDetailedReportGenerationPhases(question)) {
+    if (scopeHasExecutionPhase(scopeSteps, 'orchestrator')) phases.push('orchestrator')
+    if (scopeHasExecutionPhase(scopeSteps, 'planner')) phases.push('planner')
+    if (scopeHasExecutionPhase(scopeSteps, 'external_research_or_api')) phases.push('external_research_or_api')
+    if (scopeHasExecutionPhase(scopeSteps, 'report_builder')) phases.push('report_builder')
+    if (scopeHasExecutionPhase(scopeSteps, 'scoring')) phases.push('scoring')
+    if (scopeHasExecutionPhase(scopeSteps, 'quality_gate')) phases.push('quality_gate')
+    if (scopeHasExecutionPhase(scopeSteps, 'renderer_or_synthesis')) phases.push('renderer_or_synthesis')
+    if (scopeHasExecutionPhase(scopeSteps, 'persistence')) phases.push('persistence')
+  }
+  if (promptExplicitlyWantsRuntimeHandoff(question) || (!promptWantsDetailedReportGenerationPhases(question) && promptWantsRuntimePipeline(question))) {
     phases.push('queue', 'worker')
   }
   if (promptExpectsPersistenceStep(question)) {
     phases.push('persistence')
+  }
+  if (promptWantsNotificationOrEventPhase(question)) {
+    phases.push('notification_or_event')
   }
   return [...new Set(phases)]
 }
 
 function missingExecutionPhaseBoundaryReason(phase: ExecutionPhase): string {
   switch (phase) {
+    case 'auth_guard':
+      return 'missing expected auth guard phase'
+    case 'validation':
+      return 'missing expected validation phase'
+    case 'orchestrator':
+      return 'missing expected orchestrator phase'
+    case 'planner':
+      return 'missing expected planner phase'
     case 'worker':
       return 'missing expected worker phase'
+    case 'external_research_or_api':
+      return 'missing expected external research or API phase'
+    case 'report_builder':
+      return 'missing expected report builder phase'
+    case 'scoring':
+      return 'missing expected scoring phase'
+    case 'quality_gate':
+      return 'missing expected quality gate phase'
+    case 'renderer_or_synthesis':
+      return 'missing expected renderer or synthesis phase'
     case 'persistence':
       return 'missing expected persistence phase'
+    case 'notification_or_event':
+      return 'missing expected notification or event phase'
     case 'queue':
       return 'missing expected queue phase'
     case 'service':
@@ -1981,6 +2232,7 @@ function executionFlowAdjacency(
   graph: KnowledgeGraph,
   sliceMetadata: ContextPackSliceMetadata,
   idSet: ReadonlySet<string>,
+  question: string,
   resolveNodeId: (nodeId: string | undefined, label: string) => string | undefined,
 ): Map<string, ExecutionFlowEdge[]> {
   const adjacency = new Map<string, ExecutionFlowEdge[]>()
@@ -2000,6 +2252,33 @@ function executionFlowAdjacency(
       continue
     }
     record({ fromId, toId, relation: path.relation })
+  }
+
+  if (promptWantsAuthGuardPhase(question) || promptWantsValidationPhase(question)) {
+    const helperRelations = new Set(['uses_guard', 'guarded_by', 'calls'])
+    const wantsRequestedHelper = (nodeId: string): boolean => {
+    const attributes = graph.nodeAttributes(nodeId)
+    const step = {
+      label: String(attributes.label ?? nodeId),
+      source_file: String(attributes.source_file ?? ''),
+      ...(typeof attributes.node_kind === 'string' ? { node_kind: attributes.node_kind } : {}),
+      ...(typeof attributes.framework_role === 'string' ? { framework_role: attributes.framework_role } : {}),
+    }
+    return (promptWantsAuthGuardPhase(question) && authGuardLikeExecutionStep(step))
+      || (promptWantsValidationPhase(question) && validationLikeExecutionStep(step))
+    }
+
+    for (const fromId of idSet) {
+    for (const toId of graph.successors(fromId)) {
+      if (!idSet.has(toId)) {
+        continue
+      }
+      const relation = String(graph.edgeAttributes(fromId, toId).relation ?? 'related_to')
+      if (helperRelations.has(relation) && wantsRequestedHelper(toId)) {
+        record({ fromId, toId, relation })
+      }
+    }
+    }
   }
 
   if (adjacency.size > 0) {
@@ -2103,7 +2382,7 @@ function executionPathScore(
   if (lastStep && terminalBoundaryExecutionStep(lastStep)) {
     score -= 15
   }
-  if (lastStep && lowValueExecutionStep(lastStep)) {
+  if (lastStep && lowValueExecutionStepForQuestion(lastStep, question)) {
     score -= 40
   }
 
@@ -2131,18 +2410,22 @@ function phaseCoverageForPath(
   steps: readonly ContextPackExecutionSliceStep[],
   boundaries: readonly ContextPackExecutionSliceBoundary[],
   question: string,
+  scopeSteps: readonly ContextPackExecutionSliceStep[] = steps,
 ): { expected: ExecutionPhase[]; observed: ExecutionPhase[]; missing: ExecutionPhase[] } {
-  const phaseOrder: ExecutionPhase[] = ['controller', 'service', 'queue', 'worker', 'persistence']
-  const expected = expectedExecutionPhases(question)
+  const phaseOrder = executionPhaseOrder(question)
+  const observedSourceSteps = promptUsesExpandedExecutionTaxonomy(question) ? scopeSteps : steps
+  const expected = expectedExecutionPhases(question, observedSourceSteps)
   const observed = new Set<ExecutionPhase>()
-  for (const step of steps) {
+  for (const step of observedSourceSteps) {
     for (const phase of executionPhasesForStep(step)) {
-      observed.add(phase)
+      if (phaseOrder.includes(phase)) {
+        observed.add(phase)
+      }
     }
   }
   if (boundaries.some((boundary) => boundary.relation === 'enqueues_job')) {
     observed.add('queue')
-    if (steps.some((step) => workerLikeExecutionStep(step))) {
+    if (observedSourceSteps.some((step) => workerLikeExecutionStep(step))) {
       observed.add('worker')
     }
   }
@@ -2154,6 +2437,7 @@ function phaseCoverageForPath(
 function branchBoundaryReason(
   branchSteps: readonly ContextPackExecutionSliceStep[],
   kind: 'side_effect' | 'terminal' | 'omitted',
+  question: string,
 ): string | undefined {
   if (kind === 'terminal') {
     return 'branch terminates before rejoining the primary runtime path'
@@ -2161,7 +2445,7 @@ function branchBoundaryReason(
   if (kind === 'omitted') {
     return 'low-value branch omitted from compact execution slice'
   }
-  if (branchSteps.some((step) => lowValueExecutionStep(step))) {
+  if (branchSteps.some((step) => lowValueExecutionStepForQuestion(step, question))) {
     return 'secondary branch summarized to preserve compact output'
   }
   return undefined
@@ -2169,8 +2453,9 @@ function branchBoundaryReason(
 
 function classifyExecutionBranch(
   branchSteps: readonly ContextPackExecutionSliceStep[],
+  question: string,
 ): 'side_effect' | 'terminal' | 'omitted' {
-  if (branchSteps.length === 0 || branchSteps.every((step) => lowValueExecutionStep(step))) {
+  if (branchSteps.length === 0 || branchSteps.every((step) => lowValueExecutionStepForQuestion(step, question))) {
     return 'omitted'
   }
   if (terminalBoundaryExecutionStep(branchSteps.at(-1) ?? branchSteps[0]!)) {
@@ -2212,8 +2497,8 @@ function collectExecutionBranches(
         .map((id) => nodeById.get(id))
         .filter((step): step is ContextPackExecutionSliceStep => step !== undefined)
         .slice(0, 3)
-      const branchKind = classifyExecutionBranch(branchSteps)
-      const branchReason = branchBoundaryReason(branchSteps, branchKind)
+      const branchKind = classifyExecutionBranch(branchSteps, question)
+      const branchReason = branchBoundaryReason(branchSteps, branchKind, question)
 
       if (branchKind === 'side_effect' && sideEffects.length < 3) {
         sideEffects.push({
@@ -2338,7 +2623,6 @@ function runtimeGenerationContractPhaseElements(
 
   if (
     executionSlice.primary_path?.boundaries?.some((boundary) => boundary.relation === 'enqueues_job')
-    || (executionSlice.phase_coverage?.observed.includes('queue') && executionSlice.phase_coverage?.observed.includes('worker'))
   ) {
     elements.add('queue_worker_handoff')
   }
@@ -2378,6 +2662,7 @@ function runtimeGenerationContractPhaseElements(
 
 function buildExecutionSliceConfidence(
   sliceMetadata: ContextPackSliceMetadata,
+  question: string,
   executionSlice: Pick<ContextPackExecutionSlice, 'status' | 'phase_coverage' | 'primary_path' | 'steps' | 'omitted_branches'>,
 ): Pick<ContextPackExecutionSlice, 'confidence' | 'confidence_reasons'> | undefined {
   const explicitAnchor = sliceMetadata.anchors.some((anchor) =>
@@ -2388,15 +2673,11 @@ function buildExecutionSliceConfidence(
     || /\b(?:controller|route|handler|endpoint)\b/i.test(anchor.label),
   )
   const runtimeHandoff = executionSlice.primary_path?.boundaries?.some((boundary) => boundary.relation === 'enqueues_job')
-    || (
-      executionSlice.phase_coverage?.observed.includes('queue')
-      && executionSlice.phase_coverage?.observed.includes('worker')
-    )
   const missingPhases = executionSlice.phase_coverage?.missing ?? []
   const expectedPhasesCovered = missingPhases.length === 0
   const primaryPathSteps = executionSlice.primary_path?.steps ?? executionSlice.steps
   const lowValuePrimaryPath = primaryPathSteps.length > 0
-    && primaryPathSteps.filter((step) => lowValueExecutionStep(step)).length >= Math.ceil(primaryPathSteps.length / 2)
+    && primaryPathSteps.filter((step) => lowValueExecutionStepForQuestion(step, question)).length >= Math.ceil(primaryPathSteps.length / 2)
 
   if (explicitAnchor && runtimeHandoff && executionSlice.status === 'complete' && expectedPhasesCovered) {
     return {
@@ -2520,7 +2801,7 @@ function buildExecutionSlice(
   const anchorIds = sliceMetadata.anchors
     .map((anchor) => resolveNodeId(anchor.node_id, anchor.label))
     .filter((nodeId): nodeId is string => typeof nodeId === 'string')
-  const { orderedIds, idSet } = collectExecutionSliceScope(graph, sliceMetadata, anchorIds, resolveNodeId)
+  const { orderedIds, idSet } = collectExecutionSliceScope(graph, sliceMetadata, anchorIds, question, resolveNodeId)
   if (orderedIds.length === 0) {
     return {
       status: 'partial',
@@ -2546,7 +2827,7 @@ function buildExecutionSlice(
     }
   }
 
-  const adjacency = executionFlowAdjacency(graph, sliceMetadata, idSet, resolveNodeId)
+  const adjacency = executionFlowAdjacency(graph, sliceMetadata, idSet, question, resolveNodeId)
   const pathCandidates = enumerateExecutionPaths(adjacency, startId)
   const primaryPathCandidates = pathCandidates.length > 0 ? pathCandidates : [{
     nodeIds: walkExecutionSlice(graph, startId, idSet, nodeById, question),
@@ -2560,7 +2841,10 @@ function buildExecutionSlice(
     .map((nodeId) => nodeById.get(nodeId))
     .filter((step): step is ContextPackExecutionSliceStep => step !== undefined)
   const boundaries = primaryPathBoundaries(primaryPath, nodeById)
-  const phaseCoverage = phaseCoverageForPath(steps, boundaries, question)
+  const scopeSteps = orderedIds
+    .map((nodeId) => nodeById.get(nodeId))
+    .filter((step): step is ContextPackExecutionSliceStep => step !== undefined)
+  const phaseCoverage = phaseCoverageForPath(steps, boundaries, question, scopeSteps)
   const missingPhase = phaseCoverage.missing[0]
   const boundaryReason = missingPhase ? missingExecutionPhaseBoundaryReason(missingPhase) : undefined
   const branches = collectExecutionBranches(adjacency, primaryPath, nodeById, question)
@@ -2581,7 +2865,7 @@ function buildExecutionSlice(
 
   return {
     ...executionSlice,
-    ...(buildExecutionSliceConfidence(sliceMetadata, executionSlice) ?? {}),
+    ...(buildExecutionSliceConfidence(sliceMetadata, question, executionSlice) ?? {}),
   }
 }
 

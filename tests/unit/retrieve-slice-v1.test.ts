@@ -418,6 +418,44 @@ describe('retrieveContext retrievalStrategy=slice-v1', () => {
     }))
   })
 
+  it('surfaces auth_guard and validation phases when the prompt explicitly asks for them', () => {
+    const compact = compactFor(
+      'Trace how `POST /login` passes auth guard and validation before reaching persistence in the backend runtime pipeline',
+    )
+
+    expect(compact.execution_slice?.phase_coverage).toEqual(expect.objectContaining({
+      expected: ['controller', 'auth_guard', 'validation', 'queue', 'worker', 'persistence'],
+      observed: expect.arrayContaining([
+        'controller',
+        'auth_guard',
+        'validation',
+        'service',
+        'queue',
+        'worker',
+        'persistence',
+      ]),
+      missing: [],
+    }))
+  })
+
+  it('keeps auth guard and validation branches visible when the prompt explicitly asks for them', () => {
+    const compact = compactFor(
+      'Trace how `POST /login` passes auth guard and validation before reaching persistence in the backend runtime pipeline',
+    )
+
+    const sideEffectLabels = compact.execution_slice?.side_effects?.flatMap((branch) => branch.steps.map((step) => step.label)) ?? []
+    const omittedTargets = compact.execution_slice?.omitted_branches?.map((branch) => branch.to ?? '') ?? []
+
+    expect(sideEffectLabels).toEqual(expect.arrayContaining([
+      'AuthGuard',
+      'LoginValidator.validate',
+    ]))
+    expect(omittedTargets).not.toEqual(expect.arrayContaining([
+      'AuthGuard',
+      'LoginValidator.validate',
+    ]))
+  })
+
   it('can pull direct graph neighbors into a level-1 slice even when they do not lexically match', () => {
     const sliced = retrieveContext(buildSliceGraph(), {
       question: 'Explain `AuthService.login`',

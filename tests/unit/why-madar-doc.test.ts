@@ -75,6 +75,15 @@ describe('public marketing copy honesty', () => {
       )
     })
 
+    it('describes phase_coverage as a static prompt-scoped phase model', () => {
+      expect(lower).toMatch(
+        /phase_coverage[\s\S]{0,260}static[\s\S]{0,120}prompt-scoped/i,
+      )
+      expect(lower).toMatch(
+        /phase_coverage[\s\S]{0,260}planner\/research\/report-builder\/scoring\/renderer\/persistence/i,
+      )
+    })
+
     it('explains when users should opt into --spi', () => {
       expect(lower).toContain('when to use `--spi`')
       expect(lower).toContain('still opt-in')
