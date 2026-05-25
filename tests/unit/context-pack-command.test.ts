@@ -833,6 +833,7 @@ describe('context-pack-command', () => {
     expect(output).not.toContain('# Pack Schema v1')
     expect(output).not.toContain('## Workflow centers')
     expect(output).not.toContain(': undefined')
+    expect(output.match(/^Workflow centers$/gm)).toHaveLength(1)
   })
 
   it('renders a claude adapter brief with direct execution guidance', async () => {
