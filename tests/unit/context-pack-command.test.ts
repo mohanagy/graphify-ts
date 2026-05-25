@@ -238,6 +238,222 @@ describe('context-pack-command', () => {
     }))
   })
 
+  it('derives runtime-generation explain workflow centers and first-read from the execution spine', async () => {
+    const graph = buildRuntimeGenerationGraph()
+    const retrieval = {
+      question: 'How idea report is being generated',
+      token_count: 220,
+      matched_nodes: [
+        {
+          node_id: 'status_helper',
+          label: 'getStatusMessage',
+          source_file: 'src/ideas/report-status.ts',
+          line_number: 18,
+          file_type: 'code',
+          snippet: 'export function getStatusMessage() {}',
+          match_score: 0.98,
+          relevance_band: 'direct' as const,
+          community: 2,
+          community_label: 'Idea report helpers',
+        },
+        {
+          node_id: 'next_steps_helper',
+          label: 'generateSuggestedNextSteps',
+          source_file: 'src/ideas/next-steps.ts',
+          line_number: 24,
+          file_type: 'code',
+          snippet: 'export function generateSuggestedNextSteps() {}',
+          match_score: 0.95,
+          relevance_band: 'direct' as const,
+          community: 2,
+          community_label: 'Idea report helpers',
+        },
+        {
+          node_id: 'controller_entry',
+          label: 'IdeasController.generateReport',
+          source_file: 'src/ideas/controller.ts',
+          line_number: 40,
+          file_type: 'code',
+          snippet: 'return this.reportService.generateReport(id)',
+          match_score: 0.74,
+          relevance_band: 'direct' as const,
+          community: 0,
+          community_label: 'Idea report runtime',
+        },
+        {
+          node_id: 'service_handoff',
+          label: 'IdeaReportService.generateReport',
+          source_file: 'src/ideas/report-service.ts',
+          line_number: 58,
+          file_type: 'code',
+          snippet: 'await queue.enqueue(reportJob)',
+          match_score: 0.72,
+          relevance_band: 'direct' as const,
+          community: 0,
+          community_label: 'Idea report runtime',
+        },
+      ],
+      relationships: [],
+      community_context: [
+        { id: 2, label: 'Idea report helpers', node_count: 8 },
+      ],
+      graph_signals: { god_nodes: [], bridge_nodes: [] },
+      claims: [],
+      expandable: [],
+      coverage: {
+        required_evidence: ['primary', 'supporting', 'structural'] as const,
+        semantic_required: ['implementation', 'structure'] as const,
+        semantic_optional: ['contracts', 'configuration', 'tests'] as const,
+        entries: [],
+        semantic_entries: [],
+        missing_required: [],
+        missing_semantic: [],
+        available_relationships: 0,
+        selected_relationships: 0,
+      },
+      retrieval_gate: {
+        level: 4,
+        skipped_retrieval: false,
+        reason: 'manual override',
+        intent: 'explain',
+        signals: {
+          has_pr_diff: false,
+          has_stack_trace: false,
+          mentioned_paths: [],
+          mentioned_symbols: [],
+          generation_intent: 'runtime_generation' as const,
+          target_domain_hint: 'backend_runtime' as const,
+        },
+      },
+      retrieval_strategy: 'slice-v1' as const,
+      execution_slice: {
+        status: 'complete' as const,
+        confidence: 'high' as const,
+        steps: [
+          {
+            node_id: 'controller_entry',
+            label: 'IdeasController.generateReport',
+            source_file: 'src/ideas/controller.ts',
+            line_number: 40,
+            node_kind: 'method',
+            framework_role: 'nest_controller',
+          },
+          {
+            node_id: 'service_handoff',
+            label: 'IdeaReportService.generateReport',
+            source_file: 'src/ideas/report-service.ts',
+            line_number: 58,
+            node_kind: 'method',
+          },
+          {
+            node_id: 'queue_boundary',
+            label: 'IdeaReportQueue.enqueue',
+            source_file: 'src/ideas/report-queue.ts',
+            line_number: 72,
+            node_kind: 'method',
+          },
+          {
+            node_id: 'worker_entry',
+            label: 'IdeaReportWorker.process',
+            source_file: 'src/ideas/report-worker.ts',
+            line_number: 84,
+            node_kind: 'method',
+            framework_role: 'worker',
+          },
+          {
+            node_id: 'assembler',
+            label: 'IdeaReportAssembler.build',
+            source_file: 'src/ideas/report-assembler.ts',
+            line_number: 102,
+            node_kind: 'method',
+          },
+          {
+            node_id: 'store',
+            label: 'IdeaReportStore.save',
+            source_file: 'src/ideas/report-store.ts',
+            line_number: 119,
+            node_kind: 'method',
+          },
+        ],
+        phase_coverage: {
+          expected: ['controller', 'service', 'queue', 'worker', 'report_builder', 'persistence'],
+          observed: ['controller', 'service', 'queue', 'worker', 'report_builder', 'persistence'],
+          missing: [],
+        },
+      },
+      answer_contract: {
+        version: 1,
+        answer_focus: 'runtime_generation' as const,
+        entrypoint_scope: 'setup_context' as const,
+        required_elements: ['main_pipeline_phases'],
+        do_not_claim: ['irrelevant_model_or_provider_details'],
+        observed_phases: ['controller', 'service', 'queue', 'worker', 'report_builder', 'persistence'],
+        missing_phases: [],
+      },
+    } satisfies import('../../src/runtime/retrieve.js').RetrieveResult
+    const dependencies: ContextPackCommandDependencies = {
+      loadGraph: vi.fn().mockReturnValue(graph),
+      retrieveContext: vi.fn().mockReturnValue(retrieval),
+      compactRetrieveResult,
+      analyzePrImpact: vi.fn(),
+      compactPrImpactResult: vi.fn(),
+      analyzeImpact: vi.fn(),
+      compactImpactResult: vi.fn(),
+    }
+
+    const output = await runContextPackCommand({
+      prompt: 'How idea report is being generated',
+      budget: 1800,
+      task: 'explain',
+      graphPath: 'out/graph.json',
+      retrievalStrategy: 'slice-v1',
+      format: 'json',
+    }, dependencies)
+
+    const payload = JSON.parse(output) as {
+      workflow_centers?: Array<{ path?: string; label?: string }>
+      recommended_first_read?: Array<{ path?: string; label?: string }>
+      negative_guidance?: string[]
+    }
+
+    expect(payload.workflow_centers?.slice(0, 4)).toEqual([
+      expect.objectContaining({
+        path: 'src/ideas/controller.ts',
+        label: 'IdeasController.generateReport',
+      }),
+      expect.objectContaining({
+        path: 'src/ideas/report-service.ts',
+        label: 'IdeaReportService.generateReport',
+      }),
+      expect.objectContaining({
+        path: 'src/ideas/report-queue.ts',
+        label: 'IdeaReportQueue.enqueue',
+      }),
+      expect.objectContaining({
+        path: 'src/ideas/report-worker.ts',
+        label: 'IdeaReportWorker.process',
+      }),
+    ])
+    expect(payload.recommended_first_read).toEqual([
+      expect.objectContaining({
+        path: 'src/ideas/controller.ts',
+        label: 'IdeasController.generateReport',
+      }),
+      expect.objectContaining({
+        path: 'src/ideas/report-service.ts',
+        label: 'IdeaReportService.generateReport',
+      }),
+      expect.objectContaining({
+        path: 'src/ideas/report-queue.ts',
+        label: 'IdeaReportQueue.enqueue',
+      }),
+    ])
+    expect(payload.negative_guidance).toEqual(expect.arrayContaining([
+      expect.stringContaining('src/ideas/report-status.ts'),
+      expect.stringContaining('src/ideas/next-steps.ts'),
+    ]))
+  })
+
   it('defaults runtime-generation explain packs to slice-v1 retrieval', async () => {
     const graph = buildRuntimeGenerationGraph()
     const dependencies: ContextPackCommandDependencies = {

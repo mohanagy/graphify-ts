@@ -3,6 +3,7 @@ import type {
   ContextPackClaim,
   ContextPackCoverage,
   ContextPackEvidenceClass,
+  ContextPackExecutionSliceStep,
   ContextPackExpandableRef,
   ContextPackFormat,
   ImplementationPackGuidance,
@@ -31,6 +32,7 @@ import { communitiesFromGraph, loadGraph } from '../runtime/serve.js'
 
 const DEFAULT_IMPACT_DEPTH = 3
 const IMPLEMENTATION_DISTRACTOR_PATTERN = /(?:helper|util|formatter|serializer|mapper|constant|generated|dist\/|build\/|lockfile|migration)/i
+const RUNTIME_GENERATION_DISTRACTOR_PATTERN = /(?:helper|util|formatter|serializer|mapper|constant|status|display|render|renderer|summary|footer|header|view|score|scoring|suggest(?:ed)?|next[-_\s]?steps)/i
 
 export interface ContextPackCommandDependencies {
   loadGraph: (graphPath: string) => KnowledgeGraph
@@ -244,11 +246,37 @@ function defaultPackRetrievalStrategy(
     : undefined
 }
 
+function runtimeGenerationExecutionSpine(
+  task: TaskContextPlan['task_kind'],
+  pack: PackPayload,
+  retrieval?: RetrieveResult,
+): ContextPackExecutionSliceStep[] {
+  const retrievalGate = retrieval?.retrieval_gate ?? ('retrieval_gate' in pack ? pack.retrieval_gate : undefined)
+  const retrievalSteps = Array.isArray(retrieval?.execution_slice?.steps) ? retrieval.execution_slice.steps : []
+  if (
+    task !== 'explain'
+    || retrievalGate?.signals.generation_intent !== 'runtime_generation'
+  ) {
+    return []
+  }
+
+  if (retrievalSteps.length > 0) {
+    return retrievalSteps
+  }
+
+  if ('execution_slice' in pack && Array.isArray(pack.execution_slice?.steps) && pack.execution_slice.steps.length > 0) {
+    return pack.execution_slice.steps
+  }
+
+  return []
+}
+
 function workflowCenters(
   task: TaskContextPlan['task_kind'],
   pack: PackPayload,
   plan: TaskContextPlan,
   implementation?: ImplementationPackGuidance,
+  retrieval?: RetrieveResult,
 ): ContextPackWorkflowCenter[] {
   const fromCommunityContext = (
     entries: Array<{ label: string; node_count?: number }>,
@@ -261,6 +289,31 @@ function workflowCenters(
 
   if (task === 'implement' && implementation?.workflow_centers.length) {
     return implementation.workflow_centers.slice(0, 4)
+  }
+
+  const executionSpine = runtimeGenerationExecutionSpine(task, pack, retrieval)
+  if (executionSpine.length > 0) {
+    const centers: ContextPackWorkflowCenter[] = []
+    const seen = new Set<string>()
+    for (const [index, step] of executionSpine.entries()) {
+      if (seen.has(step.source_file)) {
+        continue
+      }
+      seen.add(step.source_file)
+      centers.push({
+        label: step.label,
+        path: step.source_file,
+        reason: index === 0
+          ? 'Runtime-generation execution spine enters here.'
+          : `Runtime-generation execution spine handoff ${index + 1} passes through this file.`,
+      })
+      if (centers.length >= 4) {
+        break
+      }
+    }
+    if (centers.length > 0) {
+      return centers
+    }
   }
 
   if (
@@ -292,6 +345,7 @@ function recommendedFirstRead(
   task: TaskContextPlan['task_kind'],
   pack: PackPayload,
   implementation?: ImplementationPackGuidance,
+  retrieval?: RetrieveResult,
 ): ContextPackRecommendedFirstRead[] {
   if (task === 'implement' && implementation) {
     const reads: ContextPackRecommendedFirstRead[] = []
@@ -321,6 +375,31 @@ function recommendedFirstRead(
       pushRead(entry.path, entry.reason, entry.matched_symbols[0])
     }
 
+    if (reads.length > 0) {
+      return reads
+    }
+  }
+
+  const executionSpine = runtimeGenerationExecutionSpine(task, pack, retrieval)
+  if (executionSpine.length > 0) {
+    const reads: ContextPackRecommendedFirstRead[] = []
+    const seen = new Set<string>()
+    for (const [index, step] of executionSpine.entries()) {
+      if (seen.has(step.source_file)) {
+        continue
+      }
+      seen.add(step.source_file)
+      reads.push({
+        path: step.source_file,
+        label: step.label,
+        reason: index === 0
+          ? 'Start with the runtime-generation entrypoint.'
+          : `Read this runtime-generation handoff after ${executionSpine[index - 1]?.label ?? 'the previous step'}.`,
+      })
+      if (reads.length >= 3) {
+        break
+      }
+    }
     if (reads.length > 0) {
       return reads
     }
@@ -424,9 +503,11 @@ function publicContracts(
 }
 
 function negativeGuidance(
+  task: TaskContextPlan['task_kind'],
   coverage: ContextPackCoverage,
   pack: PackPayload,
   implementation?: ImplementationPackGuidance,
+  retrieval?: RetrieveResult,
 ): string[] {
   const guidance = [...(implementation?.cautions ?? [])]
 
@@ -449,6 +530,27 @@ function negativeGuidance(
       continue
     }
     guidance.push(`Treat ${pattern.source_file} as supporting context first, not the default edit path, unless the task explicitly targets that helper or artifact.`)
+  }
+
+  const executionSpine = runtimeGenerationExecutionSpine(task, pack, retrieval)
+  if (executionSpine.length > 0) {
+    const spinePaths = new Set(executionSpine.map((step) => step.source_file))
+    const seenPaths = new Set<string>()
+    const matchedNodes = retrieval?.matched_nodes
+      ?? ('matched_nodes' in pack && Array.isArray(pack.matched_nodes) ? pack.matched_nodes : [])
+    for (const node of matchedNodes) {
+      if (spinePaths.has(node.source_file) || seenPaths.has(node.source_file)) {
+        continue
+      }
+      if (!RUNTIME_GENERATION_DISTRACTOR_PATTERN.test(`${node.label} ${node.source_file}`)) {
+        continue
+      }
+      seenPaths.add(node.source_file)
+      guidance.push(`Treat ${node.source_file} as supporting context first, not the primary runtime workflow spine, unless the question explicitly targets that helper or display/status surface.`)
+      if (seenPaths.size >= 3) {
+        break
+      }
+    }
   }
 
   return [...new Set(guidance)]
@@ -525,17 +627,19 @@ function buildPackSchemaV1<TPack extends PackPayload>(
     implementation?: ImplementationPackGuidance
     routing?: ContextPackRoutingDebug
     target?: string
+    retrieval?: RetrieveResult
   },
 ): PackSchemaEnvelope<TPack> {
-  const centers = workflowCenters(response.task, response.pack, response.plan, response.implementation)
-  const firstRead = recommendedFirstRead(response.task, response.pack, response.implementation)
+  const { retrieval, ...serializableResponse } = response
+  const centers = workflowCenters(response.task, response.pack, response.plan, response.implementation, retrieval)
+  const firstRead = recommendedFirstRead(response.task, response.pack, response.implementation, retrieval)
   const contracts = publicContracts(response.implementation)
-  const guidance = negativeGuidance(response.coverage, response.pack, response.implementation)
+  const guidance = negativeGuidance(response.task, response.coverage, response.pack, response.implementation, retrieval)
   const score = confidenceScore(response.coverage, response.pack, response.implementation)
 
   return {
     schema_version: 1,
-    ...response,
+    ...serializableResponse,
     workflow_centers: centers,
     recommended_first_read: firstRead,
     likely_edit_files: response.implementation?.likely_edit_files ?? [],
@@ -854,6 +958,7 @@ export async function runContextPackCommand(
   return renderContextPackOutput(options.format, buildPackSchemaV1({
     ...baseResponse(options, initialPlan, plannerBudget, resolvedTask.task_kind),
     ...buildExplainPackPayload(dependencies.compactRetrieveResult(retrieval), retrieval, implementation),
+    retrieval,
     ...(options.why ? { routing: buildRoutingDebug(retrieval) } : {}),
   }))
 }
