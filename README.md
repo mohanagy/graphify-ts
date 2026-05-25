@@ -119,11 +119,15 @@ For `--task implement`, `workflow_centers` are scored workflow-owner candidates 
 
 The implement brief also keeps `recommended_first_read` separate from ranked `likely_edit_files` and `likely_test_files`. The edit/test sections now carry explicit `score` and `reason` fields so agents can tell orientation reads apart from the files most likely to change or validate.
 
+`negative_guidance` is also task-aware now: implementation packs can explicitly call out helper-like or generated files as supporting context instead of silently letting lexical matches drift into the default edit path.
+
 Use `--format json` when another tool or script will consume the pack directly. Use `--format text` when you want the same schema rendered as a short human/agent-readable execution brief.
 
 ### Adaptive context-pack representations
 
 Compiled context packs now have a first-pass **rendering-only** adaptive layer. Retrieval still selects the same nodes and paths first; the runtime only changes how those already-selected nodes are emitted for the task.
+
+That renderer is now budget-aware: tighter budgets compress already-selected nodes down toward summary/signature views, while explain packs only preserve full detail when the budget is large enough to justify it.
 
 The current deterministic core modes are:
 

@@ -103,6 +103,41 @@ function buildImplementationPackGraph() {
   return graph
 }
 
+function buildImplementationPackDistractorGraph() {
+  const root = mkdtempSync(join(tmpdir(), 'madar-fixture-'))
+  tempFixtureRoots.push(root)
+  writeFileSync(join(root, 'package.json'), JSON.stringify({
+    name: 'madar-fixture',
+    private: true,
+    scripts: {
+      typecheck: 'tsc --noEmit',
+      build: 'tsc -p tsconfig.build.json',
+      'test:run': 'vitest run',
+    },
+  }))
+  const graph = build(
+    [
+      {
+        schema_version: 1,
+        nodes: [
+          { id: 'pack_command', label: 'runContextPackCommand', file_type: 'code', source_file: `${root}/src/infrastructure/context-pack-command.ts`, source_location: 'L224', node_kind: 'function', community: 0 },
+          { id: 'pack_helper', label: 'buildContextPackHelper', file_type: 'code', source_file: `${root}/src/infrastructure/context-pack-helper.ts`, source_location: 'L18', node_kind: 'function', community: 0 },
+          { id: 'pack_contract', label: 'ContextPackTaskKind', file_type: 'code', source_file: `${root}/src/contracts/context-pack.ts`, source_location: 'L13', community: 1 },
+          { id: 'pack_test', label: 'context-pack-command.test', file_type: 'code', source_file: `${root}/tests/unit/context-pack-command.test.ts`, source_location: 'L1', node_kind: 'function', community: 2 },
+        ],
+        edges: [
+          { source: 'pack_command', target: 'pack_helper', relation: 'calls', confidence: 'EXTRACTED', source_file: `${root}/src/infrastructure/context-pack-command.ts` },
+          { source: 'pack_command', target: 'pack_contract', relation: 'depends_on', confidence: 'EXTRACTED', source_file: `${root}/src/infrastructure/context-pack-command.ts` },
+          { source: 'pack_command', target: 'pack_test', relation: 'covered_by', confidence: 'EXTRACTED', source_file: `${root}/src/infrastructure/context-pack-command.ts` },
+        ],
+      },
+    ],
+    { directed: true },
+  )
+  graph.graph.root_path = root
+  return graph
+}
+
 describe('context-pack-command', () => {
   it('preserves execution_slice for runtime-generation explain packs', async () => {
     const graph = buildRuntimeGenerationGraph()
@@ -679,6 +714,41 @@ describe('context-pack-command', () => {
       why_explanation: expect.arrayContaining([expect.any(String)]),
     }))
     expect(payload.likely_edit_files?.some((entry) => entry.path === 'src/contracts/context-pack.ts')).toBe(false)
+  })
+
+  it('surfaces lexical helpers as negative guidance instead of edit targets for implementation packs', async () => {
+    const graph = buildImplementationPackDistractorGraph()
+    const dependencies: ContextPackCommandDependencies = {
+      loadGraph: vi.fn().mockReturnValue(graph),
+      retrieveContext: vi.fn((currentGraph, options) => retrieveContext(currentGraph, options as never)),
+      compactRetrieveResult,
+      analyzePrImpact: vi.fn(),
+      compactPrImpactResult: vi.fn(),
+      analyzeImpact: vi.fn(),
+      compactImpactResult: vi.fn(),
+    }
+
+    const output = await runContextPackCommand({
+      prompt: 'Implement context pack command compression guidance',
+      budget: 1800,
+      task: 'implement',
+      taskExplicit: true,
+      graphPath: 'out/graph.json',
+      format: 'json',
+    } as never, dependencies)
+
+    const payload = JSON.parse(output) as {
+      likely_edit_files?: Array<{ path?: string }>
+      negative_guidance?: string[]
+    }
+
+    expect(payload.likely_edit_files).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: 'src/infrastructure/context-pack-command.ts' }),
+    ]))
+    expect(payload.likely_edit_files?.some((entry) => entry.path === 'src/infrastructure/context-pack-helper.ts')).toBe(false)
+    expect(payload.negative_guidance).toEqual(expect.arrayContaining([
+      expect.stringContaining('src/infrastructure/context-pack-helper.ts'),
+    ]))
   })
 
   it('renders pack schema v1 as a task-aware execution brief in text mode', async () => {

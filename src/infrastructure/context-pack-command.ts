@@ -30,6 +30,7 @@ import { buildRoutingDebug } from '../runtime/routing-debug.js'
 import { communitiesFromGraph, loadGraph } from '../runtime/serve.js'
 
 const DEFAULT_IMPACT_DEPTH = 3
+const IMPLEMENTATION_DISTRACTOR_PATTERN = /(?:helper|util|formatter|serializer|mapper|constant|generated|dist\/|build\/|lockfile|migration)/i
 
 export interface ContextPackCommandDependencies {
   loadGraph: (graphPath: string) => KnowledgeGraph
@@ -441,6 +442,12 @@ function negativeGuidance(
   }
   if ('uncovered_hotspots' in pack && Array.isArray(pack.uncovered_hotspots) && pack.uncovered_hotspots.length > 0) {
     guidance.push(`Do not treat the compact review bundle as complete for uncovered hotspots: ${pack.uncovered_hotspots.slice(0, 3).map((entry) => entry.label).join(', ')}.`)
+  }
+  for (const pattern of implementation?.existing_patterns ?? []) {
+    if (!IMPLEMENTATION_DISTRACTOR_PATTERN.test(`${pattern.label} ${pattern.source_file}`)) {
+      continue
+    }
+    guidance.push(`Treat ${pattern.source_file} as supporting context first, not the default edit path, unless the task explicitly targets that helper or artifact.`)
   }
 
   return [...new Set(guidance)]

@@ -6,6 +6,7 @@ import {
   compactContextPack,
   compileContextPack,
   estimateContextPackEntryTokens,
+  renderCompiledContextPackNodes,
   type ContextPackNodeCandidate,
 } from '../../src/runtime/context-pack.js'
 
@@ -374,6 +375,75 @@ describe('context-pack', () => {
       expect(reviewPack.token_count).toBeLessThan(explainPack.token_count)
       expect(explainPack.token_count).toBe(renderedTokenCount(explainPack.nodes))
       expect(reviewPack.token_count).toBe(renderedTokenCount(reviewPack.nodes))
+    })
+
+    it('compresses selected explain nodes more aggressively when the token budget is tight', () => {
+      const nodes = [
+        nodeCandidate({
+          node_id: 'auth_controller',
+          label: 'AuthController.callback',
+          source_file: 'src/auth/controller.ts',
+          line_number: 12,
+          file_type: 'code',
+          snippet: [
+            'export class AuthController {',
+            '  async callback(input: LoginInput) {',
+            '    const normalized = normalizeCallback(input)',
+            '    const user = await this.authService.login(normalized)',
+            '    return this.sessionStore.create(user.id)',
+            '  }',
+            '}',
+          ].join('\n'),
+          match_score: 10,
+          relevance_band: 'direct',
+          community: 0,
+          community_label: 'Auth',
+        }, 'primary', 8),
+        nodeCandidate({
+          node_id: 'auth_service',
+          label: 'AuthService.login',
+          source_file: 'src/auth/service.ts',
+          line_number: 20,
+          file_type: 'code',
+          snippet: [
+            'export class AuthService {',
+            '  async login(input: LoginInput) {',
+            '    await this.validator.validate(input)',
+            '    const token = this.tokenService.sign(input.userId)',
+            '    return this.sessionStore.create(token)',
+            '  }',
+            '}',
+          ].join('\n'),
+          match_score: 8,
+          relevance_band: 'related',
+          community: 0,
+          community_label: 'Auth',
+        }, 'supporting', 8),
+      ]
+      const relationships = [
+        {
+          from_id: 'auth_controller',
+          from: 'AuthController.callback',
+          to_id: 'auth_service',
+          to: 'AuthService.login',
+          relation: 'calls',
+        },
+      ] as const
+
+      const generous = renderCompiledContextPackNodes(
+        classifyTaskContract('explain', { budget: 256, prompt: 'Explain the auth callback flow' }),
+        nodes.map((candidate) => candidate.build_entry()),
+        relationships,
+      )
+      const constrained = renderCompiledContextPackNodes(
+        classifyTaskContract('explain', { budget: 32, prompt: 'Explain the auth callback flow' }),
+        nodes.map((candidate) => candidate.build_entry()),
+        relationships,
+      )
+
+      expect(generous.nodes.find((node) => node.node_id === 'auth_controller')?.representation_type).toBe('detail')
+      expect(constrained.nodes.find((node) => node.node_id === 'auth_controller')?.representation_type).not.toBe('detail')
+      expect(constrained.token_count).toBeLessThan(generous.token_count)
     })
 
     it('does not materialize omitted entries when candidate metadata already covers previews and semantics', () => {

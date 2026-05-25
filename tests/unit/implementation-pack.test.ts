@@ -407,6 +407,84 @@ describe('buildImplementationPackGuidance likely edit/test targets (#296)', () =
     ]))
   })
 
+  it('keeps an explicitly named helper target in likely_edit_files', () => {
+    const graph = buildLikelyTargetsGraph()
+    const retrieval = {
+      question: 'update normalizeLoginPayload in src/auth/login-helper.ts to preserve the new login validation behavior',
+      token_count: 180,
+      matched_nodes: [
+        {
+          node_id: 'login_helper',
+          label: 'normalizeLoginPayload',
+          source_file: `${graph.graph.root_path}/src/auth/login-helper.ts`,
+          line_number: 18,
+          node_kind: 'function',
+          file_type: 'code',
+          snippet: 'export function normalizeLoginPayload() {}',
+          match_score: 0.96,
+          relevance_band: 'direct' as const,
+          community: 1,
+          community_label: 'Login workflow',
+        },
+        {
+          node_id: 'login_service',
+          label: 'LoginService.validate',
+          source_file: `${graph.graph.root_path}/src/auth/login-service.ts`,
+          line_number: 30,
+          node_kind: 'method',
+          framework_role: 'nest_provider',
+          file_type: 'code',
+          snippet: 'export class LoginService { validate() {} }',
+          match_score: 0.74,
+          relevance_band: 'direct' as const,
+          community: 1,
+          community_label: 'Login workflow',
+        },
+        {
+          node_id: 'login_controller',
+          label: 'LoginController.submit',
+          source_file: `${graph.graph.root_path}/src/auth/login-controller.ts`,
+          line_number: 20,
+          node_kind: 'method',
+          framework_role: 'nest_controller',
+          file_type: 'code',
+          snippet: 'export class LoginController { submit() {} }',
+          match_score: 0.51,
+          relevance_band: 'related' as const,
+          community: 0,
+          community_label: 'Login HTTP surface',
+        },
+      ],
+      relationships: [],
+      community_context: [],
+      graph_signals: { god_nodes: [], bridge_nodes: [] },
+      claims: [],
+      expandable: [],
+      coverage: {
+        required_evidence: ['primary', 'supporting', 'structural'] as const,
+        semantic_required: ['implementation', 'structure'] as const,
+        semantic_optional: ['tests'] as const,
+        entries: [],
+        semantic_entries: [],
+        missing_required: [],
+        missing_semantic: [],
+        available_relationships: 0,
+        selected_relationships: 0,
+      },
+    } satisfies import('../../src/runtime/retrieve.js').RetrieveResult
+
+    const guidance = buildImplementationPackGuidance(graph, retrieval, {
+      budget: 2200,
+      taskIntent: 'implement',
+      limit: 5,
+    })
+
+    expect(guidance.likely_edit_files).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: 'src/auth/login-helper.ts' }),
+      expect.objectContaining({ path: 'src/auth/login-service.ts' }),
+    ]))
+  })
+
   it('keeps a clear caution when no related tests are discoverable', () => {
     const root = mkdtempSync(join(tmpdir(), 'madar-no-tests-'))
     tempFixtureRoots.push(root)

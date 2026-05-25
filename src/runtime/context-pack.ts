@@ -996,6 +996,28 @@ function tokenCountForRenderedNodes(nodes: readonly Pick<ContextPackNode, 'label
   )
 }
 
+function resolutionForTaskBudget(
+  taskContract: ContextPackTaskContract,
+  nodes: readonly ContextPackNode[],
+): 'summary' | 'signature' | 'sketch' {
+  const budgetPerNode = taskContract.budget / Math.max(1, nodes.length)
+  if (budgetPerNode < 18) {
+    return 'summary'
+  }
+  if (budgetPerNode < 28) {
+    return 'signature'
+  }
+  return 'sketch'
+}
+
+function canPreserveExplainDetail(
+  taskContract: ContextPackTaskContract,
+  nodes: readonly ContextPackNode[],
+): boolean {
+  return taskContract.task_kind === 'explain'
+    && resolutionForTaskBudget(taskContract, nodes) === 'sketch'
+}
+
 export function renderCompiledContextPackNodes<
   TNode extends ContextPackNode = ContextPackNode,
   TRelationship extends ContextPackRelationship = ContextPackRelationship,
@@ -1017,7 +1039,7 @@ export function renderCompiledContextPackNodes<
   const renderedNodes = nodes.some((node) => typeof node.representation_type === 'string')
     ? [...nodes]
     : applyContextPackResolution(nodes, {
-        resolution: 'sketch',
+        resolution: resolutionForTaskBudget(taskContract, nodes),
         relationships,
         task_kind: taskContract.task_kind,
       }).nodes.map((node, index) => {
@@ -1036,7 +1058,7 @@ export function renderCompiledContextPackNodes<
         )
         const hasOriginalSnippet = typeof originalNode.snippet === 'string'
           && originalNode.snippet.length > 0
-        if (taskContract.task_kind === 'explain' && hasOriginalSnippet) {
+        if (canPreserveExplainDetail(taskContract, nodes) && hasOriginalSnippet) {
           return {
             ...node,
             representation_type: 'detail',
