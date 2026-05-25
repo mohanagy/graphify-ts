@@ -7,12 +7,15 @@ import type {
   ContextPackWorkflowCenter,
   ImplementationPackFileHint,
   ImplementationPackGuidance,
+  ImplementationPackPhase,
+  ImplementationPackRetrievalPipeline,
   ImplementationPackRiskBoundary,
   ImplementationPackSurfaceHint,
 } from '../contracts/context-pack.js'
 import type { KnowledgeGraph } from '../contracts/graph.js'
 import type { TaskIntentKind } from '../contracts/task-intent.js'
 import { classifySourceDomain } from '../shared/source-discovery.js'
+import { lineNumberFromSourceLocation } from '../shared/source-location.js'
 import { relativizeSourceFile } from '../shared/source-path.js'
 import { riskMap } from './risk-map.js'
 import type { RetrieveMatchedNode, RetrieveResult } from './retrieve.js'
@@ -25,6 +28,7 @@ const WORKFLOW_OWNER_PATTERN = /(?:service|controller|handler|worker|queue|job|w
 const HELPER_PATTERN = /(?:helper|util|format|formatter|presenter|serializer|mapper|constant|type|schema|dto)/i
 const SIDE_EFFECT_PATTERN = /(?:save|create|update|delete|persist|write|enqueue|publish|dispatch|emit|send|store|cache|repository|queue|session|database|db)/i
 const WORKFLOW_EDGE_RELATIONS = new Set(['calls', 'controller_route', 'depends_on', 'imports_from', 'enqueues_job'])
+const SURFACE_ATTACHMENT_RELATIONS = new Set(['calls', 'controller_route', 'depends_on', 'imports_from'])
 const TEST_EDIT_PATTERN = /\b(?:add|update|modify|change|fix|write|edit|refactor|rename|remove)\b.{0,24}\b(?:test|tests|spec|specs|e2e|integration)\b|\b(?:test|tests|spec|specs|e2e|integration)\b.{0,24}\b(?:add|update|modify|change|fix|write|edit|refactor|rename|remove)\b/i
 const E2E_TEST_PATTERN = /(?:^|\/)(?:e2e|integration)(?:\/|$)|\.(?:e2e|integration)\.[^/]+$/i
 const GENERIC_MODULE_TOKENS = new Set([
@@ -32,6 +36,14 @@ const GENERIC_MODULE_TOKENS = new Set([
   'app', 'apps', 'lib', 'libs', 'packages', 'package', 'modules', 'module',
   'feature', 'features', 'http', 'api',
 ])
+const IMPLEMENTATION_PIPELINE_PHASE_ORDER: ImplementationPackPhase[] = [
+  'seed',
+  'expand',
+  'promote',
+  'attach',
+  'refine',
+  'render',
+]
 
 type PackageScripts = Record<string, string>
 
@@ -55,6 +67,8 @@ interface RankedFileAccumulator {
   matchedSymbolSet: Set<string>
   reasons: string[]
   reasonSet: Set<string>
+  phases: ImplementationPackPhase[]
+  phaseSet: Set<ImplementationPackPhase>
 }
 
 interface IndexedTestFile {
@@ -74,6 +88,8 @@ interface WorkflowNodeCandidate {
   framework_role?: string
   match_score: number
   relevance_band: 'direct' | 'related'
+  phases: ImplementationPackPhase[]
+  phase_reasons: string[]
 }
 
 interface WorkflowScoreDetails {
@@ -90,7 +106,11 @@ interface WorkflowCenterAggregate {
   matched_symbols: string[]
   reasons: string[]
   reasonSet: Set<string>
+  phase_reasons: string[]
+  phaseReasonSet: Set<string>
   matchedSymbolSet: Set<string>
+  phases: ImplementationPackPhase[]
+  phaseSet: Set<ImplementationPackPhase>
   bestNodeScore: number
   bestNonHelperLabel?: string
   bestNonHelperScore: number
@@ -104,6 +124,16 @@ function rootPathFromGraph(graph: KnowledgeGraph): string | undefined {
 
 function roundFileScore(value: number): number {
   return Math.round(Math.max(0, value) * 100) / 100
+}
+
+function compareStableText(left: string, right: string): number {
+  if (left < right) {
+    return -1
+  }
+  if (left > right) {
+    return 1
+  }
+  return 0
 }
 
 function finalizeReason(reason: string): string {
@@ -122,11 +152,47 @@ function pushUnique(values: string[], seen: Set<string>, value: string | undefin
   values.push(value)
 }
 
+function pushUniquePhase(
+  values: ImplementationPackPhase[],
+  seen: Set<ImplementationPackPhase>,
+  value: ImplementationPackPhase | undefined,
+): void {
+  if (!value || seen.has(value)) {
+    return
+  }
+  seen.add(value)
+  values.push(value)
+}
+
+function orderedPhases(phases: readonly ImplementationPackPhase[]): ImplementationPackPhase[] {
+  const seen = new Set<ImplementationPackPhase>()
+  const ordered: ImplementationPackPhase[] = []
+  for (const phase of IMPLEMENTATION_PIPELINE_PHASE_ORDER) {
+    if (!phases.includes(phase) || seen.has(phase)) {
+      continue
+    }
+    seen.add(phase)
+    ordered.push(phase)
+  }
+  return ordered
+}
+
+function mergePhaseLists(
+  values: ImplementationPackPhase[],
+  seen: Set<ImplementationPackPhase>,
+  phases: readonly ImplementationPackPhase[],
+): void {
+  for (const phase of phases) {
+    pushUniquePhase(values, seen, phase)
+  }
+}
+
 function createImplementationPackFileHint(
   path: string,
   score: number,
   reason: string,
   matchedSymbols: readonly string[],
+  phases: readonly ImplementationPackPhase[] = [],
 ): ImplementationPackFileHint {
   const finalReason = finalizeReason(reason)
   return {
@@ -135,6 +201,7 @@ function createImplementationPackFileHint(
     reason: finalReason,
     why: finalReason,
     matched_symbols: [...new Set(matchedSymbols)],
+    ...(phases.length > 0 ? { phases: orderedPhases(phases) } : {}),
   }
 }
 
@@ -170,6 +237,7 @@ function addRankedFileCandidate(
   score: number,
   reason: string,
   matchedSymbols: readonly string[],
+  phases: readonly ImplementationPackPhase[] = [],
 ): void {
   const entry = target.get(path) ?? {
     path,
@@ -178,29 +246,34 @@ function addRankedFileCandidate(
     matchedSymbolSet: new Set<string>(),
     reasons: [],
     reasonSet: new Set<string>(),
+    phases: [],
+    phaseSet: new Set<ImplementationPackPhase>(),
   }
   entry.score += score
   pushUnique(entry.reasons, entry.reasonSet, finalizeReason(reason))
   for (const symbol of matchedSymbols) {
     pushUnique(entry.matched_symbols, entry.matchedSymbolSet, symbol)
   }
+  mergePhaseLists(entry.phases, entry.phaseSet, phases)
   target.set(path, entry)
 }
 
 function rankedFileHints(
   entries: Iterable<RankedFileAccumulator>,
   limit: number,
+  extraPhases: readonly ImplementationPackPhase[] = [],
 ): ImplementationPackFileHint[] {
   return [...entries]
     .sort((left, right) => right.score - left.score
       || right.reasons.length - left.reasons.length
-      || left.path.localeCompare(right.path))
+      || compareStableText(left.path, right.path))
     .slice(0, limit)
     .map((entry) => createImplementationPackFileHint(
       entry.path,
       entry.score,
       entry.reasons[0] ?? 'Relevant file for this task.',
       entry.matched_symbols,
+      [...entry.phases, ...extraPhases],
     ))
 }
 
@@ -273,6 +346,34 @@ function graphRelation(graph: KnowledgeGraph, sourceId: string, targetId: string
   return String(graph.edgeAttributes(sourceId, targetId).relation ?? '')
 }
 
+function upsertWorkflowCandidate(
+  target: Map<string, WorkflowNodeCandidate>,
+  candidate: WorkflowNodeCandidate,
+): void {
+  const existing = target.get(candidate.node_id)
+  if (!existing) {
+    target.set(candidate.node_id, {
+      ...candidate,
+      phases: orderedPhases(candidate.phases),
+      phase_reasons: [...new Set(candidate.phase_reasons)],
+    })
+    return
+  }
+
+  existing.match_score = Math.max(existing.match_score, candidate.match_score)
+  if (candidate.relevance_band === 'direct') {
+    existing.relevance_band = 'direct'
+  }
+  if (!existing.node_kind && candidate.node_kind) {
+    existing.node_kind = candidate.node_kind
+  }
+  if (!existing.framework_role && candidate.framework_role) {
+    existing.framework_role = candidate.framework_role
+  }
+  existing.phases = orderedPhases([...existing.phases, ...candidate.phases])
+  existing.phase_reasons = [...new Set([...existing.phase_reasons, ...candidate.phase_reasons])]
+}
+
 function workflowCandidates(
   graph: KnowledgeGraph,
   retrieval: RetrieveResult,
@@ -288,7 +389,7 @@ function workflowCandidates(
     if (sourceDomain === 'test' || sourceDomain === 'docs' || sourceDomain === 'build_artifact') {
       continue
     }
-    byNodeId.set(node.node_id, {
+    upsertWorkflowCandidate(byNodeId, {
       node_id: node.node_id,
       label: node.label,
       source_file: node.source_file,
@@ -296,6 +397,8 @@ function workflowCandidates(
       ...(node.framework_role ? { framework_role: node.framework_role } : {}),
       match_score: node.match_score,
       relevance_band: node.relevance_band === 'direct' ? 'direct' : 'related',
+      phases: ['seed'],
+      phase_reasons: ['Seed search matched this symbol directly from the task prompt.'],
     })
   }
 
@@ -306,14 +409,14 @@ function workflowCandidates(
 
     for (const predecessorId of graph.predecessors(node.node_id)) {
       const relation = graphRelation(graph, predecessorId, node.node_id)
-      if (!WORKFLOW_EDGE_RELATIONS.has(relation) || byNodeId.has(predecessorId)) {
+      if (!WORKFLOW_EDGE_RELATIONS.has(relation)) {
         continue
       }
       if (classifyWorkflowDomain(graph, predecessorId, rootPath) !== 'production') {
         continue
       }
       const attributes = graph.nodeAttributes(predecessorId)
-      byNodeId.set(predecessorId, {
+      upsertWorkflowCandidate(byNodeId, {
         node_id: predecessorId,
         label: String(attributes.label ?? predecessorId),
         source_file: String(attributes.source_file ?? ''),
@@ -321,19 +424,21 @@ function workflowCandidates(
         ...(attributes.framework_role ? { framework_role: String(attributes.framework_role) } : {}),
         match_score: Math.max(0.1, node.match_score * 0.35),
         relevance_band: 'related',
+        phases: ['expand'],
+        phase_reasons: [`Graph expansion followed ${relation} from ${node.label}.`],
       })
     }
 
     for (const successorId of graph.successors(node.node_id)) {
       const relation = graphRelation(graph, node.node_id, successorId)
-      if (!WORKFLOW_EDGE_RELATIONS.has(relation) || byNodeId.has(successorId)) {
+      if (!WORKFLOW_EDGE_RELATIONS.has(relation)) {
         continue
       }
       if (classifyWorkflowDomain(graph, successorId, rootPath) !== 'production') {
         continue
       }
       const attributes = graph.nodeAttributes(successorId)
-      byNodeId.set(successorId, {
+      upsertWorkflowCandidate(byNodeId, {
         node_id: successorId,
         label: String(attributes.label ?? successorId),
         source_file: String(attributes.source_file ?? ''),
@@ -341,6 +446,8 @@ function workflowCandidates(
         ...(attributes.framework_role ? { framework_role: String(attributes.framework_role) } : {}),
         match_score: Math.max(0.1, node.match_score * 0.25),
         relevance_band: 'related',
+        phases: ['expand'],
+        phase_reasons: [`Graph expansion followed ${relation} from ${node.label}.`],
       })
     }
   }
@@ -524,7 +631,11 @@ function workflowCenters(
       matched_symbols: [],
       reasons: [],
       reasonSet: new Set<string>(),
+      phase_reasons: [],
+      phaseReasonSet: new Set<string>(),
       matchedSymbolSet: new Set<string>(),
+      phases: [],
+      phaseSet: new Set<ImplementationPackPhase>(),
       bestNodeScore: Number.NEGATIVE_INFINITY,
       bestNonHelperScore: Number.NEGATIVE_INFINITY,
     }
@@ -534,9 +645,13 @@ function workflowCenters(
       current.direct_matches += 1
     }
     pushUnique(current.matched_symbols, current.matchedSymbolSet, candidate.label)
+    for (const reason of candidate.phase_reasons) {
+      pushUnique(current.phase_reasons, current.phaseReasonSet, reason)
+    }
     for (const reason of scoreDetails.reasons) {
       pushUnique(current.reasons, current.reasonSet, reason)
     }
+    mergePhaseLists(current.phases, current.phaseSet, candidate.phases)
     const scoreDelta = scoreDetails.score - current.bestNodeScore
     if (scoreDelta > 1e-9 || (Math.abs(scoreDelta) <= 1e-9 && !scoreDetails.helperLike)) {
       current.bestNodeScore = scoreDetails.score
@@ -551,23 +666,29 @@ function workflowCenters(
 
   return [...centers.values()]
     .map((entry) => {
+      const reasons = [...entry.reasons]
       if (entry.direct_matches > 1) {
         entry.score += 0.5
-        pushUnique(entry.reasons, entry.reasonSet, `Multiple direct matches converge in ${entry.path}.`)
+        reasons.push(`Multiple direct matches converge in ${entry.path}.`)
       }
-      const reason = entry.reasons.slice(0, 3).join(' ')
+      const reason = [
+        ...entry.phase_reasons,
+        'Workflow-center promotion preferred this file as the owning workflow surface.',
+        ...reasons,
+      ].slice(0, 3).join(' ')
       return {
         label: entry.bestNonHelperLabel ?? entry.label,
         path: entry.path,
         score: Math.round(entry.score * 100) / 100,
-        reasons: entry.reasons.slice(0, 4),
+        reasons: reasons.slice(0, 4),
         matched_symbols: entry.matched_symbols,
         reason: reason.length > 0 ? reason : 'Structural and lexical signals both point to this file.',
+        phases: orderedPhases([...entry.phases, 'promote']),
       } satisfies ContextPackWorkflowCenter
     })
     .sort((left, right) => (right.score ?? 0) - (left.score ?? 0)
       || (right.reasons?.length ?? 0) - (left.reasons?.length ?? 0)
-      || left.path!.localeCompare(right.path!))
+      || compareStableText(left.path ?? '', right.path ?? ''))
     .slice(0, limit)
 }
 
@@ -611,6 +732,7 @@ function mergeLikelyEditFiles(
       reason: center.reason,
       why: center.reason,
       matched_symbols: matchedSymbols.length > 0 ? matchedSymbols : [center.label],
+      phases: orderedPhases([...(center.phases ?? []), ...(existing?.phases ?? []), 'attach', 'refine']),
     })
     seen.add(center.path)
     if (results.length >= limit) {
@@ -628,7 +750,12 @@ function mergeLikelyEditFiles(
     ) {
       continue
     }
-    results.push(entry)
+    results.push({
+      ...entry,
+      ...(entry.phases?.length
+        ? { phases: orderedPhases([...entry.phases, 'attach', 'refine']) }
+        : { phases: ['attach', 'refine'] as ImplementationPackPhase[] }),
+    })
     seen.add(entry.path)
     if (results.length >= limit) {
       break
@@ -641,6 +768,7 @@ function mergeLikelyEditFiles(
 function groupFiles(
   nodes: readonly RetrieveMatchedNode[],
   rootPath?: string,
+  phases: readonly ImplementationPackPhase[] = [],
 ): ImplementationPackFileHint[] {
   const byPath = new Map<string, FileAggregate>()
 
@@ -677,6 +805,7 @@ function groupFiles(
       entry.score,
       reason,
       [...entry.direct_symbols, ...entry.related_symbols],
+      phases,
     )
   })
 }
@@ -720,10 +849,11 @@ function likelyTestFiles(
       ...coveredTestNodes(graph, retrieval, rootPath),
     ],
     rootPath,
+    ['attach'],
   )
 
   for (const entry of directAndCovered) {
-    addRankedFileCandidate(ranked, entry.path, entry.score, entry.reason, entry.matched_symbols)
+    addRankedFileCandidate(ranked, entry.path, entry.score, entry.reason, entry.matched_symbols, entry.phases ?? ['attach'])
   }
 
   const indexedTests = indexTestFiles(graph, rootPath)
@@ -773,11 +903,12 @@ function likelyTestFiles(
           ...(testFile.labels.length > 0 ? [testFile.labels[0]!] : []),
           ...editFile.matched_symbols,
         ],
+        ['attach'],
       )
     }
   }
 
-  return rankedFileHints(ranked.values(), limit)
+  return rankedFileHints(ranked.values(), limit, ['refine'])
 }
 
 function coveredTestNodes(
@@ -856,6 +987,7 @@ function pushSurfaceHint(
   kind: ImplementationPackSurfaceHint['kind'],
   why: string,
   rootPath?: string,
+  phases: readonly ImplementationPackPhase[] = [],
 ): void {
   const sourceFile = relativizeSourceFile(node.source_file, rootPath)
   const key = `${kind}:${sourceFile}:${node.label}:${node.line_number}`
@@ -869,12 +1001,47 @@ function pushSurfaceHint(
     line_number: node.line_number,
     kind,
     why,
+    ...(phases.length > 0 ? { phases: orderedPhases(phases) } : {}),
   })
 }
 
+function graphNodesForPath(
+  graph: KnowledgeGraph,
+  path: string,
+  rootPath?: string,
+): string[] {
+  return graph
+    .nodeEntries()
+    .filter(([, attributes]) => relativizeSourceFile(String(attributes.source_file ?? ''), rootPath) === path)
+    .map(([nodeId]) => nodeId)
+}
+
+function retrieveMatchedNodeFromGraph(
+  graph: KnowledgeGraph,
+  nodeId: string,
+): RetrieveMatchedNode {
+  const attributes = graph.nodeAttributes(nodeId)
+  return {
+    node_id: nodeId,
+    label: String(attributes.label ?? nodeId),
+    source_file: String(attributes.source_file ?? ''),
+    line_number: lineNumberFromSourceLocation(String(attributes.source_location ?? '')),
+    node_kind: String(attributes.node_kind ?? ''),
+    framework_role: typeof attributes.framework_role === 'string' ? attributes.framework_role : undefined,
+    file_type: String(attributes.file_type ?? 'code'),
+    snippet: null,
+    match_score: 0,
+    relevance_band: 'related',
+    community: typeof attributes.community === 'number' ? attributes.community : null,
+    community_label: null,
+  }
+}
+
 function buildSurfaceHints(
+  graph: KnowledgeGraph,
   retrieval: RetrieveResult,
   editPaths: ReadonlySet<string>,
+  workflowCentersValue: readonly ContextPackWorkflowCenter[],
   rootPath?: string,
 ): {
   contracts_and_public_surfaces: ImplementationPackSurfaceHint[]
@@ -897,12 +1064,12 @@ function buildSurfaceHints(
     }
 
     if (isContractNode(node)) {
-      pushSurfaceHint(surfaceSeen, contracts_and_public_surfaces, node, 'contract', 'Changing this contract can affect implementation callers.', rootPath)
+      pushSurfaceHint(surfaceSeen, contracts_and_public_surfaces, node, 'contract', 'Changing this contract can affect implementation callers.', rootPath, ['seed', 'attach'])
       continue
     }
 
     if (isPublicSurfaceNode(node)) {
-      pushSurfaceHint(surfaceSeen, contracts_and_public_surfaces, node, 'public_surface', 'This is part of the public entry surface touched by the task.', rootPath)
+      pushSurfaceHint(surfaceSeen, contracts_and_public_surfaces, node, 'public_surface', 'This is part of the public entry surface touched by the task.', rootPath, ['seed', 'attach'])
       continue
     }
 
@@ -911,9 +1078,97 @@ function buildSurfaceHints(
     }
   }
 
+  for (const center of workflowCentersValue) {
+    if (!center.path) {
+      continue
+    }
+
+    for (const nodeId of graphNodesForPath(graph, center.path, rootPath)) {
+      for (const predecessorId of graph.predecessors(nodeId)) {
+        const relation = graphRelation(graph, predecessorId, nodeId)
+        if (!SURFACE_ATTACHMENT_RELATIONS.has(relation)) {
+          continue
+        }
+        const neighbor = retrieveMatchedNodeFromGraph(graph, predecessorId)
+        if (classifySourceDomain(neighbor.source_file, rootPath) !== 'production') {
+          continue
+        }
+        if (isContractNode(neighbor)) {
+          pushSurfaceHint(surfaceSeen, contracts_and_public_surfaces, neighbor, 'contract', `Attachment stage pulled this nearby contract in from ${center.label} via ${relation}.`, rootPath, ['attach'])
+        } else if (isPublicSurfaceNode(neighbor)) {
+          pushSurfaceHint(surfaceSeen, contracts_and_public_surfaces, neighbor, 'public_surface', `Attachment stage pulled this nearby public surface in from ${center.label} via ${relation}.`, rootPath, ['attach'])
+        }
+      }
+
+      for (const successorId of graph.successors(nodeId)) {
+        const relation = graphRelation(graph, nodeId, successorId)
+        if (!SURFACE_ATTACHMENT_RELATIONS.has(relation)) {
+          continue
+        }
+        const neighbor = retrieveMatchedNodeFromGraph(graph, successorId)
+        if (classifySourceDomain(neighbor.source_file, rootPath) !== 'production') {
+          continue
+        }
+        if (isContractNode(neighbor)) {
+          pushSurfaceHint(surfaceSeen, contracts_and_public_surfaces, neighbor, 'contract', `Attachment stage pulled this nearby contract in from ${center.label} via ${relation}.`, rootPath, ['attach'])
+        } else if (isPublicSurfaceNode(neighbor)) {
+          pushSurfaceHint(surfaceSeen, contracts_and_public_surfaces, neighbor, 'public_surface', `Attachment stage pulled this nearby public surface in from ${center.label} via ${relation}.`, rootPath, ['attach'])
+        }
+      }
+    }
+  }
+
   return {
     contracts_and_public_surfaces: contracts_and_public_surfaces.slice(0, 6),
     existing_patterns: existing_patterns.slice(0, 5),
+  }
+}
+
+function retrievalPipeline(
+  retrieval: RetrieveResult,
+  workflowCentersValue: readonly ContextPackWorkflowCenter[],
+  likelyEditFiles: readonly ImplementationPackFileHint[],
+  likelyTestFiles: readonly ImplementationPackFileHint[],
+  contractsAndPublicSurfaces: readonly ImplementationPackSurfaceHint[],
+  existingPatterns: readonly ImplementationPackSurfaceHint[],
+  rootPath?: string,
+): ImplementationPackRetrievalPipeline {
+  const productionSeedCount = retrieval.matched_nodes.filter((node) => {
+    if (node.relevance_band === 'peripheral') {
+      return false
+    }
+    const sourceDomain = classifySourceDomain(node.source_file, rootPath)
+    return sourceDomain !== 'test' && sourceDomain !== 'docs' && sourceDomain !== 'build_artifact'
+  }).length
+  const expandedCenterCount = workflowCentersValue.filter((entry) => entry.phases?.includes('expand')).length
+
+  return {
+    phases: [
+      {
+        phase: 'seed',
+        summary: `Seed search matched ${productionSeedCount} production retrieval node${productionSeedCount === 1 ? '' : 's'}.`,
+      },
+      {
+        phase: 'expand',
+        summary: `Graph expansion added ${expandedCenterCount} promoted workflow candidate${expandedCenterCount === 1 ? '' : 's'} from structural neighbors.`,
+      },
+      {
+        phase: 'promote',
+        summary: `Workflow-center promotion ranked ${workflowCentersValue.length} owning file${workflowCentersValue.length === 1 ? '' : 's'} for the brief.`,
+      },
+      {
+        phase: 'attach',
+        summary: `Attachment linked ${likelyTestFiles.length} test file${likelyTestFiles.length === 1 ? '' : 's'} and ${contractsAndPublicSurfaces.length} contract/public surface file${contractsAndPublicSurfaces.length === 1 ? '' : 's'}.`,
+      },
+      {
+        phase: 'refine',
+        summary: `Refinement kept ${likelyEditFiles.length} edit file${likelyEditFiles.length === 1 ? '' : 's'}, ${likelyTestFiles.length} test file${likelyTestFiles.length === 1 ? '' : 's'}, and ${existingPatterns.length} supporting pattern${existingPatterns.length === 1 ? '' : 's'}.`,
+      },
+      {
+        phase: 'render',
+        summary: 'Pack Schema v1 renders the refined implementation guidance for downstream agents.',
+      },
+    ],
   }
 }
 
@@ -1060,6 +1315,7 @@ export function buildImplementationPackGuidance(
     entry.score,
     entry.why,
     entry.matched_symbols,
+    ['seed'],
   ))
   const likely_edit_files = mergeLikelyEditFiles(
     workflow_centers,
@@ -1071,9 +1327,24 @@ export function buildImplementationPackGuidance(
   )
   const likely_test_files = likelyTestFiles(graph, retrieval, likely_edit_files, rootPath, limit)
   const editPaths = new Set(likely_edit_files.map((entry) => entry.path))
-  const { contracts_and_public_surfaces, existing_patterns } = buildSurfaceHints(retrieval, editPaths, rootPath)
+  const { contracts_and_public_surfaces, existing_patterns } = buildSurfaceHints(
+    graph,
+    retrieval,
+    editPaths,
+    workflow_centers,
+    rootPath,
+  )
   const validation = validationCommands(rootPath, likely_test_files)
   const risk_boundaries: ImplementationPackRiskBoundary[] = risk.top_risks
+  const retrieval_pipeline = retrievalPipeline(
+    retrieval,
+    workflow_centers,
+    likely_edit_files,
+    likely_test_files,
+    contracts_and_public_surfaces,
+    existing_patterns,
+    rootPath,
+  )
   const summary = likely_edit_files[0]
     ? `Start with ${likely_edit_files[0].path}, then validate the highest-risk shared boundaries before finishing.`
     : risk.summary
@@ -1081,6 +1352,7 @@ export function buildImplementationPackGuidance(
 
   return {
     summary,
+    retrieval_pipeline,
     workflow_centers,
     likely_edit_files,
     likely_test_files,

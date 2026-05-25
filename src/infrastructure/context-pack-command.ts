@@ -419,6 +419,7 @@ function publicContracts(
       line_number: entry.line_number,
       kind: entry.kind,
       why: entry.why,
+      ...(entry.phases?.length ? { phases: entry.phases } : {}),
     })) ?? []
 }
 
@@ -540,6 +541,7 @@ function buildPackSchemaV1<TPack extends PackPayload>(
     likely_edit_files: response.implementation?.likely_edit_files ?? [],
     likely_test_files: response.implementation?.likely_test_files ?? [],
     public_contracts: contracts,
+    ...(response.implementation?.retrieval_pipeline ? { retrieval_pipeline: response.implementation.retrieval_pipeline } : {}),
     risk_boundaries: response.implementation?.risk_boundaries ?? [],
     validation_commands: response.implementation?.validation_commands ?? [],
     negative_guidance: guidance,
@@ -598,6 +600,10 @@ function riskBoundaryLines(schema: PackSchemaEnvelope): string[] {
   return schema.risk_boundaries.map((entry) => `- ${entry.label} [${entry.severity}]: ${entry.reason}`)
 }
 
+function retrievalPipelineLines(schema: PackSchemaEnvelope): string[] {
+  return schema.retrieval_pipeline?.phases.map((entry) => `- ${entry.phase}: ${entry.summary}`) ?? []
+}
+
 function renderPackSchemaText(schema: PackSchemaEnvelope): string {
   const lines = [
     'Pack Schema v1',
@@ -608,6 +614,8 @@ function renderPackSchemaText(schema: PackSchemaEnvelope): string {
     `Graph path: ${schema.graph_path}`,
     `Confidence score: ${schema.confidence_score.toFixed(2)}`,
     '',
+    ...renderTextSection('Workflow centers', workflowCenterLines(schema)),
+    ...renderTextSection('Retrieval pipeline', schema.retrieval_pipeline?.phases.map((entry) => `- ${entry.phase}: ${entry.summary}`) ?? []),
     ...renderTextSection('Workflow centers', workflowCenterLines(schema)),
     ...renderTextSection('Recommended first read', schema.recommended_first_read.map((entry) => formatFileHint(entry.path, entry.reason, entry.label))),
     ...renderTextSection('Likely edit files', schema.likely_edit_files.map((entry) => formatScoredFileHint(entry))),
@@ -633,6 +641,7 @@ function renderPackSchemaMarkdown(schema: PackSchemaEnvelope): string {
     `Graph path: ${schema.graph_path}`,
     `Confidence score: ${schema.confidence_score.toFixed(2)}`,
     '',
+    ...renderMarkdownSection('Retrieval pipeline', retrievalPipelineLines(schema)),
     ...renderMarkdownSection('Workflow centers', workflowCenterLines(schema)),
     ...renderMarkdownSection('Recommended first read', schema.recommended_first_read.map((entry) => formatFileHint(entry.path, entry.reason, entry.label))),
     ...renderMarkdownSection('Likely edit files', schema.likely_edit_files.map((entry) => formatScoredFileHint(entry))),
@@ -664,6 +673,7 @@ function renderClaudePack(schema: PackSchemaEnvelope): string {
       : ['- No first-read anchor was identified; begin with the workflow centers below.']),
     '- Do not start with a broad repo search. Use the listed files, contracts, and tests first.',
     '',
+    ...renderMarkdownSection('Retrieval pipeline', retrievalPipelineLines(schema)),
     ...renderMarkdownSection('Workflow centers', workflowCenterLines(schema)),
     ...renderMarkdownSection('Likely edit files', schema.likely_edit_files.map((entry) => formatScoredFileHint(entry))),
     ...renderMarkdownSection('Likely test files', schema.likely_test_files.map((entry) => formatScoredFileHint(entry))),
@@ -717,6 +727,7 @@ function renderCopilotPack(schema: PackSchemaEnvelope): string {
     `Confidence score: ${schema.confidence_score.toFixed(2)}`,
     '',
     ...renderMarkdownSection('Suggested plan', renderCopilotPlanSteps(schema)),
+    ...renderMarkdownSection('Retrieval pipeline', retrievalPipelineLines(schema)),
     ...renderMarkdownSection('Workflow centers', workflowCenterLines(schema)),
     ...renderMarkdownSection('Likely edit files', schema.likely_edit_files.map((entry) => formatScoredFileHint(entry))),
     ...renderMarkdownSection('Likely test files', schema.likely_test_files.map((entry) => formatScoredFileHint(entry))),

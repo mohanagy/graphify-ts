@@ -15,6 +15,7 @@ const PACK_QUALITY_FIXTURE_ORDER = [
   'monorepo-package-boundary',
   'source-test-adjacency',
   'noisy-helper-distractor',
+  'indirect-seed-workflow-owner',
 ] as const
 
 const PACK_QUALITY_FIXTURE_ROOT = resolve('tests/fixtures/pack-quality')
@@ -27,6 +28,7 @@ interface PackQualityFixtureManifest {
   expected_likely_test_files: string[]
   expected_validation_commands: string[]
   expected_negative_guidance: string[]
+  expected_retrieval_pipeline_phases?: string[]
 }
 
 interface PackSchemaPayload {
@@ -35,6 +37,9 @@ interface PackSchemaPayload {
   likely_test_files?: Array<{ path?: string }>
   validation_commands?: string[]
   negative_guidance?: string[]
+  retrieval_pipeline?: {
+    phases?: Array<{ phase?: string }>
+  }
 }
 
 export interface PackQualityFixtureRunResult {
@@ -102,6 +107,13 @@ function loadPackQualityFixture(name: string): PackQualityFixtureManifest {
   if ('budget' in parsed && parsed.budget !== undefined && typeof parsed.budget !== 'number') {
     problems.push('"budget" must be a number when provided')
   }
+  if (
+    'expected_retrieval_pipeline_phases' in parsed
+    && parsed.expected_retrieval_pipeline_phases !== undefined
+    && !Array.isArray(parsed.expected_retrieval_pipeline_phases)
+  ) {
+    problems.push('"expected_retrieval_pipeline_phases" must be an array when provided')
+  }
   for (const field of requiredArrayFields) {
     if (!Array.isArray(parsed[field])) {
       problems.push(`"${field}" must be an array`)
@@ -118,6 +130,9 @@ function loadPackQualityFixture(name: string): PackQualityFixtureManifest {
   const expectedLikelyTestFiles = parsed.expected_likely_test_files as string[]
   const expectedValidationCommands = parsed.expected_validation_commands as string[]
   const expectedNegativeGuidance = parsed.expected_negative_guidance as string[]
+  const expectedRetrievalPipelinePhases = Array.isArray(parsed.expected_retrieval_pipeline_phases)
+    ? parsed.expected_retrieval_pipeline_phases as string[]
+    : undefined
 
   return {
     prompt,
@@ -127,6 +142,7 @@ function loadPackQualityFixture(name: string): PackQualityFixtureManifest {
     expected_likely_test_files: expectedLikelyTestFiles,
     expected_validation_commands: expectedValidationCommands,
     expected_negative_guidance: expectedNegativeGuidance,
+    ...(expectedRetrievalPipelinePhases ? { expected_retrieval_pipeline_phases: expectedRetrievalPipelinePhases } : {}),
   }
 }
 
