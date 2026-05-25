@@ -728,6 +728,7 @@ function hasGroundedFirstRead(schema: PackSchemaEnvelope): boolean {
 function useDirectiveAdapterGuidance(schema: PackSchemaEnvelope): boolean {
   return schema.confidence_score >= ADAPTER_DIRECTIVE_CONFIDENCE_THRESHOLD
     && schema.missing_context.length === 0
+    && schema.missing_semantic.length === 0
     && hasGraphBackedWorkflowCenter(schema)
     && hasGroundedFirstRead(schema)
 }

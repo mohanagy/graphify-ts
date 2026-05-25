@@ -81,6 +81,27 @@ function highConfidenceCoverage(): ContextPackCoverage {
   }
 }
 
+function missingSemanticCoverage(): ContextPackCoverage {
+  return {
+    required_evidence: ['primary', 'structural'],
+    semantic_required: ['implementation', 'structure'],
+    semantic_optional: ['tests'],
+    entries: [
+      { evidence_class: 'primary', required: true, available_nodes: 1, selected_nodes: 1, status: 'covered' },
+      { evidence_class: 'structural', required: true, available_nodes: 1, selected_nodes: 1, status: 'covered' },
+    ],
+    semantic_entries: [
+      { category: 'implementation', label: 'implementation', required: true, available_nodes: 1, selected_nodes: 1, status: 'covered' },
+      { category: 'structure', label: 'structure', required: true, available_nodes: 1, selected_nodes: 0, status: 'missing' },
+      { category: 'tests', label: 'tests', required: false, available_nodes: 1, selected_nodes: 1, status: 'covered' },
+    ],
+    missing_required: [],
+    missing_semantic: ['structure'],
+    available_relationships: 1,
+    selected_relationships: 1,
+  }
+}
+
 function lowConfidenceImplementation(): ImplementationPackGuidance {
   return {
     summary: 'Evidence is partial, so the starting file still needs targeted verification.',
@@ -280,5 +301,22 @@ describe('context-pack adapter gating', () => {
     } as never, buildDependencies(buildRetrieval(coverage), buildCompactPack(coverage)))
 
     expect(output).toContain('Do not start with a broad repo search.')
+  })
+
+  it('suppresses claude anti-search guidance when required semantic coverage is still missing', async () => {
+    const coverage = missingSemanticCoverage()
+    buildImplementationPackGuidanceMock.mockReturnValue(highConfidenceImplementation())
+
+    const output = await runContextPackCommand({
+      prompt: 'Implement issue #312 by gating directive adapter wording on pack quality',
+      budget: 1800,
+      task: 'implement',
+      taskExplicit: true,
+      graphPath: 'out/graph.json',
+      format: 'claude',
+    } as never, buildDependencies(buildRetrieval(coverage), buildCompactPack(coverage)))
+
+    expect(output).not.toContain('Do not start with a broad repo search.')
+    expect(output).toContain('Use targeted verification to confirm the listed starting points before widening the search.')
   })
 })
