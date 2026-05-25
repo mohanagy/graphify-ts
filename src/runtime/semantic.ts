@@ -12,6 +12,7 @@ export interface SemanticRuntimeOptions {
 
 export const DEFAULT_SEMANTIC_MODEL = 'Xenova/all-MiniLM-L6-v2'
 export const DEFAULT_RERANK_MODEL = 'Xenova/ms-marco-MiniLM-L-6-v2'
+const OPTIONAL_TRANSFORMERS_PACKAGE = '@huggingface/transformers'
 
 type TransformerPipeline = (input: unknown, options?: Record<string, unknown>) => Promise<unknown>
 
@@ -109,12 +110,25 @@ async function loadPipeline(task: string, model: string): Promise<TransformerPip
       return await pipeline(task as Parameters<typeof pipeline>[0], model) as TransformerPipeline
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      if (isMissingOptionalTransformersDependency(message)) {
+        throw new Error(
+          `[madar] Semantic retrieval requires the optional package '${OPTIONAL_TRANSFORMERS_PACKAGE}'. Install it with \`npm install ${OPTIONAL_TRANSFORMERS_PACKAGE}\` and rerun with --semantic or --rerank.`,
+        )
+      }
       throw new Error(`[madar] Failed to load local ${task} model '${model}': ${message}`)
     }
   })()
 
   pipelineCache.set(cacheKey, pending)
   return pending
+}
+
+function isMissingOptionalTransformersDependency(message: string): boolean {
+  return (
+    message.includes(`Cannot find package '${OPTIONAL_TRANSFORMERS_PACKAGE}'`) ||
+    message.includes(`Cannot find module '${OPTIONAL_TRANSFORMERS_PACKAGE}'`) ||
+    (message.includes('ERR_MODULE_NOT_FOUND') && message.includes(OPTIONAL_TRANSFORMERS_PACKAGE))
+  )
 }
 
 function classificationScore(output: unknown): number {
