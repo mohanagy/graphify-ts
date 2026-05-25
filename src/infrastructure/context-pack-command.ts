@@ -588,7 +588,8 @@ function workflowCenterLines(schema: PackSchemaEnvelope): string[] {
       ? `${entry.path}${typeof entry.score === 'number' ? ` [${entry.score.toFixed(2)}]` : ''}`
       : entry.label
     const label = entry.path && entry.label !== entry.path ? ` (${entry.label})` : ''
-    return `- ${location}${label}: ${entry.reason}`
+    const reason = entry.reason || entry.reasons?.[0] || 'No workflow-center rationale was provided.'
+    return `- ${location}${label}: ${reason}`
   })
 }
 

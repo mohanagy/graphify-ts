@@ -996,7 +996,7 @@ describe('cli main', () => {
     expect(help).toContain('    --yes                 skip confirmation before running the paid benchmark/eval prompts')
     expect(help).toContain('eval [graph.json]')
     expect(help).toContain('compare [question]    run a real baseline vs madar prompt comparison')
-    expect(help).toContain('    --format MODE       json|markdown|claude|copilot (text alias accepted; default json)')
+    expect(help).toContain('    --format MODE       json|text|markdown|claude|copilot (default json)')
     expect(help).toContain('    --graph <path>        path to graph.json (default out/graph.json)')
     expect(help).toContain('    --exec TEMPLATE       required command template; supports {prompt_file}, {question}, {mode}, and {output_file}')
     expect(help).toContain('    --questions PATH      load questions from a JSON file instead of a positional question')

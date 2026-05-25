@@ -799,6 +799,7 @@ describe('context-pack-command', () => {
     expect(output).toContain('## Negative guidance')
     expect(output).toContain('## Why this pack')
     expect(output).toContain('Confidence score:')
+    expect(output).not.toContain(': undefined')
   })
 
   it('keeps the legacy text adapter output stable', async () => {
@@ -831,6 +832,7 @@ describe('context-pack-command', () => {
     expect(output).toContain('Validation commands')
     expect(output).not.toContain('# Pack Schema v1')
     expect(output).not.toContain('## Workflow centers')
+    expect(output).not.toContain(': undefined')
   })
 
   it('renders a claude adapter brief with direct execution guidance', async () => {
@@ -865,6 +867,7 @@ describe('context-pack-command', () => {
     expect(output).toContain('## Validation commands')
     expect(output).toContain('## Negative guidance')
     expect(output).toContain('## Why this pack')
+    expect(output).not.toContain(': undefined')
   })
 
   it('renders a copilot adapter brief with an implementation-oriented plan', async () => {
@@ -898,6 +901,7 @@ describe('context-pack-command', () => {
     expect(output).toContain('## Validation commands')
     expect(output).toContain('## Negative guidance')
     expect(output).toContain('## Why this pack')
+    expect(output).not.toContain(': undefined')
   })
 
   it('emits a compact deterministic review pack', async () => {
