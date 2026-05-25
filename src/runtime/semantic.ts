@@ -106,8 +106,10 @@ async function loadPipeline(task: string, model: string): Promise<TransformerPip
 
   const pending = (async () => {
     try {
-      const { pipeline } = await import('@huggingface/transformers')
-      return await pipeline(task as Parameters<typeof pipeline>[0], model) as TransformerPipeline
+      const transformersModule = await import(OPTIONAL_TRANSFORMERS_PACKAGE) as {
+        pipeline: (task: string, model: string) => Promise<TransformerPipeline>
+      }
+      return await transformersModule.pipeline(task, model)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       if (isMissingOptionalTransformersDependency(message)) {
