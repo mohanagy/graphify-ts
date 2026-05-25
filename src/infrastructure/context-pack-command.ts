@@ -419,6 +419,7 @@ function publicContracts(
       line_number: entry.line_number,
       kind: entry.kind,
       why: entry.why,
+      ...(entry.phases?.length ? { phases: entry.phases } : {}),
     })) ?? []
 }
 
@@ -540,6 +541,7 @@ function buildPackSchemaV1<TPack extends PackPayload>(
     likely_edit_files: response.implementation?.likely_edit_files ?? [],
     likely_test_files: response.implementation?.likely_test_files ?? [],
     public_contracts: contracts,
+    ...(response.implementation?.retrieval_pipeline ? { retrieval_pipeline: response.implementation.retrieval_pipeline } : {}),
     risk_boundaries: response.implementation?.risk_boundaries ?? [],
     validation_commands: response.implementation?.validation_commands ?? [],
     negative_guidance: guidance,
@@ -588,6 +590,7 @@ function renderPackSchemaText(schema: PackSchemaEnvelope): string {
       const label = entry.path && entry.label !== entry.path ? ` (${entry.label})` : ''
       return `- ${location}${label}: ${entry.reason}`
     })),
+    ...renderTextSection('Retrieval pipeline', schema.retrieval_pipeline?.phases.map((entry) => `- ${entry.phase}: ${entry.summary}`) ?? []),
     ...renderTextSection('Recommended first read', schema.recommended_first_read.map((entry) => formatFileHint(entry.path, entry.reason, entry.label))),
     ...renderTextSection('Likely edit files', schema.likely_edit_files.map((entry) => formatScoredFileHint(entry))),
     ...renderTextSection('Likely test files', schema.likely_test_files.map((entry) => formatScoredFileHint(entry))),

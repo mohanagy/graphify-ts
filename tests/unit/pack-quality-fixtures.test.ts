@@ -10,6 +10,7 @@ const EXPECTED_FIXTURES = [
   'monorepo-package-boundary',
   'source-test-adjacency',
   'noisy-helper-distractor',
+  'indirect-seed-workflow-owner',
 ] as const
 
 describe('pack-quality fixtures (#298)', () => {
@@ -38,6 +39,12 @@ describe('pack-quality fixtures (#298)', () => {
       if (result.fixture.expected_validation_commands.length > 0) {
         expect(result.payload.validation_commands).toEqual(
           expect.arrayContaining(result.fixture.expected_validation_commands),
+        )
+      }
+
+      if ((result.fixture.expected_retrieval_pipeline_phases?.length ?? 0) > 0) {
+        expect(result.payload.retrieval_pipeline?.phases?.map((entry) => entry.phase)).toEqual(
+          expect.arrayContaining(result.fixture.expected_retrieval_pipeline_phases ?? []),
         )
       }
 
