@@ -1,0 +1,28 @@
+{
+  "prompt": "normalize payment aging retry window",
+  "expected_workflow_centers": [
+    "src/core/workflow-runner.ts"
+  ],
+  "expected_likely_edit_files": [
+    "src/core/workflow-runner.ts"
+  ],
+  "expected_likely_test_files": [
+    "tests/unit/workflow-runner.test.ts"
+  ],
+  "expected_validation_commands": [
+    "npm run typecheck",
+    "npm run build",
+    "npm run test:run -- tests/unit/workflow-runner.test.ts"
+  ],
+  "expected_negative_guidance": [
+    "src/core/payment-aging-helper.ts"
+  ],
+  "expected_retrieval_pipeline_phases": [
+    "seed",
+    "expand",
+    "promote",
+    "attach",
+    "refine",
+    "render"
+  ]
+}

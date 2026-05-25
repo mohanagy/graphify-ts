@@ -173,12 +173,30 @@ export interface ContextPackRuntimeGenerationAnswerContract {
   confidence?: 'high' | 'medium' | 'low'
 }
 
+export type ImplementationPackPhase =
+  | 'seed'
+  | 'expand'
+  | 'promote'
+  | 'attach'
+  | 'refine'
+  | 'render'
+
+export interface ImplementationPackPipelinePhase {
+  phase: ImplementationPackPhase
+  summary: string
+}
+
+export interface ImplementationPackRetrievalPipeline {
+  phases: ImplementationPackPipelinePhase[]
+}
+
 export interface ImplementationPackFileHint {
   path: string
   score: number
   reason: string
   why?: string
   matched_symbols: string[]
+  phases?: ImplementationPackPhase[]
 }
 
 export interface ImplementationPackSurfaceHint {
@@ -187,6 +205,7 @@ export interface ImplementationPackSurfaceHint {
   line_number: number
   kind: 'contract' | 'public_surface' | 'pattern'
   why: string
+  phases?: ImplementationPackPhase[]
 }
 
 export interface ImplementationPackRiskBoundary {
@@ -205,6 +224,7 @@ export interface ImplementationPackRuntimeContext {
 
 export interface ImplementationPackGuidance {
   summary: string
+  retrieval_pipeline: ImplementationPackRetrievalPipeline
   workflow_centers: ContextPackWorkflowCenter[]
   likely_edit_files: ImplementationPackFileHint[]
   likely_test_files: ImplementationPackFileHint[]
@@ -225,6 +245,7 @@ export interface ContextPackWorkflowCenter {
   reasons?: string[]
   matched_symbols?: string[]
   reason: string
+  phases?: ImplementationPackPhase[]
 }
 
 export interface ContextPackRecommendedFirstRead {
@@ -239,6 +260,7 @@ export interface ContextPackPublicContract {
   line_number: number
   kind: 'contract' | 'public_surface'
   why: string
+  phases?: ImplementationPackPhase[]
 }
 
 export type ContextRepresentationType =
@@ -416,6 +438,7 @@ export interface ContextPackSchemaV1<TPack = unknown> {
   likely_edit_files: ImplementationPackFileHint[]
   likely_test_files: ImplementationPackFileHint[]
   public_contracts: ContextPackPublicContract[]
+  retrieval_pipeline?: ImplementationPackRetrievalPipeline
   risk_boundaries: ImplementationPackRiskBoundary[]
   validation_commands: string[]
   negative_guidance: string[]

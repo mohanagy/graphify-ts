@@ -679,6 +679,16 @@ describe('context-pack-command', () => {
       schema_version: 1,
       task: 'implement',
       task_intent: 'implement',
+      retrieval_pipeline: expect.objectContaining({
+        phases: [
+          expect.objectContaining({ phase: 'seed' }),
+          expect.objectContaining({ phase: 'expand' }),
+          expect.objectContaining({ phase: 'promote' }),
+          expect.objectContaining({ phase: 'attach' }),
+          expect.objectContaining({ phase: 'refine' }),
+          expect.objectContaining({ phase: 'render' }),
+        ],
+      }),
       workflow_centers: expect.arrayContaining([
         expect.objectContaining({
           label: expect.any(String),
@@ -693,7 +703,12 @@ describe('context-pack-command', () => {
         expect.objectContaining({ path: 'src/contracts/context-pack.ts' }),
       ]),
       likely_edit_files: expect.arrayContaining([
-        expect.objectContaining({ path: 'src/infrastructure/context-pack-command.ts', score: expect.any(Number), reason: expect.any(String) }),
+        expect.objectContaining({
+          path: 'src/infrastructure/context-pack-command.ts',
+          score: expect.any(Number),
+          reason: expect.any(String),
+          phases: expect.arrayContaining([expect.any(String)]),
+        }),
       ]),
       likely_test_files: expect.arrayContaining([
         expect.objectContaining({ path: 'tests/unit/context-pack-command.test.ts', score: expect.any(Number), reason: expect.any(String) }),
@@ -777,6 +792,7 @@ describe('context-pack-command', () => {
     expect(output).toContain('Workflow centers')
     expect(output).toContain('Recommended first read')
     expect(output).toContain('Likely edit files')
+    expect(output).toContain('Retrieval pipeline')
     expect(output).toContain('Validation commands')
     expect(output).toContain('Confidence score')
   })

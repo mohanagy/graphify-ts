@@ -106,6 +106,49 @@ function buildLikelyTargetsGraph() {
   return graph
 }
 
+function buildIndirectSeedExpansionGraph() {
+  const root = mkdtempSync(join(tmpdir(), 'madar-indirect-seed-'))
+  tempFixtureRoots.push(root)
+  writeFileSync(join(root, 'package.json'), JSON.stringify({
+    name: 'madar-indirect-seed-fixture',
+    private: true,
+    scripts: {
+      typecheck: 'tsc --noEmit',
+      build: 'tsc -p tsconfig.build.json',
+      'test:run': 'vitest run',
+    },
+  }))
+
+  const graph = build(
+    [
+      {
+        schema_version: 1,
+        nodes: [
+          { id: 'task_route', label: 'POST /tasks/apply', file_type: 'code', source_file: `${root}/src/http/task-routes.ts`, source_location: 'L10', node_kind: 'route', framework_role: 'express_route', community: 0 },
+          { id: 'task_controller', label: 'TaskController.handle', file_type: 'code', source_file: `${root}/src/core/task-controller.ts`, source_location: 'L20', node_kind: 'method', framework_role: 'nest_controller', community: 0 },
+          { id: 'workflow_runner', label: 'WorkflowRunner.run', file_type: 'code', source_file: `${root}/src/core/workflow-runner.ts`, source_location: 'L30', node_kind: 'method', framework_role: 'nest_provider', community: 1 },
+          { id: 'retry_helper', label: 'normalizePaymentAgingRetryWindow', file_type: 'code', source_file: `${root}/src/core/payment-aging-helper.ts`, source_location: 'L40', node_kind: 'function', community: 1 },
+          { id: 'retry_store', label: 'RetryLedger.store', file_type: 'code', source_file: `${root}/src/core/retry-ledger.ts`, source_location: 'L50', node_kind: 'method', community: 2 },
+          { id: 'retry_contract', label: 'RetryWindowConfig', file_type: 'code', source_file: `${root}/src/contracts/retry-window.ts`, source_location: 'L60', community: 3 },
+          { id: 'workflow_runner_test', label: 'WorkflowRunner.run.spec', file_type: 'code', source_file: `${root}/tests/unit/workflow-runner.test.ts`, source_location: 'L1', node_kind: 'function', community: 4 },
+        ],
+        edges: [
+          { source: 'task_route', target: 'task_controller', relation: 'controller_route', confidence: 'EXTRACTED', source_file: `${root}/src/http/task-routes.ts` },
+          { source: 'task_controller', target: 'workflow_runner', relation: 'calls', confidence: 'EXTRACTED', source_file: `${root}/src/core/task-controller.ts` },
+          { source: 'workflow_runner', target: 'retry_helper', relation: 'calls', confidence: 'EXTRACTED', source_file: `${root}/src/core/workflow-runner.ts` },
+          { source: 'workflow_runner', target: 'retry_store', relation: 'calls', confidence: 'EXTRACTED', source_file: `${root}/src/core/workflow-runner.ts` },
+          { source: 'workflow_runner', target: 'retry_contract', relation: 'depends_on', confidence: 'EXTRACTED', source_file: `${root}/src/core/workflow-runner.ts` },
+          { source: 'workflow_runner', target: 'workflow_runner_test', relation: 'covered_by', confidence: 'EXTRACTED', source_file: `${root}/src/core/workflow-runner.ts` },
+        ],
+      },
+    ],
+    { directed: true },
+  )
+
+  graph.graph.root_path = root
+  return graph
+}
+
 describe('buildImplementationPackGuidance workflow-center scoring (#295)', () => {
   it('ranks the workflow owner above a lexically stronger helper', () => {
     const graph = buildWorkflowCenterGraph()
@@ -195,6 +238,7 @@ describe('buildImplementationPackGuidance workflow-center scoring (#295)', () =>
     expect(guidance.workflow_centers[0]).toEqual(expect.objectContaining({
       label: 'InvoiceGenerationService.generateInvoice',
       path: 'src/invoices/generation-service.ts',
+      phases: expect.arrayContaining(['seed', 'expand', 'promote']),
       score: expect.any(Number),
       reasons: expect.arrayContaining([
         expect.stringMatching(/entry point|route|controller/i),
@@ -648,5 +692,84 @@ describe('buildImplementationPackGuidance likely edit/test targets (#296)', () =
     })
 
     expect(guidance.likely_edit_files.every((entry) => !entry.path.startsWith('tests/'))).toBe(true)
+  })
+})
+
+describe('buildImplementationPackGuidance search-expand-refine pipeline (#299)', () => {
+  it('tracks explicit pipeline phases when graph expansion promotes the workflow owner from an indirect seed', () => {
+    const graph = buildIndirectSeedExpansionGraph()
+    const retrieval = {
+      question: 'normalize payment aging retry window',
+      token_count: 90,
+      matched_nodes: [
+        {
+          node_id: 'retry_helper',
+          label: 'normalizePaymentAgingRetryWindow',
+          source_file: `${graph.graph.root_path}/src/core/payment-aging-helper.ts`,
+          line_number: 40,
+          node_kind: 'function',
+          file_type: 'code',
+          snippet: 'export function normalizePaymentAgingRetryWindow() {}',
+          match_score: 0.97,
+          relevance_band: 'direct' as const,
+          community: 1,
+          community_label: 'Task workflow',
+        },
+      ],
+      relationships: [],
+      community_context: [],
+      graph_signals: { god_nodes: [], bridge_nodes: [] },
+      claims: [],
+      expandable: [],
+      coverage: {
+        required_evidence: ['primary', 'supporting', 'structural'] as const,
+        semantic_required: ['implementation', 'structure'] as const,
+        semantic_optional: ['tests', 'contracts'] as const,
+        entries: [],
+        semantic_entries: [],
+        missing_required: [],
+        missing_semantic: [],
+        available_relationships: 0,
+        selected_relationships: 0,
+      },
+    } satisfies import('../../src/runtime/retrieve.js').RetrieveResult
+
+    const guidance = buildImplementationPackGuidance(graph, retrieval, {
+      budget: 2200,
+      taskIntent: 'implement',
+      limit: 5,
+    })
+
+    expect(guidance.retrieval_pipeline.phases.map((entry) => entry.phase)).toEqual([
+      'seed',
+      'expand',
+      'promote',
+      'attach',
+      'refine',
+      'render',
+    ])
+    expect(guidance.workflow_centers[0]).toEqual(expect.objectContaining({
+      path: 'src/core/workflow-runner.ts',
+      phases: expect.arrayContaining(['expand', 'promote']),
+      reason: expect.stringMatching(/expand|promot/i),
+    }))
+    expect(guidance.likely_edit_files[0]).toEqual(expect.objectContaining({
+      path: 'src/core/workflow-runner.ts',
+      phases: expect.arrayContaining(['expand', 'promote', 'attach', 'refine']),
+      reason: expect.stringMatching(/expand|promot/i),
+    }))
+    expect(guidance.contracts_and_public_surfaces).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        source_file: 'src/contracts/retry-window.ts',
+        kind: 'contract',
+        phases: expect.arrayContaining(['attach']),
+        why: expect.stringMatching(/attach|neighbor/i),
+      }),
+      expect.objectContaining({
+        source_file: 'src/core/task-controller.ts',
+        kind: 'public_surface',
+        phases: expect.arrayContaining(['attach']),
+      }),
+    ]))
   })
 })
