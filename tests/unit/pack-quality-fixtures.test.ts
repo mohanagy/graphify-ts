@@ -67,6 +67,17 @@ describe('pack-quality fixtures (#298)', () => {
     const result = await runPackQualityFixture('runtime-generation-explain-report-flow')
     const payload = result.payload as typeof result.payload & {
       recommended_first_read?: Array<{ path?: string }>
+      pack?: {
+        execution_slice?: {
+          steps?: Array<{ label?: string }>
+          phase_coverage?: {
+            expected?: string[]
+            observed?: string[]
+            missing?: string[]
+          }
+        }
+        matched_nodes?: Array<{ label?: string }>
+      }
     }
 
     expect(payload.workflow_centers?.map((entry) => entry.path)).toEqual(
@@ -94,5 +105,37 @@ describe('pack-quality fixtures (#298)', () => {
       expect.stringContaining('idea-report-status-message.helper.ts'),
       expect.stringContaining('idea-report-suggested-next-steps.helper.ts'),
     ]))
+    expect(payload.pack?.execution_slice?.steps?.map((entry) => entry.label)).toEqual(
+      expect.arrayContaining([
+        '.generateFromProblem()',
+        'startIdeaReportPipeline()',
+        'enqueueIdeaReportJob()',
+        '.process()',
+        'saveStructuredReport()',
+      ]),
+    )
+    expect(payload.pack?.execution_slice?.phase_coverage).toEqual(expect.objectContaining({
+      expected: expect.arrayContaining([
+        'planner',
+        'external_research_or_api',
+        'report_builder',
+        'persistence',
+      ]),
+      observed: expect.arrayContaining([
+        'planner',
+        'external_research_or_api',
+        'report_builder',
+        'persistence',
+      ]),
+      missing: [],
+    }))
+    expect(payload.pack?.matched_nodes?.map((entry) => entry.label)).toEqual(
+      expect.arrayContaining([
+        'planIdeaReport()',
+        'processIdeaReportSection()',
+        'assembleIdeaReport()',
+        'saveStructuredReport()',
+      ]),
+    )
   })
 })
