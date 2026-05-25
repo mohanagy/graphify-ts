@@ -146,6 +146,24 @@ function helperLikeFileContext(
   return HELPER_PATTERN.test([path, ...labelOrSymbols, reason ?? ''].join(' '))
 }
 
+function explicitlyTargetsPathOrSymbol(
+  question: string | undefined,
+  path: string,
+  symbols: readonly string[],
+): boolean {
+  if (!question) {
+    return false
+  }
+
+  const prompt = question.toLowerCase()
+  const normalizedPath = path.toLowerCase()
+  if (prompt.includes(normalizedPath) || prompt.includes(basename(normalizedPath))) {
+    return true
+  }
+
+  return symbols.some((symbol) => symbol.length > 0 && prompt.includes(symbol.toLowerCase()))
+}
+
 function addRankedFileCandidate(
   target: Map<string, RankedFileAccumulator>,
   path: string,
@@ -559,6 +577,7 @@ function mergeLikelyEditFiles(
   rootPath: string | undefined,
   allowTestFiles: boolean,
   limit: number,
+  question?: string,
 ): ImplementationPackFileHint[] {
   const results: ImplementationPackFileHint[] = []
   const seen = new Set<string>()
@@ -575,7 +594,9 @@ function mergeLikelyEditFiles(
       !center.path
       || seen.has(center.path)
       || (!allowTestFiles && classifySourceDomain(center.path, rootPath) === 'test')
-      || (hasNonHelperWorkflowCenter && helperLikeFileContext(center.path, [center.label, ...(center.matched_symbols ?? [])], center.reason))
+      || (hasNonHelperWorkflowCenter
+        && helperLikeFileContext(center.path, [center.label, ...(center.matched_symbols ?? [])], center.reason)
+        && !explicitlyTargetsPathOrSymbol(question, center.path, [center.label, ...(center.matched_symbols ?? [])]))
     ) {
       continue
     }
@@ -601,7 +622,9 @@ function mergeLikelyEditFiles(
     if (
       seen.has(entry.path)
       || (!allowTestFiles && classifySourceDomain(entry.path, rootPath) === 'test')
-      || (hasNonHelperWorkflowCenter && helperLikeFileContext(entry.path, entry.matched_symbols, entry.reason))
+      || (hasNonHelperWorkflowCenter
+        && helperLikeFileContext(entry.path, entry.matched_symbols, entry.reason)
+        && !explicitlyTargetsPathOrSymbol(question, entry.path, entry.matched_symbols))
     ) {
       continue
     }
@@ -1044,6 +1067,7 @@ export function buildImplementationPackGuidance(
     rootPath,
     allowTestFilesInEditSet,
     limit,
+    retrieval.question,
   )
   const likely_test_files = likelyTestFiles(graph, retrieval, likely_edit_files, rootPath, limit)
   const editPaths = new Set(likely_edit_files.map((entry) => entry.path))
