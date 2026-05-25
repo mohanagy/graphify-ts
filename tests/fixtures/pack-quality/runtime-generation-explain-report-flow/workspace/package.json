@@ -1,0 +1,10 @@
+{
+  "name": "pack-quality-runtime-generation-explain-report-flow",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "test:run": "vitest run"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "task": "explain",
+  "prompt": "How idea report is being generated",
+  "expected_workflow_centers": [
+    "src/modules/ideas/interface/http/idea-generation.controller.ts",
+    "src/modules/pipeline/api/pipeline-trigger.service.ts",
+    "src/modules/pipeline/api/queue-registry.service.ts",
+    "src/modules/pipeline/workers/orchestrator.worker.ts"
+  ],
+  "expected_likely_edit_files": [],
+  "expected_likely_test_files": [],
+  "expected_validation_commands": [],
+  "expected_negative_guidance": [
+    "idea-report-status-message.helper.ts",
+    "idea-report-suggested-next-steps.helper.ts"
+  ]
+}

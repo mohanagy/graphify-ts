@@ -16,11 +16,13 @@ const PACK_QUALITY_FIXTURE_ORDER = [
   'source-test-adjacency',
   'noisy-helper-distractor',
   'indirect-seed-workflow-owner',
+  'runtime-generation-explain-report-flow',
 ] as const
 
 const PACK_QUALITY_FIXTURE_ROOT = resolve('tests/fixtures/pack-quality')
 
 interface PackQualityFixtureManifest {
+  task?: 'implement' | 'explain'
   prompt: string
   budget?: number
   expected_workflow_centers: string[]
@@ -33,6 +35,7 @@ interface PackQualityFixtureManifest {
 
 interface PackSchemaPayload {
   workflow_centers?: Array<{ path?: string }>
+  recommended_first_read?: Array<{ path?: string }>
   likely_edit_files?: Array<{ path?: string }>
   likely_test_files?: Array<{ path?: string }>
   validation_commands?: string[]
@@ -104,6 +107,9 @@ function loadPackQualityFixture(name: string): PackQualityFixtureManifest {
   if (typeof parsed.prompt !== 'string' || parsed.prompt.trim().length === 0) {
     problems.push('"prompt" must be a non-empty string')
   }
+  if ('task' in parsed && parsed.task !== undefined && parsed.task !== 'implement' && parsed.task !== 'explain') {
+    problems.push('"task" must be either "implement" or "explain" when provided')
+  }
   if ('budget' in parsed && parsed.budget !== undefined && typeof parsed.budget !== 'number') {
     problems.push('"budget" must be a number when provided')
   }
@@ -135,6 +141,7 @@ function loadPackQualityFixture(name: string): PackQualityFixtureManifest {
     : undefined
 
   return {
+    ...(parsed.task === 'implement' || parsed.task === 'explain' ? { task: parsed.task } : {}),
     prompt,
     ...(typeof parsed.budget === 'number' ? { budget: parsed.budget } : {}),
     expected_workflow_centers: expectedWorkflowCenters,
@@ -152,6 +159,14 @@ function normalizePayload(payload: PackSchemaPayload): PackSchemaPayload {
     ...(payload.workflow_centers
       ? {
           workflow_centers: payload.workflow_centers.map((entry) => ({
+            ...entry,
+            ...(entry.path ? { path: normalizeAssertionPath(entry.path) } : {}),
+          })),
+        }
+      : {}),
+    ...(payload.recommended_first_read
+      ? {
+          recommended_first_read: payload.recommended_first_read.map((entry) => ({
             ...entry,
             ...(entry.path ? { path: normalizeAssertionPath(entry.path) } : {}),
           })),
@@ -194,7 +209,7 @@ export async function runPackQualityFixture(name: string): Promise<PackQualityFi
     const packOutput = await runContextPackCommand({
       prompt: fixture.prompt,
       budget: fixture.budget ?? 1800,
-      task: 'implement',
+      task: fixture.task ?? 'implement',
       taskExplicit: true,
       graphPath,
       format: 'json',
