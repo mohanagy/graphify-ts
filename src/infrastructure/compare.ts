@@ -1878,6 +1878,10 @@ export type NativeAgentRunStatus =
   | { kind: 'answer_only'; evidence: string | null; exit_code: number; stderr: string | null; result_path: string }
   | { kind: 'runner_error'; evidence: string | null; exit_code: number | null; stderr: string | null }
 
+export type NativeAgentTokenRegressionMetric =
+  | 'uncached_input_tokens'
+  | 'cache_creation_input_tokens'
+
 export interface NativeAgentCompareReport {
   baseline_mode: 'native_agent'
   question: string
@@ -1888,10 +1892,14 @@ export interface NativeAgentCompareReport {
   madar_trace?: CompareMadarTrace
   reductions: {
     input_tokens: number | null
+    uncached_input_tokens?: number | null
+    cache_creation_input_tokens?: number | null
     num_turns: number | null
     duration_ms: number | null
     cost_usd: number | null
   } | null
+  token_regression: boolean
+  token_regression_reasons: NativeAgentTokenRegressionMetric[]
   prompt_token_source: {
     baseline: 'anthropic_provider_reported' | 'unknown'
     madar: 'anthropic_provider_reported' | 'unknown'
@@ -2264,13 +2272,36 @@ function computeReduction(baseline: number, madar: number): number | null {
   return Number((baseline / madar).toFixed(2))
 }
 
+function relativeChangeFraction(baseline: number, madar: number): number | null {
+  if (baseline <= 0 || madar <= 0) {
+    return null
+  }
+  return Math.abs(madar - baseline) / baseline
+}
+
 function formatDirectionalDelta(
   baseline: number,
   madar: number,
   decreasedLabel: string,
   increasedLabel: string,
+  options: {
+    noMeaningfulChangeThreshold?: number
+    neutralLabel?: string
+  } = {},
 ): string {
-  if (baseline <= 0 || madar <= 0 || baseline === madar) {
+  if (baseline <= 0 || madar <= 0) {
+    return ''
+  }
+
+  if (
+    options.neutralLabel
+    && options.noMeaningfulChangeThreshold !== undefined
+    && (relativeChangeFraction(baseline, madar) ?? Number.POSITIVE_INFINITY) <= options.noMeaningfulChangeThreshold
+  ) {
+    return ` (${options.neutralLabel})`
+  }
+
+  if (baseline === madar) {
     return ''
   }
 
@@ -2279,6 +2310,44 @@ function formatDirectionalDelta(
   }
 
   return ` (${Number((madar / baseline).toFixed(2))}x ${increasedLabel})`
+}
+
+function collectTokenRegressionReasons(
+  baseline: Extract<NativeAgentRunStatus, { kind: 'succeeded' }>,
+  madar: Extract<NativeAgentRunStatus, { kind: 'succeeded' }>,
+): NativeAgentTokenRegressionMetric[] {
+  const reasons: NativeAgentTokenRegressionMetric[] = []
+  if (madar.uncached_input_tokens_anthropic_exact > baseline.uncached_input_tokens_anthropic_exact) {
+    reasons.push('uncached_input_tokens')
+  }
+  if (madar.usage.cache_creation_input_tokens > baseline.usage.cache_creation_input_tokens) {
+    reasons.push('cache_creation_input_tokens')
+  }
+  return reasons
+}
+
+function formatTokenRegressionMetric(
+  metric: NativeAgentTokenRegressionMetric,
+  baseline: Extract<NativeAgentRunStatus, { kind: 'succeeded' }>,
+  madar: Extract<NativeAgentRunStatus, { kind: 'succeeded' }>,
+): string {
+  if (metric === 'uncached_input_tokens') {
+    return `uncached_input_tokens baseline ${baseline.uncached_input_tokens_anthropic_exact} → madar ${madar.uncached_input_tokens_anthropic_exact}${formatDirectionalDelta(baseline.uncached_input_tokens_anthropic_exact, madar.uncached_input_tokens_anthropic_exact, 'less', 'more')}`
+  }
+
+  return `cache_creation_input_tokens baseline ${baseline.usage.cache_creation_input_tokens} → madar ${madar.usage.cache_creation_input_tokens}${formatDirectionalDelta(baseline.usage.cache_creation_input_tokens, madar.usage.cache_creation_input_tokens, 'less', 'more')}`
+}
+
+function formatTokenRegressionWarning(
+  baseline: Extract<NativeAgentRunStatus, { kind: 'succeeded' }>,
+  madar: Extract<NativeAgentRunStatus, { kind: 'succeeded' }>,
+  reasons: readonly NativeAgentTokenRegressionMetric[],
+): string | null {
+  if (reasons.length === 0) {
+    return null
+  }
+
+  return `WARNING: fresh-token regression — ${reasons.map((metric) => formatTokenRegressionMetric(metric, baseline, madar)).join('; ')}`
 }
 
 type NativeAgentComparableReport = NativeAgentCompareReport & {
@@ -2456,6 +2525,8 @@ export async function executeNativeAgentCompare(
       baseline: { kind: 'runner_error', evidence: null, exit_code: null, stderr: null },
       madar: { kind: 'runner_error', evidence: null, exit_code: null, stderr: null },
       reductions: null,
+      token_regression: false,
+      token_regression_reasons: [],
       prompt_token_source: {
         baseline: 'unknown',
         madar: 'unknown',
@@ -2635,6 +2706,8 @@ export async function executeNativeAgentCompare(
     if (reportShell.baseline.kind === 'succeeded' && reportShell.madar.kind === 'succeeded') {
       reportShell.reductions = {
         input_tokens: computeReduction(reportShell.baseline.total_input_tokens_anthropic_exact, reportShell.madar.total_input_tokens_anthropic_exact),
+        uncached_input_tokens: computeReduction(reportShell.baseline.uncached_input_tokens_anthropic_exact, reportShell.madar.uncached_input_tokens_anthropic_exact),
+        cache_creation_input_tokens: computeReduction(reportShell.baseline.usage.cache_creation_input_tokens, reportShell.madar.usage.cache_creation_input_tokens),
         num_turns: computeReduction(reportShell.baseline.num_turns, reportShell.madar.num_turns),
         duration_ms: computeReduction(reportShell.baseline.duration_ms, reportShell.madar.duration_ms),
         cost_usd:
@@ -2642,6 +2715,8 @@ export async function executeNativeAgentCompare(
             ? computeReduction(reportShell.baseline.total_cost_usd, reportShell.madar.total_cost_usd)
             : null,
       }
+      reportShell.token_regression_reasons = collectTokenRegressionReasons(reportShell.baseline, reportShell.madar)
+      reportShell.token_regression = reportShell.token_regression_reasons.length > 0
     }
     if (reportShell.provider_proof) {
       reportShell.provider_proof.reduction_basis =
@@ -2784,7 +2859,7 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
       `- "${report.question}"`,
       `    num_turns: baseline ${baseline.num_turns} → madar ${madar.num_turns}${formatDirectionalDelta(baseline.num_turns, madar.num_turns, 'fewer', 'more')}`,
       `    latency:   baseline ${baseline.duration_ms}ms → madar ${madar.duration_ms}ms${formatDirectionalDelta(baseline.duration_ms, madar.duration_ms, 'faster', 'slower')}`,
-      `    input_tokens (Anthropic-reported): baseline ${baseline.total_input_tokens_anthropic_exact} → madar ${madar.total_input_tokens_anthropic_exact}${formatDirectionalDelta(baseline.total_input_tokens_anthropic_exact, madar.total_input_tokens_anthropic_exact, 'less', 'more')}`,
+      `    input_tokens (Anthropic-reported): baseline ${baseline.total_input_tokens_anthropic_exact} → madar ${madar.total_input_tokens_anthropic_exact}${formatDirectionalDelta(baseline.total_input_tokens_anthropic_exact, madar.total_input_tokens_anthropic_exact, 'less', 'more', { noMeaningfulChangeThreshold: 0.1, neutralLabel: 'no meaningful change' })}`,
     )
     if (hasCacheActivity) {
       lines.push(
@@ -2792,6 +2867,15 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
         `    cache_creation_input_tokens (Anthropic-reported): baseline ${baseline.usage.cache_creation_input_tokens} → madar ${madar.usage.cache_creation_input_tokens}${formatDirectionalDelta(baseline.usage.cache_creation_input_tokens, madar.usage.cache_creation_input_tokens, 'less', 'more')}`,
         `    cache_read_input_tokens (Anthropic-reported): baseline ${baseline.usage.cache_read_input_tokens} → madar ${madar.usage.cache_read_input_tokens}${formatDirectionalDelta(baseline.usage.cache_read_input_tokens, madar.usage.cache_read_input_tokens, 'less', 'more')}`,
       )
+    }
+    const derivedTokenRegressionReasons = collectTokenRegressionReasons(baseline, madar)
+    const tokenRegressionReasons =
+      report.token_regression_reasons && report.token_regression_reasons.length > 0
+        ? report.token_regression_reasons
+        : derivedTokenRegressionReasons
+    const tokenRegressionWarning = formatTokenRegressionWarning(baseline, madar, tokenRegressionReasons)
+    if (tokenRegressionWarning) {
+      lines.push(`    ${tokenRegressionWarning}`)
     }
     if (report.answer_quality) {
       const baselineFindings = [

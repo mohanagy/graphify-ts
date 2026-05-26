@@ -75,6 +75,38 @@ const MADAR_USAGE_PAYLOAD = {
   },
 }
 
+const BASELINE_TOKEN_REGRESSION_PAYLOAD = {
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  duration_ms: 42000,
+  num_turns: 5,
+  result: 'baseline answer',
+  total_cost_usd: 0.62,
+  usage: {
+    input_tokens: 21144,
+    cache_creation_input_tokens: 43534,
+    cache_read_input_tokens: 324040,
+    output_tokens: 1200,
+  },
+}
+
+const MADAR_TOKEN_REGRESSION_PAYLOAD = {
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  duration_ms: 39000,
+  num_turns: 4,
+  result: 'madar answer',
+  total_cost_usd: 0.71,
+  usage: {
+    input_tokens: 18023,
+    cache_creation_input_tokens: 72305,
+    cache_read_input_tokens: 277531,
+    output_tokens: 1000,
+  },
+}
+
 function scriptedRunner(payloads: { baseline: unknown; madar: unknown }): NativeAgentRunner {
   return async (input) => ({
     exitCode: 0,
@@ -139,6 +171,8 @@ function buildSummaryResult(overrides: {
           result_path: '/tmp/project/madar.txt',
         },
         reductions: overrides.reductions,
+        token_regression: false,
+        token_regression_reasons: [],
         prompt_token_source: {
           baseline: 'anthropic_provider_reported',
           madar: 'anthropic_provider_reported',
@@ -277,6 +311,47 @@ describe('executeNativeAgentCompare', () => {
       // a usage block was present in the runner output.
       expect(report.prompt_token_source.baseline).toBe('anthropic_provider_reported')
       expect(report.prompt_token_source.madar).toBe('anthropic_provider_reported')
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('flags token regressions when fresh-token usage rises despite near-flat total input tokens', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'How idea report is being generated',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({
+            baseline: BASELINE_TOKEN_REGRESSION_PAYLOAD,
+            madar: MADAR_TOKEN_REGRESSION_PAYLOAD,
+          }),
+          now: () => new Date('2026-05-26T00:00:00Z'),
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport
+      const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+      const shareSafeReport = JSON.parse(readFileSync(report.paths.share_safe_report, 'utf8')) as Record<string, unknown>
+      const reductions = savedReport.reductions as Record<string, unknown>
+      const shareSafeReductions = shareSafeReport.reductions as Record<string, unknown>
+
+      expect(reductions.input_tokens).toBeCloseTo(1.06, 2)
+      expect(reductions.uncached_input_tokens).toBeCloseTo(0.72, 2)
+      expect(reductions.cache_creation_input_tokens).toBeCloseTo(0.6, 2)
+      expect(savedReport.token_regression).toBe(true)
+      expect(savedReport.token_regression_reasons).toEqual(expect.arrayContaining([
+        'uncached_input_tokens',
+        'cache_creation_input_tokens',
+      ]))
+      expect(shareSafeReductions.uncached_input_tokens).toBeCloseTo(0.72, 2)
+      expect(shareSafeReport.token_regression).toBe(true)
     } finally {
       rmSync(projectDir, { recursive: true, force: true })
     }
@@ -766,5 +841,42 @@ describe('formatNativeAgentCompareSummary', () => {
 
     expect(summary).toContain('madar_trace: reduced_exploration')
     expect(summary).toContain('1 context_pack call; 1 focused follow-up call; no broad exploration recorded')
+  })
+
+  it('warns when total input tokens show no meaningful change but fresh-token usage regresses', () => {
+    const result = buildSummaryResult({
+      question: 'regression honesty',
+      baselineTurns: 5,
+      madarTurns: 4,
+      baselineDurationMs: 42000,
+      madarDurationMs: 39000,
+      baselineInputTokens: 388718,
+      madarInputTokens: 367859,
+      reductions: {
+        num_turns: 1.25,
+        duration_ms: 1.08,
+        input_tokens: 1.06,
+        cost_usd: 0.87,
+      },
+    })
+    const report = result.reports[0]
+    if (!report || report.baseline.kind !== 'succeeded' || report.madar.kind !== 'succeeded') {
+      throw new Error('summary fixture should produce succeeded runs')
+    }
+    report.baseline.usage = BASELINE_TOKEN_REGRESSION_PAYLOAD.usage
+    report.baseline.total_input_tokens_anthropic_exact = 388718
+    report.baseline.uncached_input_tokens_anthropic_exact = 64678
+    report.baseline.cached_input_tokens_anthropic_exact = 324040
+    report.madar.usage = MADAR_TOKEN_REGRESSION_PAYLOAD.usage
+    report.madar.total_input_tokens_anthropic_exact = 367859
+    report.madar.uncached_input_tokens_anthropic_exact = 90328
+    report.madar.cached_input_tokens_anthropic_exact = 277531
+
+    const summary = formatNativeAgentCompareSummary(result)
+
+    expect(summary).toContain('input_tokens (Anthropic-reported): baseline 388718 → madar 367859 (no meaningful change)')
+    expect(summary).toContain('WARNING: fresh-token regression')
+    expect(summary).toContain('uncached_input_tokens')
+    expect(summary).toContain('cache_creation_input_tokens')
   })
 })
