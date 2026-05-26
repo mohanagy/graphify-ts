@@ -21,6 +21,13 @@ type GraphSummaryRuntimePath = {
   hops: number
 }
 
+type GraphSummarySourceDomainsStatus = {
+  source_domains_status?: string
+  source_domains_reason?: string
+  runtime_paths_status?: string
+  runtime_paths_reason?: string
+}
+
 function padIndex(index: number): string {
   return index.toString().padStart(2, '0')
 }
@@ -128,6 +135,110 @@ function makeManyRuntimePathsGraph(count = SUMMARY_ARRAY_CAP + 2): KnowledgeGrap
   return graph
 }
 
+function makeBidirectionalRuntimePipelineGraph(): KnowledgeGraph {
+  const graph = new KnowledgeGraph(true)
+
+  graph.addNode('route', {
+    label: 'IdeasController.generate',
+    source_file: 'src/ideas/controller.ts',
+    source_location: 'L1',
+    file_type: 'code',
+    community: 0,
+    framework_role: 'nest_controller',
+  })
+  graph.addNode('service', {
+    label: 'IdeasService.generate',
+    source_file: 'src/ideas/service.ts',
+    source_location: 'L1',
+    file_type: 'code',
+    community: 0,
+    framework_role: 'service',
+  })
+  graph.addNode('queue', {
+    label: 'QueueRegistry.addJob',
+    source_file: 'src/pipeline/queue.ts',
+    source_location: 'L1',
+    file_type: 'code',
+    community: 0,
+    framework_role: 'queue',
+  })
+  graph.addNode('worker', {
+    label: 'OrchestratorWorker.process',
+    source_file: 'src/pipeline/worker.ts',
+    source_location: 'L1',
+    file_type: 'code',
+    community: 0,
+    framework_role: 'worker',
+  })
+  graph.addNode('persist', {
+    label: 'ReportRepository.save',
+    source_file: 'src/reports/repo.ts',
+    source_location: 'L1',
+    file_type: 'code',
+    community: 0,
+    framework_role: 'repository',
+  })
+
+  graph.addEdge('route', 'service', {
+    relation: 'calls',
+    confidence: 'EXTRACTED',
+    source_file: 'src/ideas/controller.ts',
+  })
+  graph.addEdge('service', 'queue', {
+    relation: 'calls',
+    confidence: 'EXTRACTED',
+    source_file: 'src/ideas/service.ts',
+  })
+  graph.addEdge('queue', 'worker', {
+    relation: 'enqueues_job',
+    confidence: 'EXTRACTED',
+    source_file: 'src/pipeline/queue.ts',
+  })
+  graph.addEdge('worker', 'persist', {
+    relation: 'calls',
+    confidence: 'EXTRACTED',
+    source_file: 'src/pipeline/worker.ts',
+  })
+
+  // Simulate the bidirectional call overlays seen in realistic backend graphs.
+  graph.addEdge('service', 'route', {
+    relation: 'calls',
+    confidence: 'EXTRACTED',
+    source_file: 'src/ideas/service.ts',
+  })
+  graph.addEdge('queue', 'service', {
+    relation: 'calls',
+    confidence: 'EXTRACTED',
+    source_file: 'src/pipeline/queue.ts',
+  })
+  graph.addEdge('worker', 'queue', {
+    relation: 'calls',
+    confidence: 'EXTRACTED',
+    source_file: 'src/pipeline/worker.ts',
+  })
+  graph.addEdge('persist', 'worker', {
+    relation: 'calls',
+    confidence: 'EXTRACTED',
+    source_file: 'src/reports/repo.ts',
+  })
+
+  return graph
+}
+
+function makeNoRuntimePathGraph(): KnowledgeGraph {
+  const graph = new KnowledgeGraph(true)
+
+  graph.addNode('isolated', {
+    label: 'IdeaTitleFormatter',
+    source_file: 'src/ideas/title-formatter.ts',
+    source_location: 'L1',
+    file_type: 'code',
+    community: 0,
+  })
+
+  return graph
+}
+
 describe('buildGraphSummary', () => {
   it('returns correct structural counts', () => {
     const graph = makeRichGraph()
@@ -175,6 +286,15 @@ describe('buildGraphSummary', () => {
     })
     // No unknown or spurious domains
     expect(Object.keys(summary.source_domains).sort()).toEqual(['docs', 'production', 'test'])
+  })
+
+  it('explains when source-domain tags are unavailable instead of silently returning an empty object', () => {
+    const graph = makeBidirectionalRuntimePipelineGraph()
+    const summary = buildGraphSummary(graph) as ReturnType<typeof buildGraphSummary> & GraphSummarySourceDomainsStatus
+
+    expect(summary.source_domains).toEqual({})
+    expect(summary.source_domains_status).toBe('not_detected')
+    expect(summary.source_domains_reason).toMatch(/source_domain/i)
   })
 
   it('returns top_modules ordered by degree descending', () => {
@@ -437,6 +557,28 @@ describe('buildGraphSummary', () => {
       { from: 'ZQueueRoute', to: 'QueueWorker', hops: 2 },
       { from: 'AHelperEntry', to: 'AHelperTerminal', hops: 1 },
     ])
+  })
+
+  it('keeps queue-backed runtime paths detectable even when reverse runtime edges exist', () => {
+    const graph = makeBidirectionalRuntimePipelineGraph()
+    const summary = buildGraphSummary(graph)
+
+    expect(summary.runtime_paths).toEqual([
+      {
+        from: 'IdeasController.generate',
+        to: 'ReportRepository.save',
+        hops: 4,
+      },
+    ])
+  })
+
+  it('explains empty runtime_paths when no bounded runtime path is detected', () => {
+    const graph = makeNoRuntimePathGraph()
+    const summary = buildGraphSummary(graph) as ReturnType<typeof buildGraphSummary> & GraphSummarySourceDomainsStatus
+
+    expect(summary.runtime_paths).toEqual([])
+    expect(summary.runtime_paths_status).toBe('not_detected')
+    expect(summary.runtime_paths_reason).toMatch(/runtime path/i)
   })
 
   it('keeps distinct runtime paths when labels contain control characters', () => {

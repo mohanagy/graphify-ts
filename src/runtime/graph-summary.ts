@@ -45,10 +45,14 @@ export interface GraphSummary {
   file_count: number
   community_count: number
   source_domains: Record<string, number>
+  source_domains_status?: 'not_detected'
+  source_domains_reason?: string
   frameworks: string[]
   top_modules: GraphSummaryTopModule[]
   entrypoints: GraphSummaryEntrypoint[]
   runtime_paths: GraphSummaryRuntimePath[]
+  runtime_paths_status?: 'not_detected'
+  runtime_paths_reason?: string
 }
 
 type NodeSummary = {
@@ -451,7 +455,15 @@ function runtimePaths(graph: KnowledgeGraph, nodes: readonly NodeSummary[]): Gra
     const traversals = bestRuntimeTraversals(graph, start, runtimeNodeIds, nodeMap)
     const terminals = [...traversals.entries()]
       .filter(([nodeId, traversal]) => nodeId !== start.id && traversal.hops > 0)
-      .filter(([nodeId]) => graph.successors(nodeId).filter((neighbor) => runtimeNodeIds.has(neighbor)).length === 0)
+      .filter(([nodeId, traversal]) => graph.successors(nodeId)
+        .filter((neighbor) => runtimeNodeIds.has(neighbor))
+        .some((neighbor) => {
+          const neighborTraversal = traversals.get(neighbor)
+          if (!neighborTraversal || neighborTraversal.hops <= traversal.hops) {
+            return false
+          }
+          return relationQualityScore(graph.edgeAttributes(nodeId, neighbor).relation) > 0
+        }) === false)
       .map(([nodeId, traversal]) => ({
         node: nodeMap.get(nodeId),
         traversal,
@@ -484,16 +496,28 @@ export function buildGraphSummary(graph: KnowledgeGraph): GraphSummary {
   const communityLabels = communityLabelsFromGraph(graph, communities)
   const nodes = buildNodeSummaries(graph, communityLabels)
   const fileCount = new Set(nodes.map((node) => node.sourceFile).filter((sourceFile) => sourceFile.length > 0)).size
+  const sourceDomains = collectSourceDomains(graph)
+  const runtimePathsSummary = runtimePaths(graph, nodes)
   const summary: GraphSummary = {
     node_count: graph.numberOfNodes(),
     edge_count: graph.numberOfEdges(),
     file_count: fileCount,
     community_count: Object.keys(communities).length,
-    source_domains: collectSourceDomains(graph),
+    source_domains: sourceDomains,
     frameworks: collectFrameworks(graph),
     top_modules: topModules(nodes),
     entrypoints: entrypoints(graph, nodes),
-    runtime_paths: runtimePaths(graph, nodes),
+    runtime_paths: runtimePathsSummary,
+  }
+
+  if (Object.keys(sourceDomains).length === 0) {
+    summary.source_domains_status = 'not_detected'
+    summary.source_domains_reason = 'No source_domain tags were present on graph nodes.'
+  }
+
+  if (runtimePathsSummary.length === 0) {
+    summary.runtime_paths_status = 'not_detected'
+    summary.runtime_paths_reason = 'No bounded runtime path was detected from the current summary heuristics.'
   }
 
   const graphVersion = normalizeString(graph.graph.graph_version)
