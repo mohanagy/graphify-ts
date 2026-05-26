@@ -549,6 +549,7 @@ describe('cli parser', () => {
       questionsPath: null,
       outputDir: resolve('out/compare'),
       baselineMode: 'full',
+      allowNoInstall: false,
       yes: false,
       limit: null,
     })
@@ -560,6 +561,7 @@ describe('cli parser', () => {
       questionsPath: 'benchmark-questions.json',
       outputDir: resolve('out/compare'),
       baselineMode: 'full',
+      allowNoInstall: false,
       yes: false,
       limit: null,
     })
@@ -577,6 +579,7 @@ describe('cli parser', () => {
         'out/compare/custom',
         '--baseline-mode',
         'bounded',
+        '--allow-no-install',
         '--yes',
         '--limit',
         '5',
@@ -588,6 +591,7 @@ describe('cli parser', () => {
       questionsPath: null,
       outputDir: resolve('out/compare/custom'),
       baselineMode: 'bounded',
+      allowNoInstall: true,
       yes: true,
       limit: 5,
     })
@@ -609,6 +613,7 @@ describe('cli parser', () => {
       questionsPath: null,
       outputDir: resolve('out/compare'),
       baselineMode: 'pack_only',
+      allowNoInstall: false,
       yes: false,
       limit: null,
     })
@@ -629,6 +634,7 @@ describe('cli parser', () => {
     questionsPath: null,
     outputDir: resolve('out/compare'),
     baselineMode: 'full',
+    allowNoInstall: false,
     yes: false,
     limit: null,
     why: true,
@@ -1128,6 +1134,7 @@ describe('cli main', () => {
       questionsPath: 'benchmark-questions.json',
       outputDir: resolve('out/compare/custom'),
       baselineMode: 'bounded',
+      allowNoInstall: false,
       yes: true,
       limit: 5,
       why: true,

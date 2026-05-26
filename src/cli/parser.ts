@@ -105,6 +105,7 @@ export interface CompareCliOptions {
   questionsPath: string | null
   outputDir: string
   baselineMode: 'full' | 'bounded' | 'pack_only' | 'native_agent'
+  allowNoInstall: boolean
   yes: boolean
   limit: number | null
   why?: boolean
@@ -1075,6 +1076,7 @@ export function parseCompareArgs(args: string[]): CompareCliOptions {
   let questionsPath: string | null = null
   let outputDir = 'out/compare'
   let baselineMode: 'full' | 'bounded' | 'pack_only' | 'native_agent' = 'full'
+  let allowNoInstall = false
   let yes = false
   let limit: number | null = null
   let why = false
@@ -1166,6 +1168,11 @@ export function parseCompareArgs(args: string[]): CompareCliOptions {
       continue
     }
 
+    if (argument === '--allow-no-install') {
+      allowNoInstall = true
+      continue
+    }
+
     if (argument === '--limit') {
       limit = parsePositiveDecimalInteger('--limit', requireOptionValue('--limit', args[index + 1]))
       index += 1
@@ -1202,7 +1209,18 @@ export function parseCompareArgs(args: string[]): CompareCliOptions {
 
   outputDir = validateGraphOutputPath(outputDir)
 
-  return { question, graphPath, execTemplate, questionsPath, outputDir, baselineMode, yes, limit, ...(why ? { why: true } : {}) }
+  return {
+    question,
+    graphPath,
+    execTemplate,
+    questionsPath,
+    outputDir,
+    baselineMode,
+    allowNoInstall,
+    yes,
+    limit,
+    ...(why ? { why: true } : {}),
+  }
 }
 
 export function parseReviewCompareArgs(args: string[]): ReviewCompareCliOptions {

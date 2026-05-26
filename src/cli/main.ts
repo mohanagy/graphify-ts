@@ -4,7 +4,7 @@ import { createInterface } from 'node:readline/promises'
 import { loadBenchmarkQuestions, type BenchmarkResult, printBenchmark, runBenchmark } from '../infrastructure/benchmark.js'
 import { runBenchmarkSuite } from '../infrastructure/benchmark/suite.js'
 import { evaluateRetrievalQuality, formatQualityReport } from '../infrastructure/benchmark/quality.js'
-import { runCompareCommand } from '../infrastructure/compare.js'
+import { NativeAgentInstallRequiredError, runCompareCommand } from '../infrastructure/compare.js'
 import { runContextPackCommand } from '../infrastructure/context-pack-command.js'
 import { runContextPromptCommand } from '../infrastructure/context-prompt-command.js'
 import { runDoctorCommand, runStatusCommand } from '../infrastructure/doctor.js'
@@ -191,16 +191,24 @@ const DEFAULT_DEPENDENCIES: CliDependencies = {
     return formatQualityReport(report)
   },
   runCompare: async ({ options }) => {
-    return await runCompareCommand({
-      graphPath: options.graphPath,
-      question: options.question,
-      questionsPath: options.questionsPath,
-      outputDir: options.outputDir,
-      execTemplate: options.execTemplate,
-      baselineMode: options.baselineMode,
-      limit: options.limit,
-      ...(options.why ? { why: true } : {}),
-    })
+    try {
+      return await runCompareCommand({
+        graphPath: options.graphPath,
+        question: options.question,
+        questionsPath: options.questionsPath,
+        outputDir: options.outputDir,
+        execTemplate: options.execTemplate,
+        baselineMode: options.baselineMode,
+        allowNoInstall: options.allowNoInstall,
+        limit: options.limit,
+        ...(options.why ? { why: true } : {}),
+      })
+    } catch (error) {
+      if (error instanceof NativeAgentInstallRequiredError) {
+        throw new UsageError(error.message)
+      }
+      throw error
+    }
   },
   runReviewCompare: async ({ options }) => {
     return await runReviewCompareCommand({
