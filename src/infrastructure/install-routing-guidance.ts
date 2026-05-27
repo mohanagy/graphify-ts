@@ -69,13 +69,13 @@ const CODEX_ROUTING_ROWS: RoutingRow[] = [
     promptType: '"which files should I open first"',
     markdownTarget: '`relevant_files` when MCP graph tools are available; otherwise `madar pack "<task or question>" --task explain`',
     plainPromptType: '"which files should I open first?"',
-    plainTarget: 'relevant_files when MCP graph tools are available',
+    plainTarget: 'relevant_files when MCP graph tools are available; otherwise madar pack "<task or question>" --task explain',
   },
   {
     promptType: '"give me a repo overview"',
     markdownTarget: '`graph_summary` when MCP graph tools are available; otherwise `madar pack "<task or question>" --task explain`',
     plainPromptType: '"give me a repo overview?"',
-    plainTarget: 'graph_summary when MCP graph tools are available',
+    plainTarget: 'graph_summary when MCP graph tools are available; otherwise madar pack "<task or question>" --task explain',
   },
 ]
 

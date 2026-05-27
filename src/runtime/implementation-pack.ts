@@ -1025,7 +1025,10 @@ function retrieveMatchedNodeFromGraph(
     node_id: nodeId,
     label: String(attributes.label ?? nodeId),
     source_file: String(attributes.source_file ?? ''),
-    line_number: lineNumberFromSourceLocation(String(attributes.source_location ?? '')),
+    line_number:
+      typeof attributes.line_number === 'number' && Number.isFinite(attributes.line_number)
+        ? attributes.line_number
+        : lineNumberFromSourceLocation(String(attributes.source_location ?? '')),
     node_kind: String(attributes.node_kind ?? ''),
     framework_role: typeof attributes.framework_role === 'string' ? attributes.framework_role : undefined,
     file_type: String(attributes.file_type ?? 'code'),

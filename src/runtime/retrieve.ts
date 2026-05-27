@@ -576,9 +576,11 @@ export function withRetrieveSnippetBudget(
   options: RetrieveSnippetOptions = {},
 ): RetrieveResult {
   const shapedNodes = applyRetrieveSnippetBudgetToNodes(result.matched_nodes, options)
+  const baseNodeTokenCount = tokenCountForMatchedNodes(result.matched_nodes)
+  const shapedNodeTokenCount = tokenCountForMatchedNodes(shapedNodes.nodes)
   return {
     ...result,
-    token_count: tokenCountForMatchedNodes(shapedNodes.nodes),
+    token_count: Math.max(0, result.token_count - baseNodeTokenCount + shapedNodeTokenCount),
     matched_nodes: shapedNodes.nodes as RetrieveMatchedNode[],
     snippet_budget_tokens_used: shapedNodes.usedTokens,
     snippet_budget_tokens_remaining: shapedNodes.remainingTokens,
@@ -4593,13 +4595,18 @@ export function compactRetrieveResult(result: RetrieveResult, options: RetrieveS
         ...(Number.isFinite(compactFrameworkLimit) ? { max_nodes: compactFrameworkLimit } : {}),
       })
   const shapedNodes = applyRetrieveSnippetBudgetToNodes(compactPack.nodes, options)
+  const compactPackNodeTokenCount = compactPack.nodes.reduce(
+    (total, node) => total + estimateRetrieveEntryTokens(node.label, node.source_file, node.line_number, node.snippet ?? null),
+    0,
+  )
+  const shapedNodeTokenCount = shapedNodes.nodes.reduce(
+    (total, node) => total + estimateRetrieveEntryTokens(node.label, node.source_file, node.line_number, node.snippet ?? null),
+    0,
+  )
 
   return {
     question: result.question,
-    token_count: shapedNodes.nodes.reduce(
-      (total, node) => total + estimateRetrieveEntryTokens(node.label, node.source_file, node.line_number, node.snippet ?? null),
-      0,
-    ),
+    token_count: Math.max(0, compactPack.token_count - compactPackNodeTokenCount + shapedNodeTokenCount),
     matched_nodes: shapedNodes.nodes.map(({ evidence_class: _evidenceClass, ...node }) => node as CompactRetrieveMatchedNode),
     relationships: compactPack.relationships,
     community_context: compactPack.community_context,

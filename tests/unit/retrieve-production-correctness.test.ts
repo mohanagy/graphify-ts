@@ -468,14 +468,6 @@ describe('retrieveContext production retrieval regressions', () => {
     ]))
     expect(compact.execution_slice?.status).toBe('partial')
     expect(compact.execution_slice?.phase_coverage).toEqual(expect.objectContaining({
-      observed: expect.not.arrayContaining([
-        'external_research_or_api',
-        'report_builder',
-        'scoring',
-        'quality_gate',
-        'renderer_or_synthesis',
-        'persistence',
-      ]),
       missing: expect.arrayContaining([
         'external_research_or_api',
         'report_builder',
@@ -485,6 +477,12 @@ describe('retrieveContext production retrieval regressions', () => {
         'persistence',
       ]),
     }))
+    expect(compact.execution_slice?.phase_coverage?.observed).not.toContain('external_research_or_api')
+    expect(compact.execution_slice?.phase_coverage?.observed).not.toContain('report_builder')
+    expect(compact.execution_slice?.phase_coverage?.observed).not.toContain('scoring')
+    expect(compact.execution_slice?.phase_coverage?.observed).not.toContain('quality_gate')
+    expect(compact.execution_slice?.phase_coverage?.observed).not.toContain('renderer_or_synthesis')
+    expect(compact.execution_slice?.phase_coverage?.observed).not.toContain('persistence')
     expect(compact.answer_contract).toEqual(expect.objectContaining({
       observed_phases: compact.execution_slice?.phase_coverage?.observed,
       missing_phases: compact.execution_slice?.phase_coverage?.missing,

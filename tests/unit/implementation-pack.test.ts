@@ -129,7 +129,7 @@ function buildIndirectSeedExpansionGraph() {
           { id: 'workflow_runner', label: 'WorkflowRunner.run', file_type: 'code', source_file: `${root}/src/core/workflow-runner.ts`, source_location: 'L30', node_kind: 'method', framework_role: 'nest_provider', community: 1 },
           { id: 'retry_helper', label: 'normalizePaymentAgingRetryWindow', file_type: 'code', source_file: `${root}/src/core/payment-aging-helper.ts`, source_location: 'L40', node_kind: 'function', community: 1 },
           { id: 'retry_store', label: 'RetryLedger.store', file_type: 'code', source_file: `${root}/src/core/retry-ledger.ts`, source_location: 'L50', node_kind: 'method', community: 2 },
-          { id: 'retry_contract', label: 'RetryWindowConfig', file_type: 'code', source_file: `${root}/src/contracts/retry-window.ts`, source_location: 'L60', community: 3 },
+          { id: 'retry_contract', label: 'RetryWindowConfig', file_type: 'code', source_file: `${root}/src/contracts/retry-window.ts`, line_number: 60, community: 3 },
           { id: 'workflow_runner_test', label: 'WorkflowRunner.run.spec', file_type: 'code', source_file: `${root}/tests/unit/workflow-runner.test.ts`, source_location: 'L1', node_kind: 'function', community: 4 },
         ],
         edges: [
@@ -761,6 +761,7 @@ describe('buildImplementationPackGuidance search-expand-refine pipeline (#299)',
     expect(guidance.contracts_and_public_surfaces).toEqual(expect.arrayContaining([
       expect.objectContaining({
         source_file: 'src/contracts/retry-window.ts',
+        line_number: 60,
         kind: 'contract',
         phases: expect.arrayContaining(['attach']),
         why: expect.stringMatching(/attach|neighbor/i),

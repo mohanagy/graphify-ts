@@ -195,6 +195,11 @@ export function listPackQualityFixtures(): string[] {
   const fixtureNames = readdirSync(PACK_QUALITY_FIXTURE_ROOT, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
+  const unlistedFixtures = fixtureNames.filter((name) => !PACK_QUALITY_FIXTURE_ORDER.includes(name as typeof PACK_QUALITY_FIXTURE_ORDER[number]))
+
+  if (unlistedFixtures.length > 0) {
+    throw new Error(`Found unlisted pack-quality fixture directories: ${unlistedFixtures.sort((left, right) => left.localeCompare(right)).join(', ')}`)
+  }
 
   return PACK_QUALITY_FIXTURE_ORDER.filter((name) =>
     fixtureNames.includes(name) && existsSync(fixtureManifestPath(name)) && existsSync(fixtureWorkspaceRoot(name)))

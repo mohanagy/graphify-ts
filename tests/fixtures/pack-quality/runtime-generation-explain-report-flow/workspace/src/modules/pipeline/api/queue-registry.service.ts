@@ -10,7 +10,7 @@ class PipelineQueue {
     input: PipelineJobPayload,
   ): Promise<{ id: string }> {
     return {
-      id: `${input.userId}:${input.problem}:${input.ideaId}:${jobName}`,
+      id: `${jobName}:${input.ideaId}`,
     }
   }
 }

@@ -312,6 +312,17 @@ function execTemplateForWorkspace(execTemplate: string, workspaceRoot: string): 
   return `cd ${shellQuote(workspaceRoot)} && ${execTemplate}`
 }
 
+function prepareBenchmarkWorkspace(
+  repo: BenchmarkSuiteRepo,
+  runGenerateGraph: (rootPath?: string, options?: GenerateGraphOptions) => GenerateGraphResult,
+  scratchRoot: string,
+  kind: 'legacy' | 'spi',
+): string {
+  const workspaceRoot = join(scratchRoot, kind)
+  copyWorkspace(repo.path, workspaceRoot)
+  return runGenerateGraph(workspaceRoot, kind === 'spi' ? { noHtml: true, useSpi: true } : { noHtml: true }).graphPath
+}
+
 function median(values: number[]): number | null {
   if (values.length === 0) {
     return null
@@ -606,19 +617,15 @@ export async function runBenchmarkSuite(
       const scratchRoot = mkdtempSync(join(tmpdir(), `madar-bench-suite-${repo.id}-`))
       scratchRoots.push(scratchRoot)
 
-      const legacyWorkspace = join(scratchRoot, 'legacy')
-      copyWorkspace(repo.path, legacyWorkspace)
-      const legacyResult = runGenerateGraph(legacyWorkspace, { noHtml: true })
+      const legacyResultGraphPath = prepareBenchmarkWorkspace(repo, runGenerateGraph, scratchRoot, 'legacy')
 
       let spiGraphPath: string | null = null
       if (repo.supportsSpi) {
-        const spiWorkspace = join(scratchRoot, 'spi')
-        copyWorkspace(repo.path, spiWorkspace)
-        spiGraphPath = runGenerateGraph(spiWorkspace, { noHtml: true, useSpi: true }).graphPath
+        spiGraphPath = prepareBenchmarkWorkspace(repo, runGenerateGraph, scratchRoot, 'spi')
       }
 
       preparedRepos.set(repo.id, {
-        legacyGraphPath: legacyResult.graphPath,
+        legacyGraphPath: legacyResultGraphPath,
         spiGraphPath,
       })
     }
@@ -708,11 +715,20 @@ export async function runBenchmarkSuite(
 
       for (let trial = 1; trial <= options.trials; trial += 1) {
         const trialLabel = `trial-${String(trial).padStart(3, '0')}`
+        const coldScratchRoot = plan.mode === 'cold'
+          ? mkdtempSync(join(tmpdir(), `madar-bench-suite-${plan.repo.id}-${trialLabel}-`))
+          : null
+        if (coldScratchRoot) {
+          scratchRoots.push(coldScratchRoot)
+        }
+        const legacyGraphPath = coldScratchRoot
+          ? prepareBenchmarkWorkspace(plan.repo, runGenerateGraph, coldScratchRoot, 'legacy')
+          : prepared.legacyGraphPath
         const legacyInput = {
-          graphPath: prepared.legacyGraphPath,
+          graphPath: legacyGraphPath,
           question: plan.prompt,
           outputDir: join(stagingRoot, plan.repo.id, plan.task.id, `${plan.mode}-cache`, 'legacy', trialLabel),
-          execTemplate: execTemplateForWorkspace(options.execTemplate, dirname(dirname(prepared.legacyGraphPath))),
+          execTemplate: execTemplateForWorkspace(options.execTemplate, dirname(dirname(legacyGraphPath))),
           baselineMode: 'native_agent' as const,
         }
         await maybePrimeWarmCache(plan.mode, runCompare, legacyInput)
@@ -726,12 +742,17 @@ export async function runBenchmarkSuite(
           ))
         }
 
-        if (prepared.spiGraphPath) {
+        const spiGraphPath = prepared.spiGraphPath
+          ? coldScratchRoot
+            ? prepareBenchmarkWorkspace(plan.repo, runGenerateGraph, coldScratchRoot, 'spi')
+            : prepared.spiGraphPath
+          : null
+        if (spiGraphPath) {
           const spiInput = {
-            graphPath: prepared.spiGraphPath,
+            graphPath: spiGraphPath,
             question: plan.prompt,
             outputDir: join(stagingRoot, plan.repo.id, plan.task.id, `${plan.mode}-cache`, 'spi', trialLabel),
-            execTemplate: execTemplateForWorkspace(options.execTemplate, dirname(dirname(prepared.spiGraphPath))),
+            execTemplate: execTemplateForWorkspace(options.execTemplate, dirname(dirname(spiGraphPath))),
             baselineMode: 'native_agent' as const,
           }
           await maybePrimeWarmCache(plan.mode, runCompare, spiInput)

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
@@ -1048,10 +1048,11 @@ describe('executeNativeAgentCompare', () => {
     const previousIsolation = process.env.MADAR_BENCH_ISOLATION
     const { projectDir, graphPath, outputDir } = makeFixtureProject()
     const claudeConfigDir = mkdtempSync(join(FIXTURE_PARENT, 'claude-config-'))
+    const homeDir = dirname(claudeConfigDir)
     try {
       mkdirSync(join(claudeConfigDir, 'skills', 'brainstorming'), { recursive: true })
-      mkdirSync(join(claudeConfigDir, '.agents', 'skills', 'systematic-debugging'), { recursive: true })
-      mkdirSync(join(claudeConfigDir, '.opencode', 'plugins'), { recursive: true })
+      mkdirSync(join(homeDir, '.agents', 'skills', 'systematic-debugging'), { recursive: true })
+      mkdirSync(join(projectDir, '.opencode', 'plugins'), { recursive: true })
       writeFileSync(join(claudeConfigDir, 'CLAUDE.md'), '# user claude\n', 'utf8')
       writeFileSync(
         join(claudeConfigDir, 'settings.json'),
@@ -1064,7 +1065,7 @@ describe('executeNativeAgentCompare', () => {
         }, null, 2),
         'utf8',
       )
-      writeFileSync(join(claudeConfigDir, '.opencode', 'plugins', 'context7.ts'), 'export {}\n', 'utf8')
+      writeFileSync(join(projectDir, '.opencode', 'plugins', 'context7.ts'), 'export {}\n', 'utf8')
       mkdirSync(join(projectDir, '.vscode'), { recursive: true })
       writeFileSync(
         join(projectDir, '.claude', 'settings.json'),

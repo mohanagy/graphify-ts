@@ -340,8 +340,9 @@ export async function captureBenchmarkEnvironment(
   const homeDir = dirname(claudeConfigDir)
   const skillNames = new Set<string>([
     ...listDirectoryNames(join(claudeConfigDir, 'skills')),
-    ...listDirectoryNames(join(claudeConfigDir, '.agents', 'skills')),
-    ...listDirectoryNames(join(claudeConfigDir, '.cursor', 'skills')),
+    ...listDirectoryNames(join(homeDir, '.agents', 'skills')),
+    ...listDirectoryNames(join(homeDir, '.cursor', 'skills')),
+    ...listDirectoryNames(join(homeDir, '.config', 'opencode', 'skills')),
     ...listDirectoryNames(join(projectRoot, '.claude', 'skills')),
   ])
   const mcpServersActive = new Set<string>([
@@ -368,7 +369,9 @@ export async function captureBenchmarkEnvironment(
   const getClaudeCodeVersion = options.getClaudeCodeVersion ?? defaultClaudeCodeVersion
   const claudeCodeVersion = await getClaudeCodeVersion?.() ?? null
   const skillsLoaded = [...skillNames].sort((left, right) => left.localeCompare(right))
-  const pluginsActive = listPluginNames(join(claudeConfigDir, '.opencode', 'plugins'))
+  const pluginsActive = [...new Set([
+    ...listPluginNames(join(projectRoot, '.opencode', 'plugins')),
+  ])]
   const activeMcpServers = [...mcpServersActive].sort((left, right) => left.localeCompare(right))
 
   return {

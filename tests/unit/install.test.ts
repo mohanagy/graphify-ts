@@ -695,6 +695,48 @@ describe('install helpers', () => {
     })
   })
 
+  it('does not overwrite unrelated user Claude hooks that happen to be named madar', () => {
+    withTempDir((projectDir) => {
+      mkdirSync(join(projectDir, '.claude'), { recursive: true })
+      mkdirSync(join(projectDir, 'out'), { recursive: true })
+      writeFileSync(join(projectDir, 'out', 'graph.json'), '{}', 'utf8')
+      writeFileSync(join(projectDir, '.claude', 'settings.json'), JSON.stringify({
+        hooks: {
+          UserPromptSubmit: [{
+            name: 'madar',
+            source: 'user-custom-hook',
+            matcher: 'prompt',
+            hooks: [{
+              type: 'command',
+              command: 'echo keep-user-hook',
+            }],
+          }],
+        },
+      }, null, 2), 'utf8')
+
+      const message = claudeInstall(projectDir)
+      const settings = JSON.parse(readFileSync(join(projectDir, '.claude', 'settings.json'), 'utf8')) as {
+        hooks?: {
+          UserPromptSubmit?: Array<Record<string, unknown>>
+        }
+      }
+      const entries = settings.hooks?.UserPromptSubmit ?? []
+
+      expect(message).toContain('registered')
+      expect(entries).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          name: 'madar',
+          source: 'user-custom-hook',
+        }),
+        expect.objectContaining({
+          name: 'madar',
+          source: 'madar',
+        }),
+      ]))
+      expect(entries).toHaveLength(2)
+    })
+  })
+
   it('writes a stable `name: madar` sentinel into installed Claude, Gemini, and Codex hook entries', () => {
     withTempDir((projectDir) => {
       claudeInstall(projectDir)

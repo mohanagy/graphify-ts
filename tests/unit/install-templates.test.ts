@@ -106,8 +106,8 @@ function expectPlainPackRoutingGuide(content: string): void {
   expect(normalized).toContain('For each codebase question, start with the specific Madar command below first')
   expect(normalized).toContain('madar pack "<task or question>" --task explain for "how does X work?" / explain runtime / flow')
   expect(normalized).toContain('madar pack "<task or question>" --task impact for "what breaks if I change X?" / impact analysis')
-  expect(normalized).toContain('relevant_files when MCP graph tools are available for "which files should I open first?"')
-  expect(normalized).toContain('graph_summary when MCP graph tools are available for "give me a repo overview?"')
+  expect(normalized).toContain('relevant_files when MCP graph tools are available; otherwise madar pack "<task or question>" --task explain for "which files should I open first?"')
+  expect(normalized).toContain('graph_summary when MCP graph tools are available; otherwise madar pack "<task or question>" --task explain for "give me a repo overview?"')
   expect(normalized).toContain('Do not run ToolSearch before calling a Madar command or graph tool')
 }
 

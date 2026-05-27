@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { runPackQualityFixture } from './helpers/pack-quality.js'
+import { listPackQualityFixtures, runPackQualityFixture } from './helpers/pack-quality.js'
 
 const tempFixtureNames: string[] = []
 
@@ -27,5 +27,22 @@ describe('pack-quality helper', () => {
     }))
 
     await expect(runPackQualityFixture(fixtureName)).rejects.toThrow(/fixture\.json|prompt|expected_likely_edit_files/i)
+  })
+
+  it('fails fast when a fixture directory exists outside the declared fixture order', () => {
+    const fixtureName = '__unlisted-fixture'
+    const fixtureRoot = resolve('tests/fixtures/pack-quality', fixtureName)
+    tempFixtureNames.push(fixtureName)
+    mkdirSync(join(fixtureRoot, 'workspace'), { recursive: true })
+    writeFileSync(join(fixtureRoot, 'fixture.json'), JSON.stringify({
+      prompt: 'Explain auth flow',
+      expected_workflow_centers: [],
+      expected_likely_edit_files: [],
+      expected_likely_test_files: [],
+      expected_validation_commands: [],
+      expected_negative_guidance: [],
+    }), 'utf8')
+
+    expect(() => listPackQualityFixtures()).toThrow(/unlisted pack-quality fixture/i)
   })
 })

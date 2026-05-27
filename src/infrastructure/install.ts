@@ -203,8 +203,7 @@ function isMadarProjectHookCommand(command: string): boolean {
 }
 
 function hasMadarHookSentinel(hook: Record<string, unknown>): boolean {
-  return hook.name === MANAGED_HOOK_NAME
-    || hook.source === MANAGED_HOOK_SOURCE
+  return hook.source === MANAGED_HOOK_SOURCE
     || (typeof hook.source === 'string' && hook.source.startsWith(`${MANAGED_HOOK_SOURCE}:`))
 }
 

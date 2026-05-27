@@ -7,7 +7,7 @@ Madar is for the moment when a structural graph already tells you what exists, b
 - Local graph artifacts plus task-aware packs for explain, review, impact, and implementation work.
 - Static `execution_slice` output for runtime questions, explicitly labeled as a hypothesis rather than a live trace.
 - Share-safe benchmark and compare artifacts that can be reviewed without exposing workstation paths.
-- Deterministic install guidance that pushes supported agents toward graph-first or context-pack-first first passes.
+- Deterministic install guidance that pushes supported agents toward graph-first or context-pack-first passes.
 
 ## In progress
 

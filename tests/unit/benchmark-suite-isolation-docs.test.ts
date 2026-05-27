@@ -56,6 +56,7 @@ describe('benchmark suite isolation docs', () => {
 
   it('ships a runnable isolation launcher that sets the pinned config', () => {
     expect(runIsolated).toContain('export CLAUDE_CONFIG_DIR')
+    expect(runIsolated).toContain('export CURSOR_CONFIG_DIR')
     expect(runIsolated).toContain('export MADAR_BENCH_ISOLATION=1')
     expect(runIsolated).toContain('"serve"')
     expect(runIsolated).toContain('"--stdio"')

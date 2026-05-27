@@ -36,6 +36,7 @@ cat > "${CURSOR_MCP_PATH}" <<JSON
 JSON
 
 export CLAUDE_CONFIG_DIR
+export CURSOR_CONFIG_DIR
 export MADAR_BENCH_ISOLATION=1
 
 exec node "${CLI_PATH}" bench:suite "$@"

@@ -22,13 +22,15 @@ describe('benchmark environment helpers', () => {
   it('captures benchmark environment from project and Claude config roots', async () => {
     await withTempDir(async (tempDir) => {
       const claudeConfigDir = join(tempDir, '.claude')
+      const homeDir = tempDir
       const projectParent = join(tempDir, 'workspace')
       const projectRoot = join(projectParent, 'repo')
 
       mkdirSync(join(claudeConfigDir, 'skills', 'brainstorming'), { recursive: true })
-      mkdirSync(join(claudeConfigDir, '.agents', 'skills', 'systematic-debugging'), { recursive: true })
-      mkdirSync(join(claudeConfigDir, '.cursor', 'skills', 'documentation-lookup'), { recursive: true })
-      mkdirSync(join(claudeConfigDir, '.opencode', 'plugins'), { recursive: true })
+      mkdirSync(join(homeDir, '.agents', 'skills', 'systematic-debugging'), { recursive: true })
+      mkdirSync(join(homeDir, '.cursor', 'skills', 'documentation-lookup'), { recursive: true })
+      mkdirSync(join(homeDir, '.config', 'opencode', 'skills', 'opencode-routing'), { recursive: true })
+      mkdirSync(join(projectRoot, '.opencode', 'plugins'), { recursive: true })
       mkdirSync(join(projectRoot, '.claude'), { recursive: true })
       mkdirSync(join(projectRoot, '.vscode'), { recursive: true })
       mkdirSync(projectParent, { recursive: true })
@@ -36,8 +38,8 @@ describe('benchmark environment helpers', () => {
       writeFileSync(join(claudeConfigDir, 'CLAUDE.md'), '# user claude\n', 'utf8')
       writeFileSync(join(projectParent, 'CLAUDE.md'), '# parent claude\n', 'utf8')
       writeFileSync(join(projectRoot, 'CLAUDE.md'), '# project claude\n', 'utf8')
-      writeFileSync(join(claudeConfigDir, '.opencode', 'plugins', 'context7.ts'), 'export {}\n', 'utf8')
-      writeFileSync(join(claudeConfigDir, '.opencode', 'plugins', 'team-hooks.ts'), 'export {}\n', 'utf8')
+      writeFileSync(join(projectRoot, '.opencode', 'plugins', 'context7.ts'), 'export {}\n', 'utf8')
+      writeFileSync(join(projectRoot, '.opencode', 'plugins', 'team-hooks.ts'), 'export {}\n', 'utf8')
       writeFileSync(
         join(projectRoot, '.mcp.json'),
         JSON.stringify({
@@ -98,9 +100,10 @@ describe('benchmark environment helpers', () => {
       expect(environment.skills_loaded).toEqual([
         'brainstorming',
         'documentation-lookup',
+        'opencode-routing',
         'systematic-debugging',
       ])
-      expect(environment.skills_loaded_count).toBe(3)
+      expect(environment.skills_loaded_count).toBe(4)
       expect(environment.plugins_active).toEqual(['context7', 'team-hooks'])
       expect(environment.user_claude_md_hash).toMatch(/^sha256:/)
       expect(environment.project_claude_md_hash).toMatch(/^sha256:/)

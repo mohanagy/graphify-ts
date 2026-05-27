@@ -53,4 +53,4 @@ madar bench:suite \
   --yes
 ```
 
-Measured results remain repo/task specific receipts. Public claims stay conservative and point back to dated artifact folders plus [`docs/claims-and-evidence.md`](../../claims-and-evidence.md) until the broader matrix is populated.
+Measured results remain repo/task-specific receipts. Public claims stay conservative and point back to dated artifact folders plus [`docs/claims-and-evidence.md`](../../claims-and-evidence.md) until the broader matrix is populated.
