@@ -514,10 +514,15 @@ describe('executeNativeAgentCompare', () => {
       expect(report.install_verified).toBe(true)
       expect(report.measurement_validity).toBe('degraded')
       expect(report.madar_mcp_call_count).toBe(0)
+      expect(report.reductions).toBeNull()
       expect(report.madar_trace).toEqual(expect.objectContaining({
         madar_mcp_call_count: 0,
         exploration_outcome: 'madar_available_but_unused',
       }))
+      const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+      const shareSafeReport = JSON.parse(readFileSync(report.paths.share_safe_report, 'utf8')) as Record<string, unknown>
+      expect(savedReport.reductions).toBeNull()
+      expect(shareSafeReport.reductions).toBeNull()
     } finally {
       rmSync(projectDir, { recursive: true, force: true })
     }
@@ -1549,6 +1554,48 @@ describe('formatNativeAgentCompareSummary', () => {
     expect(summary).toContain('install_verified: true')
     expect(summary).toContain('madar_mcp_call_count: 0')
     expect(summary).toContain('runner error')
+  })
+
+  it('suppresses favorable win lines for degraded runs where Madar was never invoked', () => {
+    const summary = formatNativeAgentCompareSummary(buildSummaryResult({
+      question: 'degraded case',
+      baselineTurns: 21,
+      madarTurns: 16,
+      baselineDurationMs: 108335,
+      madarDurationMs: 106420,
+      baselineInputTokens: 1891943,
+      madarInputTokens: 1077831,
+      reductions: {
+        num_turns: 1.31,
+        duration_ms: 1.02,
+        input_tokens: 1.76,
+        uncached_input_tokens: 0.95,
+        cache_creation_input_tokens: 0.95,
+        cost_usd: 1.29,
+      },
+      madarTrace: {
+        source: 'claude_messages_tool_use',
+        summary: '0 tool calls across 0 turns',
+        tool_call_count: 0,
+        tool_calls_by_name: {},
+        per_turn: [],
+        madar_mcp_call_count: 0,
+        madar_mcp_calls_by_name: {},
+        context_pack_call_count: 0,
+        focused_follow_up_tool_call_count: 0,
+        broad_exploration_tool_call_count: 0,
+        broad_exploration_tool_calls_by_name: {},
+        exploration_outcome: 'madar_available_but_unused',
+        exploration_summary: 'Madar tools were available but not used.',
+      },
+      measurementValidity: 'degraded',
+      madarMcpCallCount: 0,
+    }))
+
+    expect(summary).toContain('measurement_validity: degraded')
+    expect(summary).toContain('Cannot attribute outcome differences to Madar.')
+    expect(summary).not.toContain('num_turns: baseline 21 → madar 16 (1.31x fewer)')
+    expect(summary).not.toContain('input_tokens (Anthropic-reported): baseline 1891943 → madar 1077831 (1.76x less)')
   })
 
   it('prints the tool-call delta when per-side tool counts are available', () => {

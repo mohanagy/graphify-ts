@@ -2782,8 +2782,22 @@ interface NativeAgentSuiteChange {
   percentReduction: number
 }
 
+function nativeAgentReductionsAttributable(
+  report: Pick<NativeAgentCompareReport, 'measurement_validity' | 'madar_mcp_call_count' | 'madar_trace'>,
+): boolean {
+  if (report.measurement_validity === 'invalid') {
+    return false
+  }
+  if (report.madar_trace) {
+    return report.madar_mcp_call_count > 0
+  }
+  return true
+}
+
 function isComparableNativeAgentReport(report: NativeAgentCompareReport): report is NativeAgentComparableReport {
-  return report.baseline.kind === 'succeeded' && report.madar.kind === 'succeeded'
+  return report.baseline.kind === 'succeeded'
+    && report.madar.kind === 'succeeded'
+    && nativeAgentReductionsAttributable(report)
 }
 
 function computeReductionPercent(baseline: number, madar: number): number | null {
@@ -3188,6 +3202,9 @@ export async function executeNativeAgentCompare(
           ? 'valid'
           : 'degraded'
         : 'invalid'
+    if (!nativeAgentReductionsAttributable(reportShell)) {
+      reportShell.reductions = null
+    }
     const answerQuality = evaluateNativeAgentAnswerQualityReport(
       answerQualityGates,
       question,
@@ -3353,13 +3370,27 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
       madar.usage.cache_creation_input_tokens > 0 ||
       madar.cached_input_tokens_anthropic_exact > 0
 
+    lines.push(`- "${report.question}"`)
+    appendNativeAgentValidityLines(lines, report)
+    const derivedTokenRegressionReasons = collectTokenRegressionReasons(baseline, madar)
+    const tokenRegressionReasons =
+      report.token_regression_reasons && report.token_regression_reasons.length > 0
+        ? report.token_regression_reasons
+        : derivedTokenRegressionReasons
+    if (!nativeAgentReductionsAttributable(report)) {
+      lines.push('    Cannot attribute outcome differences to Madar. Raw numbers preserved in report.json.')
+      const tokenRegressionWarning = formatTokenRegressionWarning(baseline, madar, tokenRegressionReasons)
+      if (tokenRegressionWarning) {
+        lines.push(`    ${tokenRegressionWarning}`)
+      }
+      if (report.madar_trace) {
+        lines.push(`    madar_trace: ${report.madar_trace.exploration_outcome} · ${report.madar_trace.exploration_summary}`)
+      }
+      lines.push('    provider/runtime proof: Anthropic reported input, cache, and total tokens for both runs')
+      continue
+    }
+
     lines.push(
-      `- "${report.question}"`,
-      ...(() => {
-        const validityLines: string[] = []
-        appendNativeAgentValidityLines(validityLines, report)
-        return validityLines
-      })(),
       `    num_turns: baseline ${baseline.num_turns} → madar ${madar.num_turns}${formatDirectionalDelta(baseline.num_turns, madar.num_turns, 'fewer', 'more')}`,
       `    latency:   baseline ${baseline.duration_ms}ms → madar ${madar.duration_ms}ms${formatDirectionalDelta(baseline.duration_ms, madar.duration_ms, 'faster', 'slower')}`,
       `    input_tokens (Anthropic-reported): baseline ${baseline.total_input_tokens_anthropic_exact} → madar ${madar.total_input_tokens_anthropic_exact}${formatDirectionalDelta(baseline.total_input_tokens_anthropic_exact, madar.total_input_tokens_anthropic_exact, 'less', 'more', { noMeaningfulChangeThreshold: 0.1, neutralLabel: 'no meaningful change' })}`,
@@ -3376,11 +3407,6 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
         `    tool calls: baseline ${report.tool_call_counts.baseline.total} → madar ${report.tool_call_counts.madar.total}${formatDirectionalDelta(report.tool_call_counts.baseline.total, report.tool_call_counts.madar.total, 'fewer', 'more')}`,
       )
     }
-    const derivedTokenRegressionReasons = collectTokenRegressionReasons(baseline, madar)
-    const tokenRegressionReasons =
-      report.token_regression_reasons && report.token_regression_reasons.length > 0
-        ? report.token_regression_reasons
-        : derivedTokenRegressionReasons
     const tokenRegressionWarning = formatTokenRegressionWarning(baseline, madar, tokenRegressionReasons)
     if (tokenRegressionWarning) {
       lines.push(`    ${tokenRegressionWarning}`)
