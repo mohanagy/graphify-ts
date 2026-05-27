@@ -8,16 +8,16 @@ import { activeMcpTools, MCP_TOOLS } from '../../src/runtime/stdio/definitions.j
 // new tool genuinely needs more bytes, raise the ceiling here in the same PR
 // with a note in the commit message and the README.
 //
-// Post-#188 measurements (taken from `node -e "JSON.stringify({tools: ...})"`):
-//   * Core profile (7 tools, the default):  ≈ 3,203 bytes  ≈ ~801 tokens
-//   * Full profile (26 tools, opt-in):      ≈ 12,395 bytes ≈ ~3,099 tokens
+// Post-#338 measurements (taken from `node -e "JSON.stringify({tools: ...})"`):
+//   * Core profile (7 tools, the default):  ≈ 3,389 bytes
+//   * Full profile (26 tools, opt-in):      ≈ 12,620 bytes
 //
 // Pre-#82 core was 4,271 bytes / ~1,068 tokens — i.e. #82 cut the core profile
 // by 30%. The ceilings below sit just above today's measurements to leave a
 // small growth buffer without permitting a silent regression.
 
-const CORE_PROFILE_BYTE_CEILING = 3_250
-const FULL_PROFILE_BYTE_CEILING = 12_450  // v0.23: raised for the default-core graph_summary tool
+const CORE_PROFILE_BYTE_CEILING = 3_400
+const FULL_PROFILE_BYTE_CEILING = 12_650  // v0.27: raised for additive retrieve snippet-budget arguments
 
 function payloadBytes(tools: ReadonlyArray<unknown>): number {
   return JSON.stringify({ tools }).length

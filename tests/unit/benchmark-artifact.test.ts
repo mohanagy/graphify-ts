@@ -30,6 +30,10 @@ interface PackQualityGateDefinition {
   manual_review_notes: string[]
 }
 
+function estimateSnippetTokens(snippet: string | null): number {
+  return snippet?.trim().split(/\s+/).filter(Boolean).length ?? 0
+}
+
 const DOCS_ARTIFACT_GATE: PackQualityGateDefinition = {
   prompt: 'Explain how idea report is getting generated',
   required_labels: ['IdeaReportController', 'GenerateIdeaReportService'],
@@ -51,6 +55,7 @@ function buildMatchedNodes(totalCount: number, labels: readonly string[]): Compa
       source_file: `src/runtime/report-${index + 1}.ts`,
       line_number: index + 1,
       snippet: `// ${label}`,
+      snippet_truncated: false,
       match_score: totalCount - index,
       relevance_band: index === 0 ? 'direct' : 'related',
       community: 1,
@@ -65,6 +70,7 @@ function buildMatchedNodes(totalCount: number, labels: readonly string[]): Compa
       source_file: `src/runtime/supporting-${index}.ts`,
       line_number: index,
       snippet: `// SupportingReportNode${index}`,
+      snippet_truncated: false,
       match_score: totalCount - index,
       relevance_band: 'peripheral',
       community: 1,
@@ -91,10 +97,16 @@ function buildRelationships(
   }))
 }
 
-function buildPackFixture(overrides: Partial<Pick<CompareReportPack, 'token_count' | 'matched_nodes' | 'relationships'>> = {}): CompareReportPack {
+function buildPackFixture(
+  overrides: Partial<Pick<CompareReportPack, 'token_count' | 'matched_nodes' | 'relationships' | 'snippet_budget_tokens_used' | 'snippet_budget_tokens_remaining'>> = {},
+): CompareReportPack {
   const matched_nodes = overrides.matched_nodes
     ?? buildMatchedNodes(DOCS_ARTIFACT_GATE.max_matched_nodes, DOCS_ARTIFACT_GATE.required_labels)
   const relationships = overrides.relationships ?? buildRelationships(DOCS_ARTIFACT_GATE.max_relationships, matched_nodes)
+  const snippetBudgetTokensUsed = overrides.snippet_budget_tokens_used
+    ?? matched_nodes.reduce((total, node) => total + estimateSnippetTokens(node.snippet), 0)
+  const snippetBudgetTokensRemaining = overrides.snippet_budget_tokens_remaining
+    ?? Math.max(0, 3_000 - snippetBudgetTokensUsed)
 
   return {
     question: 'Explain how idea report is getting generated',
@@ -104,6 +116,8 @@ function buildPackFixture(overrides: Partial<Pick<CompareReportPack, 'token_coun
     community_context: [{ id: 1, label: 'Report Generation', node_count: 38 }],
     graph_signals: { god_nodes: [], bridge_nodes: [] },
     retrieval_strategy: 'default',
+    snippet_budget_tokens_used: snippetBudgetTokensUsed,
+    snippet_budget_tokens_remaining: snippetBudgetTokensRemaining,
     ...overrides,
   }
 }

@@ -29,7 +29,17 @@ import { pickImpactTarget } from '../context-pack-target.js'
 import { analyzeImpact, callChains, compactImpactResult, type ImpactResult } from '../impact.js'
 import { analyzePrImpact, compactPrImpactResult } from '../pr-impact.js'
 import { relevantFiles } from '../relevant-files.js'
-import { collectRelationships, compactRetrieveResult, contextPackFromRetrieveResult, readSnippet, retrieveContext, retrieveContextAsync, type RetrieveResult } from '../retrieve.js'
+import {
+  collectRelationships,
+  compactRetrieveResult,
+  contextPackFromRetrieveResult,
+  readSnippet,
+  retrieveContext,
+  retrieveContextAsync,
+  withRetrieveSnippetBudget,
+  type RetrieveResult,
+  type RetrieveSnippetOptions,
+} from '../retrieve.js'
 import { computeContextPackDiagnostics } from '../context-pack-diagnostics.js'
 import { collectPackNodeIds, computeDeltaContextPack } from '../context-pack-delta.js'
 import { applyContextPackResolution, type ContextPackResolution } from '../context-pack-resolution.js'
@@ -908,6 +918,14 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
       const retrieveRerank = toolArguments.rerank === true
       const retrieveSemanticModel = helpers.stringParamAlias(toolArguments, ['semantic_model', 'semanticModel'])
       const retrieveRerankModel = helpers.stringParamAlias(toolArguments, ['rerank_model', 'rerankModel'])
+      const retrieveSnippetBudget = helpers.numberParamAlias(toolArguments, ['snippet_budget', 'snippetBudget'], { min: 0, max: helpers.maxStdioTokenBudget })
+      if ((Object.hasOwn(toolArguments, 'snippet_budget') || Object.hasOwn(toolArguments, 'snippetBudget')) && retrieveSnippetBudget === null) {
+        return helpers.failure(id, helpers.jsonrpcInvalidParams, `snippet_budget must be a number between 0 and ${helpers.maxStdioTokenBudget}`)
+      }
+      const retrieveTopNWithSnippet = helpers.numberParamAlias(toolArguments, ['top_n_with_snippet', 'topNWithSnippet'], { min: 0 })
+      if ((Object.hasOwn(toolArguments, 'top_n_with_snippet') || Object.hasOwn(toolArguments, 'topNWithSnippet')) && retrieveTopNWithSnippet === null) {
+        return helpers.failure(id, helpers.jsonrpcInvalidParams, 'top_n_with_snippet must be a non-negative number')
+      }
       // #75 manual override: numeric retrieval_level argument (0-5) bypasses
       // the gate's heuristics and forces the supplied level. numberParamAlias
       // already enforces the range and returns null for absent/out-of-range
@@ -919,6 +937,10 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
       const retrieveStrategy = parseRetrievalStrategyParam(helpers, toolArguments)
       if (retrieveStrategy === 'invalid') {
         return helpers.failure(id, helpers.jsonrpcInvalidParams, 'retrieval_strategy must be one of default, slice-v1')
+      }
+      const retrieveSnippetOptions: RetrieveSnippetOptions = {
+        ...(retrieveSnippetBudget !== null ? { snippetBudget: retrieveSnippetBudget } : {}),
+        ...(retrieveTopNWithSnippet !== null ? { topNWithSnippet: retrieveTopNWithSnippet } : {}),
       }
       const retrieveLevelTyped = retrieveLevelOverride === null ? null : (retrieveLevelOverride as 0 | 1 | 2 | 3 | 4 | 5)
       const retrieval = retrieveSemantic || retrieveRerank ? retrieveContextAsync(graph, {
@@ -943,9 +965,9 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
       const useVerboseRetrieve = toolArguments.verbose === true || toolArguments.compact === false
       return retrieval.then((result) => helpers.ok(id, helpers.textToolResult(JSON.stringify(
         useVerboseRetrieve
-          ? result
+          ? withRetrieveSnippetBudget(result, retrieveSnippetOptions)
           : {
-              ...compactRetrieveResult(result),
+              ...compactRetrieveResult(result, retrieveSnippetOptions),
               ...contextMetadata(result),
             },
       ))))

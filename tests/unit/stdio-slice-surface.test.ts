@@ -64,6 +64,92 @@ afterEach(() => {
 })
 
 describe('stdio slice-v1 surface', () => {
+  it('adds bounded snippet fields to retrieve responses and keeps top-node snippets aligned with context_pack', async () => {
+    const graphPath = createGraphPath()
+
+    const retrieveResponse = await Promise.resolve(handleStdioRequest(graphPath, {
+      id: 6,
+      method: 'tools/call',
+      params: {
+        name: 'retrieve',
+        arguments: {
+          question: 'Explain `AuthService.login`',
+          budget: 1000,
+          snippet_budget: 12,
+          top_n_with_snippet: 1,
+        },
+      },
+    }))
+
+    const contextPackResponse = await Promise.resolve(handleStdioRequest(graphPath, {
+      id: 7,
+      method: 'tools/call',
+      params: {
+        name: 'context_pack',
+        arguments: {
+          prompt: 'Explain `AuthService.login`',
+          budget: 1000,
+          task: 'explain',
+          verbose: true,
+        },
+      },
+    }))
+
+    const retrievePayload = JSON.parse(((retrieveResponse as { result?: { content?: Array<{ text: string }> } }).result?.content ?? [])[0]?.text ?? '') as {
+      matched_nodes: Array<{
+        label: string
+        source_file: string
+        line_number: number
+        snippet: string | null
+        snippet_truncated: boolean
+      }>
+      snippet_budget_tokens_used: number
+      snippet_budget_tokens_remaining: number
+    }
+    const contextPackPayload = JSON.parse(((contextPackResponse as { result?: { content?: Array<{ text: string }> } }).result?.content ?? [])[0]?.text ?? '') as {
+      pack: {
+        matched_nodes: Array<{
+          label: string
+          source_file: string
+          line_number: number
+          snippet: string | null
+        }>
+      }
+    }
+
+    expect(retrievePayload.snippet_budget_tokens_used).toBeLessThanOrEqual(12)
+    expect(retrievePayload.snippet_budget_tokens_remaining).toBeGreaterThanOrEqual(0)
+    expect(retrievePayload.matched_nodes[0]).toHaveProperty('snippet_truncated')
+    expect(retrievePayload.matched_nodes[0]?.snippet).toEqual(expect.any(String))
+    expect(retrievePayload.matched_nodes[1]).toEqual(expect.objectContaining({
+      snippet: null,
+      snippet_truncated: false,
+    }))
+
+    const retrieveNode = retrievePayload.matched_nodes.find((node) => typeof node.snippet === 'string')
+    const contextPackNode = contextPackPayload.pack.matched_nodes.find((node) => node.label === retrieveNode?.label)
+
+    expect(retrieveNode).toBeDefined()
+    expect(contextPackNode).toBeDefined()
+    expect(retrieveNode?.source_file).toBe(contextPackNode?.source_file)
+    expect(retrieveNode?.line_number).toBe(contextPackNode?.line_number)
+
+    const retrieveSnippetLines = new Set(
+      (retrieveNode?.snippet ?? '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0),
+    )
+    const contextPackSnippetLines = new Set(
+      (contextPackNode?.snippet ?? '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0),
+    )
+
+    expect([...retrieveSnippetLines].some((line) => contextPackSnippetLines.has(line))).toBe(true)
+  })
+
   it('accepts retrieval_strategy=slice-v1 for retrieve and context_pack', async () => {
     const graphPath = createGraphPath()
 

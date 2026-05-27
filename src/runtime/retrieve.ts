@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 
+import { decode as decodeTokens, encode as encodeTokens } from 'gpt-tokenizer/encoding/cl100k_base'
+
 import type {
   ContextPackExecutionPhase,
   ContextPackExecutionSlice,
@@ -59,6 +61,8 @@ import { communitiesFromGraph, estimateQueryTokens } from './serve.js'
 const SNIPPET_HALF_WINDOW = 7
 const DERIVED_SNIPPET_HALF_WINDOW = 1
 const MAX_SNIPPET_LINE_LENGTH = 200
+export const DEFAULT_RETRIEVE_SNIPPET_BUDGET = 3000
+export const DEFAULT_RETRIEVE_TOP_N_WITH_SNIPPET = 8
 const BM25_K1 = 1.2
 const BM25_B = 0.6
 const SEED_FUSION_SCORE_SCALE = 10
@@ -96,6 +100,13 @@ export interface RetrieveOptions {
   /** Internal additive override for benchmarks/tests. */
   selectionStrategy?: ContextPackSelectionStrategy
   retrievalStrategy?: ContextPackRetrievalStrategy
+  snippetBudget?: number
+  topNWithSnippet?: number
+}
+
+export interface RetrieveSnippetOptions {
+  snippetBudget?: number
+  topNWithSnippet?: number
 }
 
 function effectiveRetrieveTaskKind(options: RetrieveOptions): ContextPackTaskKind {
@@ -128,6 +139,7 @@ export interface RetrieveMatchedNode {
   source_domain?: SourceDomain
   file_type: string
   snippet: string | null
+  snippet_truncated?: boolean
   match_score: number
   relevance_band: 'direct' | 'related' | 'peripheral'
   community: number | null
@@ -168,18 +180,23 @@ export interface RetrieveResult {
   selection_diagnostics?: ContextPackSelectionDiagnostics
   retrieval_gate?: RetrievalGateDecision
   retrieval_strategy?: ContextPackRetrievalStrategy
+  snippet_budget_tokens_used?: number
+  snippet_budget_tokens_remaining?: number
   slice?: ContextPackSliceMetadata
   execution_slice?: ContextPackExecutionSlice
   answer_contract?: ContextPackRuntimeGenerationAnswerContract
 }
 
-export interface CompactRetrieveMatchedNode extends Omit<RetrieveMatchedNode, 'community_label' | 'file_type' | 'framework_boost'> {
+export interface CompactRetrieveMatchedNode extends Omit<RetrieveMatchedNode, 'community_label' | 'file_type' | 'framework_boost' | 'snippet_truncated'> {
   file_type?: string
+  snippet_truncated: boolean
 }
 
-export interface CompactRetrieveResult extends Omit<RetrieveResult, 'matched_nodes'> {
+export interface CompactRetrieveResult extends Omit<RetrieveResult, 'matched_nodes' | 'snippet_budget_tokens_used' | 'snippet_budget_tokens_remaining'> {
   matched_nodes: CompactRetrieveMatchedNode[]
   shared_file_type?: string
+  snippet_budget_tokens_used: number
+  snippet_budget_tokens_remaining: number
 }
 
 interface RetrieveGraphSignals {
@@ -362,6 +379,12 @@ function estimateTokens(text: string): number {
   return estimateQueryTokens(text)
 }
 
+function snippetTokenCount(snippet: string | null | undefined): number {
+  return typeof snippet === 'string' && snippet.trim().length > 0
+    ? estimateTokens(snippet)
+    : 0
+}
+
 export function estimateRetrieveEntryTokens(label: string, sourceFile: string, lineNumber: number, snippet: string | null): number {
   return estimateContextPackEntryTokens(label, sourceFile, lineNumber, snippet)
 }
@@ -373,6 +396,193 @@ function tokenCountForMatchedNodes(
     (total, node) => total + estimateRetrieveEntryTokens(node.label, node.source_file, node.line_number, node.snippet),
     0,
   )
+}
+
+function normalizedRetrieveSnippetOptions(options: RetrieveSnippetOptions = {}): { snippetBudget: number; topNWithSnippet: number } {
+  const resolvedSnippetBudget =
+    typeof options.snippetBudget === 'number' && Number.isFinite(options.snippetBudget)
+      ? Math.max(0, Math.floor(options.snippetBudget))
+      : DEFAULT_RETRIEVE_SNIPPET_BUDGET
+  const resolvedTopNWithSnippet =
+    typeof options.topNWithSnippet === 'number' && Number.isFinite(options.topNWithSnippet)
+      ? Math.max(0, Math.floor(options.topNWithSnippet))
+      : DEFAULT_RETRIEVE_TOP_N_WITH_SNIPPET
+  return {
+    snippetBudget: resolvedSnippetBudget,
+    topNWithSnippet: resolvedTopNWithSnippet,
+  }
+}
+
+function truncateTextToTokenBudget(text: string, remainingTokens: number): string | null {
+  const trimmedText = text.trim()
+  if (trimmedText.length === 0 || remainingTokens <= 0) {
+    return null
+  }
+
+  const tokens = encodeTokens(trimmedText)
+  if (tokens.length <= remainingTokens) {
+    return trimmedText
+  }
+
+  for (let tokenLimit = Math.min(remainingTokens, tokens.length); tokenLimit > 0; tokenLimit -= 1) {
+    const decoded = decodeTokens(tokens.slice(0, tokenLimit)).trim()
+    if (decoded.length === 0) {
+      continue
+    }
+    if (estimateTokens(decoded) <= remainingTokens) {
+      return decoded
+    }
+  }
+
+  return null
+}
+
+function truncateSnippetToTokenBudget(
+  snippet: string,
+  remainingTokens: number,
+): { snippet: string | null; tokensUsed: number; truncated: boolean } {
+  const trimmedSnippet = snippet.trim()
+  if (trimmedSnippet.length === 0) {
+    return { snippet: null, tokensUsed: 0, truncated: false }
+  }
+  if (remainingTokens <= 0) {
+    return { snippet: null, tokensUsed: 0, truncated: true }
+  }
+
+  const fullTokens = estimateTokens(trimmedSnippet)
+  if (fullTokens <= remainingTokens) {
+    return { snippet: trimmedSnippet, tokensUsed: fullTokens, truncated: false }
+  }
+
+  const lines = trimmedSnippet.split('\n')
+  const nonEmptyLineIndexes = lines
+    .map((line, index) => (line.trim().length > 0 ? index : -1))
+    .filter((index) => index >= 0)
+  const focusIndex = nonEmptyLineIndexes.length > 0
+    ? nonEmptyLineIndexes[Math.floor(nonEmptyLineIndexes.length / 2)]!
+    : 0
+  const focusLine = lines[focusIndex]?.trim() ?? ''
+
+  if (focusLine.length > 0 && estimateTokens(focusLine) <= remainingTokens) {
+    let start = focusIndex
+    let end = focusIndex
+    let bestSnippet = focusLine
+
+    while (true) {
+      let expanded = false
+
+      if (start > 0) {
+        const candidate = lines.slice(start - 1, end + 1).join('\n').trim()
+        if (candidate.length > 0 && estimateTokens(candidate) <= remainingTokens) {
+          start -= 1
+          bestSnippet = candidate
+          expanded = true
+        }
+      }
+
+      if (end < lines.length - 1) {
+        const candidate = lines.slice(start, end + 2).join('\n').trim()
+        if (candidate.length > 0 && estimateTokens(candidate) <= remainingTokens) {
+          end += 1
+          bestSnippet = candidate
+          expanded = true
+        }
+      }
+
+      if (!expanded) {
+        break
+      }
+    }
+
+    return {
+      snippet: bestSnippet,
+      tokensUsed: estimateTokens(bestSnippet),
+      truncated: true,
+    }
+  }
+
+  const tokenBoundSnippet = truncateTextToTokenBudget(focusLine.length > 0 ? focusLine : trimmedSnippet, remainingTokens)
+  if (tokenBoundSnippet === null) {
+    return { snippet: null, tokensUsed: 0, truncated: true }
+  }
+
+  return {
+    snippet: tokenBoundSnippet,
+    tokensUsed: estimateTokens(tokenBoundSnippet),
+    truncated: true,
+  }
+}
+
+function applyRetrieveSnippetBudgetToNodes<TNode extends { snippet?: string | null }>(
+  nodes: readonly TNode[],
+  options: RetrieveSnippetOptions = {},
+): {
+  nodes: Array<TNode & { snippet: string | null; snippet_truncated: boolean }>
+  usedTokens: number
+  remainingTokens: number
+} {
+  const { snippetBudget, topNWithSnippet } = normalizedRetrieveSnippetOptions(options)
+  let usedTokens = 0
+
+  const shapedNodes = nodes.map((node, index) => {
+    const originalSnippet = typeof node.snippet === 'string' && node.snippet.trim().length > 0
+      ? node.snippet
+      : null
+
+    if (originalSnippet === null) {
+      return {
+        ...node,
+        snippet: null,
+        snippet_truncated: false,
+      }
+    }
+
+    if (index >= topNWithSnippet) {
+      return {
+        ...node,
+        snippet: null,
+        snippet_truncated: false,
+      }
+    }
+
+    const remainingSnippetBudget = Math.max(0, snippetBudget - usedTokens)
+    const shapedSnippet = truncateSnippetToTokenBudget(originalSnippet, remainingSnippetBudget)
+    const serializedSnippetTokens = snippetTokenCount(shapedSnippet.snippet)
+    const boundedSnippet = serializedSnippetTokens <= remainingSnippetBudget
+      ? shapedSnippet
+      : truncateSnippetToTokenBudget(shapedSnippet.snippet ?? '', remainingSnippetBudget)
+    usedTokens += snippetTokenCount(boundedSnippet.snippet)
+    return {
+      ...node,
+      snippet: boundedSnippet.snippet,
+      snippet_truncated: shapedSnippet.truncated || boundedSnippet.truncated,
+    }
+  })
+
+  const serializedSnippetTokensUsed = shapedNodes.reduce(
+    (total, node) => total + snippetTokenCount(node.snippet),
+    0,
+  )
+
+  return {
+    nodes: shapedNodes,
+    usedTokens: serializedSnippetTokensUsed,
+    remainingTokens: Math.max(0, snippetBudget - serializedSnippetTokensUsed),
+  }
+}
+
+export function withRetrieveSnippetBudget(
+  result: RetrieveResult,
+  options: RetrieveSnippetOptions = {},
+): RetrieveResult {
+  const shapedNodes = applyRetrieveSnippetBudgetToNodes(result.matched_nodes, options)
+  return {
+    ...result,
+    token_count: tokenCountForMatchedNodes(shapedNodes.nodes),
+    matched_nodes: shapedNodes.nodes as RetrieveMatchedNode[],
+    snippet_budget_tokens_used: shapedNodes.usedTokens,
+    snippet_budget_tokens_remaining: shapedNodes.remainingTokens,
+  }
 }
 
 function fileLinesForSnippet(sourceFile: string, fileCache?: Map<string, string[] | null>): string[] | null {
@@ -4363,7 +4573,7 @@ export async function retrieveContextAsync(graph: KnowledgeGraph, options: Retri
   )
 }
 
-export function compactRetrieveResult(result: RetrieveResult): CompactRetrieveResult {
+export function compactRetrieveResult(result: RetrieveResult, options: RetrieveSnippetOptions = {}): CompactRetrieveResult {
   const frameworkProfile = buildFrameworkQuestionProfile(result.question, tokenizeQuestion(result.question))
   const compactFrameworkLimit =
     frameworkProfile.frameworkShaped && result.matched_nodes.some((node) => (node.framework_boost ?? 0) > 0) ? 5 : Number.POSITIVE_INFINITY
@@ -4382,19 +4592,22 @@ export function compactRetrieveResult(result: RetrieveResult): CompactRetrieveRe
         kind: 'retrieve',
         ...(Number.isFinite(compactFrameworkLimit) ? { max_nodes: compactFrameworkLimit } : {}),
       })
+  const shapedNodes = applyRetrieveSnippetBudgetToNodes(compactPack.nodes, options)
 
   return {
     question: result.question,
-    token_count: compactPack.nodes.reduce(
+    token_count: shapedNodes.nodes.reduce(
       (total, node) => total + estimateRetrieveEntryTokens(node.label, node.source_file, node.line_number, node.snippet ?? null),
       0,
     ),
-    matched_nodes: compactPack.nodes.map(({ evidence_class: _evidenceClass, ...node }) => node as CompactRetrieveMatchedNode),
+    matched_nodes: shapedNodes.nodes.map(({ evidence_class: _evidenceClass, ...node }) => node as CompactRetrieveMatchedNode),
     relationships: compactPack.relationships,
     community_context: compactPack.community_context,
     graph_signals: compactPack.graph_signals ?? { god_nodes: [], bridge_nodes: [] },
     ...(compactPack.shared_file_type ? { shared_file_type: compactPack.shared_file_type } : {}),
     retrieval_strategy: result.retrieval_strategy ?? 'default',
+    snippet_budget_tokens_used: shapedNodes.usedTokens,
+    snippet_budget_tokens_remaining: shapedNodes.remainingTokens,
     ...(result.slice ? { slice: result.slice } : {}),
     ...(executionSlice ? { execution_slice: executionSlice } : {}),
     ...(result.answer_contract ? { answer_contract: result.answer_contract } : {}),
@@ -4402,8 +4615,8 @@ export function compactRetrieveResult(result: RetrieveResult): CompactRetrieveRe
   }
 }
 
-export function compactRetrieveResultForStdio(result: RetrieveResult): RetrieveResult {
-  const compactResult = compactRetrieveResult(result)
+export function compactRetrieveResultForStdio(result: RetrieveResult, options: RetrieveSnippetOptions = {}): RetrieveResult {
+  const compactResult = compactRetrieveResult(result, options)
   const originalNodesById = new Map(
     result.matched_nodes
       .map((node) => [matchedNodeId(node), node] as const)
@@ -4413,7 +4626,11 @@ export function compactRetrieveResultForStdio(result: RetrieveResult): RetrieveR
   const matchedNodes: RetrieveResult['matched_nodes'] = compactResult.matched_nodes.map((node): RetrieveMatchedNode => {
     const original = matchedNodeId(node) !== null ? originalNodesById.get(matchedNodeId(node)!) : undefined
     if (original) {
-      return stripRetrieveMatchedNodeIdentity(original)
+      return {
+        ...stripRetrieveMatchedNodeIdentity(original),
+        snippet: node.snippet,
+        snippet_truncated: node.snippet_truncated,
+      }
     }
 
     return {
@@ -4423,6 +4640,7 @@ export function compactRetrieveResultForStdio(result: RetrieveResult): RetrieveR
       framework_boost: 0,
       file_type: node.file_type ?? compactResult.shared_file_type ?? '',
       snippet: node.snippet,
+      snippet_truncated: node.snippet_truncated,
       match_score: node.match_score,
       relevance_band: node.relevance_band,
       community: node.community,
@@ -4444,6 +4662,8 @@ export function compactRetrieveResultForStdio(result: RetrieveResult): RetrieveR
     ...(result.coverage ? { coverage: result.coverage } : {}),
     ...(result.selection_diagnostics ? { selection_diagnostics: result.selection_diagnostics } : {}),
     retrieval_strategy: result.retrieval_strategy ?? 'default',
+    snippet_budget_tokens_used: compactResult.snippet_budget_tokens_used,
+    snippet_budget_tokens_remaining: compactResult.snippet_budget_tokens_remaining,
     ...(result.slice ? { slice: result.slice } : {}),
     ...(compactResult.execution_slice ? { execution_slice: compactResult.execution_slice } : {}),
     ...(result.answer_contract ? { answer_contract: result.answer_contract } : {}),
