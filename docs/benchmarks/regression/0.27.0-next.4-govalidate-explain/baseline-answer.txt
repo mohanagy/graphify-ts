@@ -1,0 +1,74 @@
+I have enough context to explain the flow. (Skipping TaskCreate — this is read-only research.)
+
+# How the idea report is generated
+
+This backend is a NestJS app, but report generation is an **async, BullMQ-driven pipeline (v2)**, not a single request. Reports are markdown + structured JSON, assembled from per-section research results.
+
+## Entry point
+
+`POST /ideas/analyze` → `IdeaGenerationController.generateFromProblem` (src/modules/ideas/interface/http/idea-generation.controller.ts:93). After validation/credit checks it calls **`PipelineTriggerService.startPipeline(userId, rawIdea)`** (src/modules/pipeline/api/pipeline-trigger.service.ts:24), which creates an `ideaId` and pushes a `plan_idea` job onto `orchestration-queue`.
+
+Retries: `POST /ideas/:id/retry-research` (src/modules/ideas/interface/http/idea-pipeline.controller.ts:118) → same trigger.
+
+## Stage 1 — Plan (orchestrator)
+
+`OrchestratorWorker` (src/modules/pipeline/planner/orchestrator.worker.ts:24) picks up the job and delegates to `PlannerService.plan` (src/modules/pipeline/planner/planner.service.ts:48):
+
+1. LLM classifies the idea → `PlannerOutput` (idea type, title, per-section customizations).
+2. `TemplateService.getTemplateForType` selects a template, returning an ordered list of sections with `dependsOn`, `skillIds`, `toolIds`, `modelTier`.
+3. Execution **waves** computed by topological sort on `dependsOn`.
+4. `plan.md` written to S3 via `FileStorageService`.
+5. `IndexManager.createIndex` writes `index.json` (the run's authoritative state file).
+6. `run_started` broadcast → notification queue.
+7. Wave 1 sections enqueued onto `section-research-queue`.
+
+## Stage 2 — Per-section research (fan-out)
+
+`SectionResearchWorker` (src/modules/pipeline/research/section-research.worker.ts:23) → `ResearchAgentService.researchSection` (src/modules/pipeline/research/research-agent.service.ts:99). For each section:
+
+1. Stale-run + budget + terminal-status guards.
+2. Mark `running`, broadcast `section_started`.
+3. `ContextAssemblerService.assemble` pulls skills, `plan.md`, and dependency outputs.
+4. `LlmProviderResolverService.resolve(userId, modelTier, modelOverride)` picks the model (platform key or user BYOK).
+5. `MasterAgentService.call` runs the section prompt with allowed tools (web search, reddit, scrapers…) — capped at **2 tool rounds**, **120s timeout**. Timeout → `no_tools` fallback (no intermediate "search-only" step anymore).
+6. Output is sanitized (`sanitizePromptLeakage`) and written as `<sectionId>.md`; tool calls saved as `<sectionId>.tool_results.json`.
+7. Cost/tokens persisted to `index.json` and to `CostEvent` rows via `CostTrackingService`.
+8. Section marked `complete`/`failed`/`skipped`. `checkAndDispatchNext` either enqueues newly-unblocked sections or, when **all sections are terminal**, enqueues an `assemble_report` job onto `assembly-queue`.
+
+Failures write a placeholder section file so assembly can still produce a partial report.
+
+## Stage 3 — Assembly (the actual "report")
+
+`AssemblyWorker` (src/modules/pipeline/assembly/assembly.worker.ts:30) → `AssemblyService.assembleReport` (src/modules/pipeline/assembly/assembly.service.ts:107). This is the heart of the report:
+
+1. Read all section files; build `sectionData` (≥50 chars) + `failedSectionData` placeholders.
+2. **Merge** → `mergeReportSections` produces `merged.markdown` (also written as `merged_report.md` — always kept as backup).
+3. **Evidence pack** → `buildEvidencePack` extracts `[name](url)` citations, builds `evidence_cards.json` + `source_manifest.json`.
+4. **Quality gate #1** (`ReportQualityGateService`) on merged markdown + evidence. If unpublishable and strict gate enabled → `handleQualityGateFailure` (writes `quality_report.json`, status `failed`).
+5. **Compression** (`compressResearchSections`) reduces tokens before LLM calls.
+6. **Parallel `Promise.allSettled`** of two LLM phases (the key step):
+   - `runUnifiedExtraction` → one structured-JSON call producing `extractedData` (synthesis, risks, etc.) via `AssemblyExtractorService`.
+   - `MetricsScoringService.scoreMetrics` → **6 parallel calls**, one per metric, producing rich `components[]` + `evidenceRefs[]`.
+7. Merge metrics into `extractedData.metrics`; reconcile narrative with metric scores; normalize credibility scores.
+8. **Final report rendering** — three-tier strategy:
+   - **Deterministic renderer** (`renderDeterministicFinalReport`) when structured extraction succeeded — pure code, no LLM, URLs pulled from `sourceManifest`.
+   - **LLM final synthesis** (`AssemblyFinalSynthesisService.run`) if deterministic fails the gate and `PIPELINE_V2_FINAL_SYNTHESIS_ENABLED !== 'false'`.
+   - **Merged markdown** fallback otherwise.
+9. **Quality gate #2** on the final content + structured report. Forensics dump (`structured_report.rejected.json`) on failure.
+10. Write artifacts to S3: `final_report.md`, `structured_report.json`, `evidence_pack.json`, `source_manifest.json`, `evidence_cards.json`, `shadow_eval.json`, `quality_report.json` (when relevant). Each one is registered in `index.json` manifest.
+11. `index.status` → `complete` or `partial`. Broadcast `run_complete`. Dispatch `db-sync-queue` job to persist to the database.
+
+## Reading the report back
+
+`GET /ideas/:id/pipeline-status` (src/modules/ideas/interface/http/idea-pipeline.controller.ts:174) reads `index.json` via `IndexManagerService` and returns status, progress, sections, cost. Artifact files themselves (e.g. `final_report.md`) are served by the artifacts controller (`src/modules/ideas/interface/http/idea-artifacts.controller.ts`).
+
+## Queue topology summary
+
+```
+analyze ─▶ orchestration-queue ─▶ section-research-queue ─▶ assembly-queue
+                                       │ (fan-out, waves)         │
+                                       └────────► notification-queue
+                                                  db-sync-queue
+```
+
+Authoritative state = `index.json` in S3 per `(userId, ideaId)`. All workers read/write through `IndexManagerService` with stale-run guards (`runCreatedAt` comparisons) so retries don't double-write.

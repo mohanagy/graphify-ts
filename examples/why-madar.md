@@ -12,7 +12,7 @@ Madar is for the moment when a structural graph already tells you what exists, b
 ## In progress
 
 - A reproducible benchmark suite that reports **per-repo spread** instead of a single marketing number. See [`docs/benchmarks/suite/`](../docs/benchmarks/suite/README.md).
-- Better evidence for whether strict guidance reduces exploration in practice. The current evidence is mixed; the counterexample note is in [`docs/benchmarks/2026-05-25-founder-command-center-auth-flow/`](../docs/benchmarks/2026-05-25-founder-command-center-auth-flow/README.md).
+- Better evidence for how strict guidance changes exploration behavior in practice. The current evidence is mixed; the counterexample note is in [`docs/benchmarks/2026-05-25-founder-command-center-auth-flow/`](../docs/benchmarks/2026-05-25-founder-command-center-auth-flow/README.md).
 
 ## Not yet measured
 

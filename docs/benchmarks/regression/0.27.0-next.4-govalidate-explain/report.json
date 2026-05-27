@@ -1,0 +1,370 @@
+{
+  "baseline_mode": "native_agent",
+  "question": "How idea report is being generated",
+  "graph_path": "out/graph.json",
+  "isolation": false,
+  "environment": {
+    "claude_code_version": "2.1.142",
+    "host_os": "darwin-arm64",
+    "node_version": "v22.22.3",
+    "mcp_servers_active": [
+      "madar"
+    ],
+    "mcp_server_count": 1,
+    "skills_loaded": [
+      "agent-email-inbox",
+      "agent-memory-systems",
+      "ai-regression-testing",
+      "android-clean-architecture",
+      "api-design",
+      "article-writing",
+      "backend-patterns",
+      "best-practices",
+      "brainstorming",
+      "bun-runtime",
+      "claude-api",
+      "code-reviewer",
+      "coding-standards",
+      "compose-multiplatform-patterns",
+      "configure-ecc",
+      "content-engine",
+      "context7-auto-research",
+      "continuous-learning",
+      "continuous-learning-v2",
+      "cpp-coding-standards",
+      "cpp-testing",
+      "crosspost",
+      "deep-research",
+      "design-md",
+      "django-patterns",
+      "django-tdd",
+      "django-verification",
+      "dmux-workflows",
+      "documentation-lookup",
+      "e2e-testing",
+      "email-best-practices",
+      "enhance-prompt",
+      "eval-harness",
+      "exa-search",
+      "fal-ai-media",
+      "figma-implement-design",
+      "find-skills",
+      "frontend-design",
+      "frontend-patterns",
+      "frontend-slides",
+      "frontend-to-backend-requirements",
+      "golang-patterns",
+      "golang-testing",
+      "graphify",
+      "graphify-ts",
+      "investor-materials",
+      "investor-outreach",
+      "iterative-retrieval",
+      "java-coding-standards",
+      "kotlin-coroutines-flows",
+      "kotlin-exposed-patterns",
+      "kotlin-ktor-patterns",
+      "kotlin-patterns",
+      "kotlin-testing",
+      "laravel-patterns",
+      "laravel-tdd",
+      "learned",
+      "market-research",
+      "mcp-server-patterns",
+      "mermaid-diagrams",
+      "mobile-design",
+      "nextjs-turbopack",
+      "nodejs-best-practices",
+      "perl-patterns",
+      "perl-testing",
+      "plankton-code-quality",
+      "project-guidelines-example",
+      "python-patterns",
+      "python-testing",
+      "react-best-practices",
+      "react-email",
+      "react-ui-patterns",
+      "remotion",
+      "resend",
+      "resend-cli",
+      "rust-patterns",
+      "rust-testing",
+      "security-review",
+      "senior-architect",
+      "senior-backend",
+      "senior-frontend",
+      "senior-fullstack",
+      "shadcn-ui",
+      "skill-development",
+      "skill-stocktake",
+      "software-architecture",
+      "springboot-patterns",
+      "springboot-tdd",
+      "springboot-verification",
+      "stitch-design",
+      "stitch-loop",
+      "strategic-compact",
+      "subagent-driven-development",
+      "tailwind-patterns",
+      "taste-design",
+      "tdd-workflow",
+      "ui-design-system",
+      "ui-ux-pro-max",
+      "using-superpowers",
+      "ux-researcher-designer",
+      "verification-before-completion",
+      "verification-loop",
+      "video-editing",
+      "writing-plans",
+      "x-api"
+    ],
+    "skills_loaded_count": 105,
+    "plugins_active": [
+      "ecc-hooks",
+      "index"
+    ],
+    "user_claude_md_hash": "sha256:576e6cc125d7e1f236eb7b4ffa414d0b31a36562374a22202b646af08242cff2",
+    "project_claude_md_hash": "sha256:700052640ae8a592c2dd4ebbb538d4f2e035e6800b78ff22d1dc5d154c3e4038",
+    "parent_claude_md_hashes": [
+      "sha256:1fee11576b40058921fb572118b581b8f8c4459ba744293f31052bd2c875e316"
+    ],
+    "hooks_active": {
+      "user_prompt_submit": [
+        "project:command:*"
+      ],
+      "pre_tool_use": [],
+      "post_tool_use": []
+    }
+  },
+  "environment_contamination": {
+    "skills_activated_during_run": [],
+    "skills_conflicting_with_madar_rules": [],
+    "calls_to_other_mcps": {},
+    "subagent_dispatches_detected": 0,
+    "skill_alignment_score": 1
+  },
+  "exec_command": {
+    "command": null,
+    "placeholders": [
+      "{prompt_file}"
+    ],
+    "redacted": true
+  },
+  "baseline": {
+    "kind": "succeeded",
+    "model": null,
+    "usage": {
+      "input_tokens": 4623,
+      "cache_creation_input_tokens": 225068,
+      "cache_read_input_tokens": 2137255,
+      "output_tokens": 6445,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 225068,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "",
+      "iterations": [
+        {
+          "input_tokens": 1,
+          "output_tokens": 2556,
+          "cache_read_input_tokens": 158779,
+          "cache_creation_input_tokens": 1994,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 1994
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "total_input_tokens_anthropic_exact": 2366946,
+    "uncached_input_tokens_anthropic_exact": 229691,
+    "cached_input_tokens_anthropic_exact": 2137255,
+    "total_cost_usd": 2.6595425,
+    "num_turns": 29,
+    "duration_ms": 158995,
+    "result_path": "/Users/mohammednaji/Desktop/projects/works/govalidate/backend/out/compare/2026-05-27T17-11-56/baseline-answer.txt"
+  },
+  "madar": {
+    "kind": "succeeded",
+    "model": null,
+    "usage": {
+      "input_tokens": 16,
+      "cache_creation_input_tokens": 103748,
+      "cache_read_input_tokens": 394924,
+      "output_tokens": 5072,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 103748,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "",
+      "iterations": [
+        {
+          "input_tokens": 1,
+          "output_tokens": 3064,
+          "cache_read_input_tokens": 99039,
+          "cache_creation_input_tokens": 6551,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 0,
+            "ephemeral_1h_input_tokens": 6551
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard"
+    },
+    "total_input_tokens_anthropic_exact": 498688,
+    "uncached_input_tokens_anthropic_exact": 103764,
+    "cached_input_tokens_anthropic_exact": 394924,
+    "total_cost_usd": 0.9727670000000002,
+    "num_turns": 8,
+    "duration_ms": 72420,
+    "result_path": "/Users/mohammednaji/Desktop/projects/works/govalidate/backend/out/compare/2026-05-27T17-11-56/madar-answer.txt"
+  },
+  "install_verified": true,
+  "measurement_validity": "valid",
+  "madar_mcp_call_count": 1,
+  "reductions": {
+    "input_tokens": 4.75,
+    "uncached_input_tokens": 2.21,
+    "cache_creation_input_tokens": 2.17,
+    "num_turns": 3.63,
+    "duration_ms": 2.2,
+    "cost_usd": 2.73
+  },
+  "token_regression": false,
+  "token_regression_reasons": [],
+  "prompt_token_source": {
+    "baseline": "anthropic_provider_reported",
+    "madar": "anthropic_provider_reported"
+  },
+  "provider_proof": {
+    "baseline": {
+      "provider": "anthropic",
+      "input_tokens_source": "anthropic_provider_reported",
+      "effective_tokens_source": "anthropic_provider_reported",
+      "total_tokens_source": "anthropic_provider_reported"
+    },
+    "madar": {
+      "provider": "anthropic",
+      "input_tokens_source": "anthropic_provider_reported",
+      "effective_tokens_source": "anthropic_provider_reported",
+      "total_tokens_source": "anthropic_provider_reported"
+    },
+    "reduction_basis": "provider_reported"
+  },
+  "started_at": "2026-05-27T17:11:56.813Z",
+  "completed_at": "2026-05-27T17:15:55.000Z",
+  "paths": {
+    "output_dir": "out/compare/2026-05-27T17-11-56",
+    "report": "out/compare/2026-05-27T17-11-56/report.json",
+    "share_safe_report": "out/compare/2026-05-27T17-11-56/report.share-safe.json",
+    "baseline_answer": "out/compare/2026-05-27T17-11-56/baseline-answer.txt",
+    "madar_answer": "out/compare/2026-05-27T17-11-56/madar-answer.txt",
+    "prompt_file": "out/compare/2026-05-27T17-11-56/native_agent-prompt.txt"
+  },
+  "madar_trace": {
+    "source": "claude_messages_tool_use",
+    "summary": "7 tool calls across 7 turns",
+    "tool_call_count": 7,
+    "tool_calls_by_name": {
+      "mcp__madar__retrieve": 1,
+      "Read": 4,
+      "ToolSearch": 2
+    },
+    "per_turn": [
+      {
+        "turn": 2,
+        "tool_call_count": 1,
+        "tools": [
+          "ToolSearch"
+        ]
+      },
+      {
+        "turn": 4,
+        "tool_call_count": 1,
+        "tools": [
+          "ToolSearch"
+        ]
+      },
+      {
+        "turn": 7,
+        "tool_call_count": 1,
+        "tools": [
+          "mcp__madar__retrieve"
+        ]
+      },
+      {
+        "turn": 10,
+        "tool_call_count": 1,
+        "tools": [
+          "Read"
+        ]
+      },
+      {
+        "turn": 11,
+        "tool_call_count": 1,
+        "tools": [
+          "Read"
+        ]
+      },
+      {
+        "turn": 13,
+        "tool_call_count": 1,
+        "tools": [
+          "Read"
+        ]
+      },
+      {
+        "turn": 14,
+        "tool_call_count": 1,
+        "tools": [
+          "Read"
+        ]
+      }
+    ],
+    "madar_mcp_call_count": 1,
+    "madar_mcp_calls_by_name": {
+      "mcp__madar__retrieve": 1
+    },
+    "context_pack_call_count": 0,
+    "focused_follow_up_tool_call_count": 4,
+    "broad_exploration_tool_call_count": 0,
+    "broad_exploration_tool_calls_by_name": {},
+    "exploration_outcome": "madar_invoked",
+    "exploration_summary": "Madar MCP invoked 1 time (mcp__madar__retrieve); 4 focused follow-up calls; no broad exploration after the first Madar call."
+  },
+  "tool_call_counts": {
+    "baseline": {
+      "total": 28,
+      "Read": 9,
+      "Bash": 2,
+      "Glob": 9,
+      "Grep": 0,
+      "ToolSearch": 8,
+      "other": {}
+    },
+    "madar": {
+      "total": 7,
+      "Read": 4,
+      "Bash": 0,
+      "Glob": 0,
+      "Grep": 0,
+      "ToolSearch": 2,
+      "other": {
+        "retrieve": 1
+      }
+    }
+  }
+}
