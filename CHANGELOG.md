@@ -6,14 +6,22 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ### Added
 
-- **Pack Schema v1 and implementation-ready pack guidance**: `madar pack` now emits a stable schema for implementation tasks, including workflow centers, likely edit/test files, public contracts, risk boundaries, validation commands, negative guidance, and agent-ready brief renderers from one source of truth.
-- **A reproducible benchmark-suite scaffold**: `madar bench:suite` now ships fixed repo/task manifests, isolation assets, share-safe result publication, and the first measured public suite row under `docs/benchmarks/suite/`.
+- **Agent-directive evidence blocks on Madar MCP responses**: relevant `mcp__madar__*` responses now carry a deterministic top-level `evidence` block with `pack_confidence`, `coverage`, `missing_phases`, `covered_workflow_owners`, and `agent_directive`, and the install rules use that directive to gate broader exploration. Closes #339 via #348.
+- **Decision-table install templates**: `madar claude install` and the other agent installers now write concrete tool-routing guidance for prompt types like explain-runtime, impact, relevant-files, and repo-overview work instead of generic "use Madar tools" copy. Closes #337.
+- **Snippets in `mcp__madar__retrieve` responses**: `retrieve` now carries inline `nodes[].snippet` content plus a `snippet_budget` so callers can answer from the first response instead of immediately following up with raw file reads. Closes #338.
+- **Install presence gates and stable install sentinels**: `madar compare` and `madar bench:suite` now refuse to produce a "valid" Madar benchmark when no install is detected unless `--allow-no-install` is passed, and managed installs write a stable `name: "madar"` / `source: "madar"` sentinel so that detection works across hook encodings. Closes #341 and #349.
+- **Environment capture and isolation scaffolding for benchmarks**: benchmark artifacts now record active MCP servers, plugin/skill counts, CLAUDE.md hashes, and active hooks, and the suite ships checked-in isolation assets for reproducible cells. Closes #342 in part.
 
 ### Changed
 
-- **Installed-agent and compare flows are more reliable**: installed guidance now stays stricter about bounded exploration, explain-mode MCP responses expose top-level `evidence` metadata, and managed install detection now keys off the real generated hook structure with stable Claude/Gemini/Codex identity markers.
-- **Runtime and implementation packs are more trustworthy**: implementation-mode packs now promote workflow owners more accurately, runtime-generation answers keep more honest `execution_slice` / `phase_coverage` reporting, and weak-evidence fallbacks are more explicit about uncertainty instead of overclaiming full runtime certainty.
-- **Public proof surfaces are more honest and reproducible**: README/package/docs language now maps public claims back to dated evidence, benchmark isolation metadata is checked in, and compare artifacts keep the share-safe/reporting posture introduced across the `0.27.0-next.*` line.
+- **Pack assembly post-processing is restored alongside the evidence envelope**: `confidence_score`, `recommended_first_read`, `workflow_centers`, `coverage`, `missing_context`, `negative_guidance`, and related pack fields are again populated at both the response root and inside `.pack` for strong-path runs. Closes #350.
+- **Compare verbose-mode reporting is more honest about token behavior**: `report.json.reductions` now keeps uncached/cache-creation deltas, `token_regression` flags fresh-token regressions even when total input drops, and tool-call counts come from the verbose JSON stream instead of a lossy approximation. Closes #316 and #329.
+- **`madar summary` now marks empty capability buckets explicitly**: empty `source_domains` and `runtime_paths` report `not_detected` plus a reason instead of silently appearing as empty objects. Closes #317.
+- **Public release copy is anchored to a verified benchmark cell**: `README.md`, `CHANGELOG.md`, and `docs/claims-and-evidence.md` now point at the checked-in `0.27.0-next.4` GoValidate release cell instead of generalized benchmark copy.
+
+### Fixed
+
+- **`execution_slice` / `phase_coverage` overclaim on weak evidence**: low-confidence runtime slices no longer pretend they saw every phase in a multi-stage flow, and the surfaced status now reflects the actual trace depth. Closes #315.
 
 ## [0.27.0-next.4] - 2026-05-27
 
