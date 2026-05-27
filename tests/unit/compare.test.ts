@@ -1948,10 +1948,12 @@ describe('compare runtime', () => {
     const report = result.reports[0]!
     const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as {
       madar_trace?: {
+        agent_directive_seen?: string[]
         per_turn?: Array<Record<string, unknown>>
       }
     }
 
+    expect(savedReport.madar_trace?.agent_directive_seen).toEqual(['answer_from_pack'])
     expect(savedReport.madar_trace?.per_turn).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

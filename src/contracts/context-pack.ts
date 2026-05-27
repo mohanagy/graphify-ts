@@ -10,6 +10,7 @@ import type { TaskIntentKind } from './task-intent.js'
 import type { ContextPackDiagnosticWarning } from './context-pack-diagnostics.js'
 import type { SourceDomain } from '../shared/source-discovery.js'
 import type { TaskContextPlan } from './task-context-plan.js'
+import type { MadarResponseEvidence } from '../runtime/mcp-response-evidence.js'
 
 export type ContextPackTaskKind = 'explain' | 'implement' | 'review' | 'impact'
 export type ContextPackFormat = 'json' | 'text' | 'markdown' | 'claude' | 'copilot'
@@ -439,6 +440,7 @@ export interface ContextPackSchemaV1<TPack = unknown> {
   confidence_score: number
   why_explanation: string[]
   pack: TPack
+  evidence: MadarResponseEvidence
   claims: ContextPackClaim[]
   expandable: ContextPackExpandableRef[]
   coverage: ContextPackCoverage

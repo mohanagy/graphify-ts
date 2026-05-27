@@ -27,6 +27,12 @@ import { buildTaskContextPlan } from '../runtime/task-context-planner.js'
 import { resolveTaskSelection } from '../runtime/task-intent.js'
 import { compactRetrieveResult, retrieveContext, type RetrieveResult } from '../runtime/retrieve.js'
 import { buildImplementationPackGuidance } from '../runtime/implementation-pack.js'
+import {
+  buildMadarResponseEvidence,
+  collectWorkflowOwners,
+  missingPhasesFromPayload,
+  type MadarResponseEvidence,
+} from '../runtime/mcp-response-evidence.js'
 import { buildRoutingDebug } from '../runtime/routing-debug.js'
 import { communitiesFromGraph, loadGraph } from '../runtime/serve.js'
 
@@ -78,6 +84,7 @@ type PackPayload = RetrievePackPayload | ReviewPackPayload | ImpactPackPayload
 type PackResponseBase = ReturnType<typeof baseResponse>
 
 type PackSchemaEnvelope<TPack extends PackPayload = PackPayload> = ContextPackSchemaV1<TPack> & PackResponseBase & {
+  evidence: MadarResponseEvidence
   implementation?: ImplementationPackGuidance
   target?: string
 }
@@ -718,6 +725,20 @@ function buildPackSchemaV1<TPack extends PackPayload>(
   const contracts = publicContracts(response.implementation)
   const guidance = negativeGuidance(response.task, response.coverage, response.pack, response.implementation, retrieval)
   const score = confidenceScore(response.coverage, response.pack, response.implementation)
+  const evidence = buildMadarResponseEvidence({
+    coverage: response.coverage,
+    missingPhases: missingPhasesFromPayload(response.pack as {
+      answer_contract?: { missing_phases?: readonly unknown[] }
+      execution_slice?: { phase_coverage?: { missing?: readonly unknown[] } }
+    }),
+    coveredWorkflowOwners: collectWorkflowOwners(
+      centers.map((entry) => entry.path),
+      firstRead.map((entry) => entry.path),
+      response.implementation?.likely_edit_files.map((entry) => entry.path) ?? [],
+      response.implementation?.likely_test_files.map((entry) => entry.path) ?? [],
+    ),
+    score,
+  })
   const compatibilityFields: PackGuidanceCompatibilityFields = {
     workflow_centers: centers,
     recommended_first_read: firstRead,
@@ -727,6 +748,7 @@ function buildPackSchemaV1<TPack extends PackPayload>(
   return {
     schema_version: 1,
     ...serializableResponse,
+    evidence,
     pack: packForSchema(response.task, response.pack, compatibilityFields),
     workflow_centers: centers,
     recommended_first_read: firstRead,
@@ -813,11 +835,13 @@ function hasGroundedFirstRead(schema: PackSchemaEnvelope): boolean {
 }
 
 function useDirectiveAdapterGuidance(schema: PackSchemaEnvelope): boolean {
-  return schema.confidence_score >= ADAPTER_DIRECTIVE_CONFIDENCE_THRESHOLD
-    && schema.missing_context.length === 0
-    && schema.missing_semantic.length === 0
-    && hasGraphBackedWorkflowCenter(schema)
-    && hasGroundedFirstRead(schema)
+  switch (schema.evidence.agent_directive) {
+    case 'answer_from_pack':
+      return true
+    case 'verify_one_targeted_file':
+    case 'explore_with_caution':
+      return false
+  }
 }
 
 function claudeSearchGuidanceLine(schema: PackSchemaEnvelope): string {

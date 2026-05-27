@@ -411,11 +411,21 @@ describe('context-pack-command', () => {
     }, dependencies)
 
     const payload = JSON.parse(output) as {
+      evidence?: {
+        pack_confidence?: string
+        coverage?: string
+        agent_directive?: string
+      }
       workflow_centers?: Array<{ path?: string; label?: string }>
       recommended_first_read?: Array<{ path?: string; label?: string }>
       negative_guidance?: string[]
     }
 
+    expect(payload.evidence).toEqual(expect.objectContaining({
+      pack_confidence: 'high',
+      coverage: 'complete',
+      agent_directive: 'answer_from_pack',
+    }))
     expect(payload.workflow_centers?.slice(0, 4)).toEqual([
       expect.objectContaining({
         path: 'src/ideas/controller.ts',

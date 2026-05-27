@@ -126,6 +126,7 @@ export interface CompareMadarTrace {
   tool_call_count: number
   tool_calls_by_name: Record<string, number>
   per_turn: CompareMadarTraceTurnSummary[]
+  agent_directive_seen?: string[]
   madar_mcp_call_count: number
   madar_mcp_calls_by_name: Record<string, number>
   context_pack_call_count: number
@@ -1238,6 +1239,7 @@ function extractMadarTrace(stdout: string): CompareMadarTrace | undefined {
 
   const sortedTurns = [...perTurnIndex.keys()].sort((leftTurn, rightTurn) => leftTurn - rightTurn)
   const perTurn = sortedTurns.map((turn) => perTurnIndex.get(turn)!)
+  const agentDirectivesSeen = [...new Set(perTurn.flatMap((turn) => turn.agent_directive_seen ?? []))]
   const exploration = analyzeMadarTraceExploration(perTurn)
 
   return {
@@ -1248,6 +1250,7 @@ function extractMadarTrace(stdout: string): CompareMadarTrace | undefined {
       Object.entries(toolCallsByName).sort(([leftName], [rightName]) => leftName.localeCompare(rightName)),
     ),
     per_turn: perTurn,
+    ...(agentDirectivesSeen.length > 0 ? { agent_directive_seen: agentDirectivesSeen } : {}),
     ...exploration,
   }
 }

@@ -303,6 +303,38 @@ describe('context-pack adapter gating', () => {
     expect(output).toContain('Do not start with a broad repo search.')
   })
 
+  it('aligns claude anti-search guidance with answer_from_pack evidence', async () => {
+    const coverage = highConfidenceCoverage()
+    buildImplementationPackGuidanceMock.mockReturnValue(lowConfidenceImplementation())
+    const dependencies = buildDependencies(buildRetrieval(coverage), buildCompactPack(coverage))
+
+    const json = JSON.parse(await runContextPackCommand({
+      prompt: 'Implement issue #312 by gating directive adapter wording on pack quality',
+      budget: 1800,
+      task: 'implement',
+      taskExplicit: true,
+      graphPath: 'out/graph.json',
+      format: 'json',
+    } as never, dependencies)) as {
+      evidence?: {
+        agent_directive?: string
+      }
+    }
+
+    expect(json.evidence?.agent_directive).toBe('answer_from_pack')
+
+    const output = await runContextPackCommand({
+      prompt: 'Implement issue #312 by gating directive adapter wording on pack quality',
+      budget: 1800,
+      task: 'implement',
+      taskExplicit: true,
+      graphPath: 'out/graph.json',
+      format: 'claude',
+    } as never, dependencies)
+
+    expect(output).toContain('Do not start with a broad repo search.')
+  })
+
   it('suppresses claude anti-search guidance when required semantic coverage is still missing', async () => {
     const coverage = missingSemanticCoverage()
     buildImplementationPackGuidanceMock.mockReturnValue(highConfidenceImplementation())

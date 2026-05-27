@@ -97,3 +97,39 @@ export function buildMadarResponseEvidence(input: {
     agent_directive: agentDirectiveForEvidence(packConfidence, coverage),
   }
 }
+
+export function collectWorkflowOwners(...groups: Array<readonly (string | null | undefined)[]>): string[] {
+  const seen = new Set<string>()
+  const owners: string[] = []
+
+  for (const group of groups) {
+    for (const value of group) {
+      const normalized = typeof value === 'string' ? value.trim() : ''
+      if (normalized.length === 0 || seen.has(normalized)) {
+        continue
+      }
+      seen.add(normalized)
+      owners.push(normalized)
+      if (owners.length >= 5) {
+        return owners
+      }
+    }
+  }
+
+  return owners
+}
+
+export function missingPhasesFromPayload(
+  payload: Partial<{
+    answer_contract: { missing_phases?: readonly unknown[] }
+    execution_slice: { phase_coverage?: { missing?: readonly unknown[] } }
+  }>,
+): ContextPackExecutionPhase[] {
+  const fromAnswer = Array.isArray(payload.answer_contract?.missing_phases)
+    ? payload.answer_contract.missing_phases.filter((value): value is ContextPackExecutionPhase => typeof value === 'string')
+    : []
+  const fromSlice = Array.isArray(payload.execution_slice?.phase_coverage?.missing)
+    ? payload.execution_slice.phase_coverage.missing.filter((value): value is ContextPackExecutionPhase => typeof value === 'string')
+    : []
+  return [...new Set([...fromAnswer, ...fromSlice])]
+}
