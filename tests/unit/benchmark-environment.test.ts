@@ -173,4 +173,37 @@ describe('benchmark environment helpers', () => {
       skill_alignment_score: 0.33,
     })
   })
+
+  it('counts structured spawn_agent tool-use variants as contamination', () => {
+    const contamination = extractEnvironmentContamination(JSON.stringify([
+      {
+        type: 'assistant',
+        turn: 1,
+        message: {
+          content: [
+            { type: 'tool_use', name: 'spawn_agent' },
+            { type: 'tool_use', name: 'spawn-agent' },
+            { type: 'tool_use', name: 'spawn agent' },
+          ],
+        },
+      },
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        duration_ms: 10,
+        num_turns: 1,
+        result: 'ok',
+        total_cost_usd: 0,
+        usage: {
+          input_tokens: 1,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+          output_tokens: 1,
+        },
+      },
+    ]))
+
+    expect(contamination.subagent_dispatches_detected).toBe(3)
+  })
 })

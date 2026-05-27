@@ -1062,4 +1062,35 @@ describe('runBenchmarkSuite', () => {
       }
     })
   })
+
+  it('fails closed when isolation is enabled without a pinned expected environment', async () => {
+    const previousIsolation = process.env.MADAR_BENCH_ISOLATION
+    process.env.MADAR_BENCH_ISOLATION = '1'
+
+    try {
+      await expect(runBenchmarkSuite(
+        {
+          repo: null,
+          task: null,
+          mode: 'cold',
+          trials: 1,
+          outputDir: 'out/benchmarks',
+          execTemplate: 'mock-runner',
+          dryRun: false,
+          yes: true,
+        },
+        {
+          repos: [],
+          tasks: [],
+          expectedEnvironment: null,
+        },
+      )).rejects.toThrow('Benchmark isolation is enabled but no expected environment was loaded')
+    } finally {
+      if (previousIsolation === undefined) {
+        delete process.env.MADAR_BENCH_ISOLATION
+      } else {
+        process.env.MADAR_BENCH_ISOLATION = previousIsolation
+      }
+    }
+  })
 })

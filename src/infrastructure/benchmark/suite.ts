@@ -562,6 +562,11 @@ export async function runBenchmarkSuite(
   const expectedEnvironment = isolation
     ? (dependencies.expectedEnvironment === undefined ? loadExpectedEnvironment() : dependencies.expectedEnvironment)
     : null
+  if (isolation && expectedEnvironment === null) {
+    throw new Error(
+      `Benchmark isolation is enabled but no expected environment was loaded from ${portablePath(DEFAULT_EXPECTED_ENVIRONMENT_PATH)}`,
+    )
+  }
 
   const selectedRepos = selectById(repos, 'repo', options.repo)
   const selectedTasks = selectById(tasks, 'task', options.task)

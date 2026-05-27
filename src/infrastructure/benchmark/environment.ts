@@ -444,6 +444,10 @@ export function extractEnvironmentContamination(stdout: string): BenchmarkEnviro
   for (const contentPart of assistantContent) {
     if (contentPart.type === 'tool_use' && typeof contentPart.name === 'string') {
       const toolName = contentPart.name.trim()
+      const normalizedToolName = toolName.toLowerCase()
+      if (/^spawn[_ -]?agent$/.test(normalizedToolName)) {
+        contamination.subagent_dispatches_detected += 1
+      }
       if (toolName.startsWith('mcp__') && !toolName.startsWith('mcp__madar__')) {
         otherMcpCalls[toolName] = (otherMcpCalls[toolName] ?? 0) + 1
       }
