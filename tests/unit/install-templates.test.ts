@@ -57,6 +57,60 @@ function decodeHookPayload(settingsJson: string): string {
   return decodedPayloads.join('\n')
 }
 
+function expectMarkdownRoutingTable(content: string): void {
+  const normalized = content.replaceAll('\\"', '"')
+  expect(normalized).toContain('For each codebase question, use the specific Madar MCP tool below first:')
+  expect(normalized).toContain('| Prompt type')
+  expect(normalized).toContain('| "how does X work" / explain runtime / flow')
+  expect(normalized).toContain('| "what breaks if I change X" / impact analysis')
+  expect(normalized).toContain('| "which files should I open first"')
+  expect(normalized).toContain('| "give me a repo overview"')
+  expect(normalized).toContain('`context_pack`')
+  expect(normalized).toContain('`impact`')
+  expect(normalized).toContain('`relevant_files`')
+  expect(normalized).toContain('`graph_summary`')
+  expect(normalized).toContain('Do not run ToolSearch before calling a Madar tool')
+}
+
+function expectPlainRoutingGuide(content: string): void {
+  const normalized = content.replaceAll('\\"', '"')
+  expect(normalized).toContain('For each codebase question, call the matching Madar MCP tool directly first')
+  expect(normalized).toContain('context_pack for "how does X work?" / explain runtime / flow')
+  expect(normalized).toContain('impact for "what breaks if I change X?" / impact analysis')
+  expect(normalized).toContain('relevant_files for "which files should I open first?"')
+  expect(normalized).toContain('graph_summary for "give me a repo overview?"')
+  expect(normalized).toContain('Do not run ToolSearch before calling a Madar tool')
+}
+
+function expectMarkdownPackRoutingTable(content: string): void {
+  const normalized = content.replaceAll('\\"', '"')
+  expect(normalized).toContain('For each codebase question, start with the specific Madar command below first:')
+  expect(normalized).toContain('| Prompt type')
+  expect(normalized).toContain('| "how does X work" / explain runtime / flow')
+  expect(normalized).toContain('| "what breaks if I change X" / impact analysis')
+  expect(normalized).toContain('| "which files should I open first"')
+  expect(normalized).toContain('| "give me a repo overview"')
+  expect(normalized).toContain('`madar pack "<task or question>" --task explain`')
+  expect(normalized).toContain('`madar pack "<task or question>" --task impact`')
+  expect(normalized).toContain('`relevant_files` when MCP graph tools are available')
+  expect(normalized).toContain('`graph_summary` when MCP graph tools are available')
+  expect(normalized).toContain('`retrieve` for direct codebase questions')
+  expect(normalized).toContain('`feature_map` for involved areas and entry points')
+  expect(normalized).toContain('`risk_map` before editing')
+  expect(normalized).toContain('`implementation_checklist` for edit order and validation checkpoints')
+  expect(normalized).toContain('Do not run ToolSearch before calling a Madar command or graph tool')
+}
+
+function expectPlainPackRoutingGuide(content: string): void {
+  const normalized = content.replaceAll('\\"', '"')
+  expect(normalized).toContain('For each codebase question, start with the specific Madar command below first')
+  expect(normalized).toContain('madar pack "<task or question>" --task explain for "how does X work?" / explain runtime / flow')
+  expect(normalized).toContain('madar pack "<task or question>" --task impact for "what breaks if I change X?" / impact analysis')
+  expect(normalized).toContain('relevant_files when MCP graph tools are available for "which files should I open first?"')
+  expect(normalized).toContain('graph_summary when MCP graph tools are available for "give me a repo overview?"')
+  expect(normalized).toContain('Do not run ToolSearch before calling a Madar command or graph tool')
+}
+
 describe('install hook payload', () => {
   it('decoded hook payload keeps the graph-first guidance without benchmark marketing copy', () => {
     withTempDir((projectDir) => {
@@ -94,11 +148,10 @@ describe('install hook payload', () => {
       claudeInstall(projectDir)
       const settings = readFileSync(join(projectDir, '.claude', 'settings.json'), 'utf8')
       const decoded = decodeHookPayload(settings)
-      expect(decoded).toContain('relevant_files')
+      expectPlainRoutingGuide(decoded)
       expect(decoded).toContain('feature_map')
       expect(decoded).toContain('risk_map')
       expect(decoded).toContain('implementation_checklist')
-      expect(decoded).toContain('impact')
     })
   })
 
@@ -109,6 +162,7 @@ describe('install hook payload', () => {
       const decoded = decodeHookPayload(settings)
       expect(decoded).toContain('context-pack-first')
       expect(decoded).toContain('madar pack')
+      expectPlainPackRoutingGuide(decoded)
     })
   })
 })
@@ -133,5 +187,13 @@ describe('built-in install templates', () => {
     expect(content).toContain('spawn_agent')
     expect(content).toContain('npx --yes madar --help')
     expect(content).toContain('Only use madar when the task needs local repository source-code context.')
+    expectMarkdownPackRoutingTable(content)
+  })
+
+  it('documents the Copilot routing decision table in the built-in skill', () => {
+    const content = getBuiltInSkillContent('copilot')
+
+    expect(content).toContain('# /madar')
+    expectMarkdownRoutingTable(content)
   })
 })

@@ -43,6 +43,50 @@ const STRICT_GRAPH_REPORT_RULE_PLAIN_SENTENCE =
 const STRICT_NO_BROAD_EXPLORATION_RULE_PLAIN =
   'do not run broad glob patterns, repo-wide grep / find searches, or raw file sweeps after a high- or medium-confidence pack'
 
+function expectMarkdownRoutingTable(content: string): void {
+  const normalized = content.replaceAll('\\"', '"')
+  expect(normalized).toContain('For each codebase question, use the specific Madar MCP tool below first:')
+  expect(normalized).toContain('| Prompt type')
+  expect(normalized).toContain('| "how does X work" / explain runtime / flow')
+  expect(normalized).toContain('| "what breaks if I change X" / impact analysis')
+  expect(normalized).toContain('| "which files should I open first"')
+  expect(normalized).toContain('| "give me a repo overview"')
+  expect(normalized).toContain('`context_pack`')
+  expect(normalized).toContain('`impact`')
+  expect(normalized).toContain('`relevant_files`')
+  expect(normalized).toContain('`graph_summary`')
+  expect(normalized).toContain('Do not run ToolSearch before calling a Madar tool')
+}
+
+function expectPlainRoutingGuide(content: string): void {
+  const normalized = content.replaceAll('\\"', '"')
+  expect(normalized).toContain('For each codebase question, call the matching Madar MCP tool directly first')
+  expect(normalized).toContain('context_pack for "how does X work?" / explain runtime / flow')
+  expect(normalized).toContain('impact for "what breaks if I change X?" / impact analysis')
+  expect(normalized).toContain('relevant_files for "which files should I open first?"')
+  expect(normalized).toContain('graph_summary for "give me a repo overview?"')
+  expect(normalized).toContain('Do not run ToolSearch before calling a Madar tool')
+}
+
+function expectCodexMarkdownRoutingTable(content: string): void {
+  const normalized = content.replaceAll('\\"', '"')
+  expect(normalized).toContain('For each codebase question, start with the specific Madar command below first:')
+  expect(normalized).toContain('| Prompt type')
+  expect(normalized).toContain('| "how does X work" / explain runtime / flow')
+  expect(normalized).toContain('| "what breaks if I change X" / impact analysis')
+  expect(normalized).toContain('| "which files should I open first"')
+  expect(normalized).toContain('| "give me a repo overview"')
+  expect(normalized).toContain('`madar pack "<task or question>" --task explain`')
+  expect(normalized).toContain('`madar pack "<task or question>" --task impact`')
+  expect(normalized).toContain('`relevant_files` when MCP graph tools are available')
+  expect(normalized).toContain('`graph_summary` when MCP graph tools are available')
+  expect(normalized).toContain('`retrieve` for direct codebase questions')
+  expect(normalized).toContain('`feature_map` for involved areas and entry points')
+  expect(normalized).toContain('`risk_map` before editing')
+  expect(normalized).toContain('`implementation_checklist` for edit order and validation checkpoints')
+  expect(normalized).toContain('Do not run ToolSearch before calling a Madar command or graph tool')
+}
+
 const BUNDLED_ASSET_CONTENT = {
   'skill.md': '# madar\n\nLocal bundled Claude skill\n',
   'skill-aider.md': '# madar\n\nAider bundled skill.\n',
@@ -432,6 +476,7 @@ describe('install helpers', () => {
           expect(readFileSync(join(projectDir, 'GEMINI.md'), 'utf8')).toContain('impact')
           expect(readFileSync(join(projectDir, 'GEMINI.md'), 'utf8')).toContain('Only use madar when the task needs local repository source-code context.')
           expect(readFileSync(join(projectDir, 'GEMINI.md'), 'utf8')).toContain(STRICT_GRAPH_REPORT_RULE_MD)
+          expectMarkdownRoutingTable(readFileSync(join(projectDir, 'GEMINI.md'), 'utf8'))
           expect(readFileSync(join(projectDir, '.gemini', 'settings.json'), 'utf8')).toContain('out')
 
           const uninstallMessage = geminiUninstall(projectDir, { homeDir })
@@ -514,7 +559,9 @@ describe('install helpers', () => {
       const installMessage = cursorInstall(projectDir)
       expect(normalizeAssertionPath(installMessage)).toContain('.cursor/rules/madar.mdc')
       expect(existsSync(join(projectDir, '.cursor', 'rules', 'madar.mdc'))).toBe(true)
-      expect(readFileSync(join(projectDir, '.cursor', 'rules', 'madar.mdc'), 'utf8')).toContain('alwaysApply: true')
+      const rule = readFileSync(join(projectDir, '.cursor', 'rules', 'madar.mdc'), 'utf8')
+      expect(rule).toContain('alwaysApply: true')
+      expectMarkdownRoutingTable(rule)
 
       const uninstallMessage = cursorUninstall(projectDir)
       expect(uninstallMessage).toContain('removed')
@@ -536,6 +583,7 @@ describe('install helpers', () => {
       expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toContain('implementation_checklist')
       expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toContain('impact')
       expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toContain('Only use madar when the task needs local repository source-code context.')
+      expectMarkdownRoutingTable(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8'))
 
       const uninstallMessage = claudeUninstall(projectDir)
       expect(uninstallMessage).toMatch(/madar section removed|CLAUDE\.md was empty after removal/)
@@ -998,6 +1046,7 @@ describe('install helpers', () => {
       expect(agentsMd).toContain('madar codex uninstall')
       expect(agentsMd).toContain('Manual verification')
       expect(agentsMd).toContain(STRICT_GRAPH_REPORT_RULE_MD)
+      expectCodexMarkdownRoutingTable(agentsMd)
       expect(agentsMd).not.toContain('Only fall back to raw file tools** when the context pack or graph tools are missing, stale, or insufficient. In that case, read `out/GRAPH_REPORT.md` first.')
       expect(decodedHookPayload).toContain('context-pack-first')
       expect(decodedHookPayload).toContain('madar pack')
@@ -1042,7 +1091,8 @@ describe('install helpers', () => {
         expect(agentsMd).not.toContain('In that case, read `out/GRAPH_REPORT.md` first.')
 
         const plugin = readFileSync(join(projectDir, '.opencode', 'plugins', 'madar.js'), 'utf8')
-        expect(plugin).toContain(STRICT_GRAPH_REPORT_RULE_PLAIN_SENTENCE)
+        expectPlainRoutingGuide(plugin)
+        expect(plugin).toContain(STRICT_GRAPH_REPORT_RULE_PLAIN)
         expect(plugin).not.toContain('Read out/GRAPH_REPORT.md before raw file search if needed.')
       })
     })
