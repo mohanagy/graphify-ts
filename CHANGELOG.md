@@ -2,6 +2,14 @@
 
 All notable changes to the TypeScript package will be documented in this file.
 
+## [0.27.0-next.3] - 2026-05-27
+
+### Changed
+
+- **Explain-mode MCP flows now stay tighter and more agent-readable**: explain prompts route to `context_pack`, `retrieve` now ships bounded snippets, and the relevant Madar MCP responses surface a top-level `evidence` block with `pack_confidence`, `coverage`, and `agent_directive` so installed guidance can gate exploration on the response itself.
+- **Compare and native-agent traces now explain install behavior more clearly**: compare output distinguishes reduced exploration from added-context-only runs, records `agent_directive_seen` values from Madar tool results, and install-gate regressions make it easier to spot when Madar was available but unused or over-expanded.
+- **Benchmark-suite isolation receipts are more reproducible**: the suite now checks in its isolation environment metadata and runner assets more explicitly, keeping benchmark proofs and the documented environment closer together across platforms.
+
 ## [0.27.0-next.2] - 2026-05-27
 
 ### Changed
