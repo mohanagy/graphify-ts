@@ -835,11 +835,13 @@ function hasGroundedFirstRead(schema: PackSchemaEnvelope): boolean {
 }
 
 function useDirectiveAdapterGuidance(schema: PackSchemaEnvelope): boolean {
-  return schema.confidence_score >= ADAPTER_DIRECTIVE_CONFIDENCE_THRESHOLD
-    && schema.missing_context.length === 0
-    && schema.missing_semantic.length === 0
-    && hasGraphBackedWorkflowCenter(schema)
-    && hasGroundedFirstRead(schema)
+  switch (schema.evidence.agent_directive) {
+    case 'answer_from_pack':
+      return true
+    case 'verify_one_targeted_file':
+    case 'explore_with_caution':
+      return false
+  }
 }
 
 function claudeSearchGuidanceLine(schema: PackSchemaEnvelope): string {
