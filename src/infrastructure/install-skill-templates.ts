@@ -1,4 +1,8 @@
 import type { SkillInstallPlatform } from './install.js'
+import {
+  renderMarkdownCodexRoutingTable,
+  renderMarkdownMcpRoutingTable,
+} from './install-routing-guidance.js'
 
 /**
  * Built-in skill template generation for madar.
@@ -305,6 +309,19 @@ madar pack "<task or question>" --task explain
 # Use --task review, --task debug, or --task impact when that better matches the work.
 ${CODE_BLOCK_END}
 
+For each codebase question, start with the specific Madar command below first:
+
+${renderMarkdownCodexRoutingTable()}
+
+If MCP graph tools are available after the pack, use the focused tool that matches the next question:
+- ${CODE_SPAN_START}retrieve${CODE_SPAN_END} for direct codebase questions
+- ${CODE_SPAN_START}relevant_files${CODE_SPAN_END} for where to open first
+- ${CODE_SPAN_START}feature_map${CODE_SPAN_END} for involved areas and entry points
+- ${CODE_SPAN_START}risk_map${CODE_SPAN_END} before editing
+- ${CODE_SPAN_START}implementation_checklist${CODE_SPAN_END} for edit order and validation checkpoints
+- ${CODE_SPAN_START}impact${CODE_SPAN_END} for blast radius
+- ${CODE_SPAN_START}graph_summary${CODE_SPAN_END} for repo overview
+
 If the first pack is a high- or medium-confidence pack (diagnostics.quality_score >= 0.5, missing_context is empty, and diagnostics contain no error-severity gaps), answer from it before broader exploration.
 Do not run broad \`Glob\` patterns, repo-wide \`grep\` / \`find\` searches, or raw file sweeps after a high- or medium-confidence pack.
 Only expand when missing_context or missing_semantic is non-empty, diagnostics show warn/error gaps, or the user asks for deeper verification.
@@ -327,6 +344,19 @@ Codex limitations:
 - Automated tests do not require the Codex binary; they verify generated text and hook config.
 - The Codex hook can remind before Bash when ${CODE_SPAN_START}out/graph.json${CODE_SPAN_END} exists, but AGENTS.md remains the durable always-on instruction.
 - Context packs narrow first-pass discovery. They do not replace targeted reads, tests, or review for code changes.
+`
+}
+
+function mcpRoutingProfileSection(kind: PlatformKind): string {
+  if (kind !== 'default') {
+    return ''
+  }
+
+  return `## Installed MCP routing
+
+When the project also installs madar MCP integration (for example via Claude Code or GitHub Copilot workspace config), use the specific Madar MCP tool below first for codebase questions:
+
+${renderMarkdownMcpRoutingTable()}
 `
 }
 
@@ -438,6 +468,7 @@ function buildSkillDocument(kind: PlatformKind): string {
     FRONTMATTER[kind],
     commonOverview(),
     codexProfileSection(kind),
+    mcpRoutingProfileSection(kind),
     kind === 'windows' ? windowsInstallStep() : posixInstallStep(),
     detectStep(kind === 'windows' ? 'powershell' : 'bash'),
     extractionRules(),
