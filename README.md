@@ -75,13 +75,13 @@ Want a broader local-first walkthrough that also covers install, `prompt`, and a
 
 ---
 
-## What's new in 0.26.1
+## What's new in 0.27.0-next.4
 
-- Context-pack prompts are better at turning review/explain flow into build flow: implement-mode guidance now shows up consistently in the MCP prompt surface, so implementation tasks get targeted next-step instructions instead of generic context-pack wording.
-- Install behavior is quieter and more intentional: the published package no longer runs a consumer `postinstall` hook, and Madar’s install guidance now skips itself by default for prompts that do not need local repository source-code context.
-- The release package is easier to audit: the production lockfile fixes the transitive `protobufjs` finding, and the shipped dependency review documents the remaining semantic-stack supply-chain tradeoffs plus the follow-up tracked in #290.
+- Managed install detection now matches the real generated hook shape: `madar compare` and `madar bench:suite` no longer mistake a fresh Claude install for a missing hook just because the managed command is base64-wrapped.
+- Installed Claude, Gemini, and Codex hooks now carry stable Madar identity markers, so compare/install/uninstall logic stays aligned on the same managed-hook contract across supported agent surfaces.
+- Native-agent install validation is more precise: compare now keeps hook matcher families distinct, which avoids treating the wrong managed hook type as a valid Claude install.
 
-See the [`0.26.1` changelog entry](CHANGELOG.md#0261---2026-05-24) for the full release notes.
+See the [`0.27.0-next.4` changelog entry](CHANGELOG.md#0270-next4---2026-05-27) for the full release notes.
 
 The larger **What's new in 0.23.0** additions are still part of the main flow too: `madar summary`, the core MCP `graph_summary` tool, runtime `execution_slice` output, share-safe `report.share-safe.json` compare artifacts, and `compare --baseline-mode pack_only`.
 
@@ -89,7 +89,7 @@ If you want the broader proof-oriented workflow behind the current surfaces, sta
 
 ### When to use `--spi`
 
-`--spi` is **still opt-in** in 0.26.1. Use it when your repo is framework-heavy TypeScript/JavaScript and you want the extra framework-shaped metadata plus disk cache behavior.
+`--spi` is **still opt-in** in 0.27.0-next.4. Use it when your repo is framework-heavy TypeScript/JavaScript and you want the extra framework-shaped metadata plus disk cache behavior.
 
 `--spi` is usually worth it for NestJS, Next.js App Router, Prisma, tRPC, Hono, Fastify, and similar repos where users ask storage-oriented prompts, client/server boundary questions, or request-flow questions. The default pipeline is still fine for simpler repos, non-JS/TS workspaces, or quick first runs when you do not need the extra framework detail yet.
 

@@ -2,6 +2,13 @@
 
 All notable changes to the TypeScript package will be documented in this file.
 
+## [0.27.0-next.4] - 2026-05-27
+
+### Changed
+
+- **Managed installs are now detected by structure instead of a brittle hook-string grep**: `madar compare` and `madar bench:suite` now recognize the real Claude managed hook shape even when the hook command is base64-wrapped or otherwise obfuscated, so valid installed runs are no longer mislabeled as missing installs.
+- **Installed hook identity is now stable across agent surfaces**: Claude, Gemini, and Codex installs now write explicit Madar hook identity markers, compare keeps matcher families distinct when validating installs, and uninstall/detection logic now shares the same managed-hook recognizer instead of drifting by platform.
+
 ## [0.27.0-next.3] - 2026-05-27
 
 ### Changed
