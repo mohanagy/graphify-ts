@@ -28,7 +28,7 @@ import { resolveTaskSelection } from '../runtime/task-intent.js'
 import { compactRetrieveResult, retrieveContext, type RetrieveResult } from '../runtime/retrieve.js'
 import { buildImplementationPackGuidance } from '../runtime/implementation-pack.js'
 import {
-  buildMadarResponseEvidence,
+  assessMadarResponseEvidence,
   collectWorkflowOwners,
   missingPhasesFromPayload,
   type MadarResponseEvidence,
@@ -179,6 +179,7 @@ export function buildExplainPackPayloadCore(
     question: string
   },
   implementation?: ImplementationPackGuidance,
+  graphPath?: string,
 ): ExplainPackPayload {
   const payload = buildExplainPackPayload(pack, retrieval, implementation)
   const plan = buildTaskContextPlan({
@@ -189,7 +190,23 @@ export function buildExplainPackPayloadCore(
   })
   const centers = workflowCenters('explain', pack, plan, implementation, retrieval as RetrieveResult)
   const firstRead = recommendedFirstRead('explain', pack, implementation, retrieval as RetrieveResult)
-  const score = confidenceScore(payload.coverage, pack, implementation)
+  const evidenceAssessment = assessMadarResponseEvidence({
+    answerContract: (retrieval as RetrieveResult).answer_contract,
+    coverage: payload.coverage,
+    coveredWorkflowOwners: collectWorkflowOwners(
+      centers.map((entry) => entry.path),
+      firstRead.map((entry) => entry.path),
+      implementation?.likely_edit_files.map((entry) => entry.path) ?? [],
+      implementation?.likely_test_files.map((entry) => entry.path) ?? [],
+    ),
+    executionSlice: (retrieval as RetrieveResult).execution_slice,
+    graphPath,
+    missingPhases: missingPhasesFromPayload(pack as {
+      answer_contract?: { missing_phases?: readonly unknown[] }
+      execution_slice?: { phase_coverage?: { missing?: readonly unknown[] } }
+    }),
+    score: confidenceScore(payload.coverage, pack, implementation),
+  })
 
   return {
     ...payload,
@@ -197,7 +214,7 @@ export function buildExplainPackPayloadCore(
       ...payload.pack,
       workflow_centers: centers,
       recommended_first_read: firstRead,
-      confidence_score: score,
+      confidence_score: evidenceAssessment.score,
     },
   }
 }
@@ -686,6 +703,7 @@ function whyExplanation(
   coverage: ContextPackCoverage,
   score: number,
   implementation?: ImplementationPackGuidance,
+  confidenceReasons: readonly string[] = [],
 ): string[] {
   const requiredEntries = coverage.entries.filter((entry) => entry.required)
   const requiredCovered = requiredEntries.filter((entry) => entry.status === 'covered').length
@@ -705,6 +723,7 @@ function whyExplanation(
       ? ['No related tests were identified, so the brief keeps a manual validation caution visible.']
       : []),
     `Confidence ${score.toFixed(2)} from ${requiredCovered}/${requiredEntries.length || 0} required evidence classes and ${semanticCovered}/${semanticEntries.length || 0} required semantic categories covered.`,
+    ...confidenceReasons.map((reason) => `Confidence reason: ${reason}.`),
   ]
 
   return explanations
@@ -724,9 +743,11 @@ function buildPackSchemaV1<TPack extends PackPayload>(
   const firstRead = recommendedFirstRead(response.task, response.pack, response.implementation, retrieval)
   const contracts = publicContracts(response.implementation)
   const guidance = negativeGuidance(response.task, response.coverage, response.pack, response.implementation, retrieval)
-  const score = confidenceScore(response.coverage, response.pack, response.implementation)
-  const evidence = buildMadarResponseEvidence({
+  const evidenceAssessment = assessMadarResponseEvidence({
+    answerContract: retrieval?.answer_contract ?? ('answer_contract' in response.pack ? response.pack.answer_contract : undefined),
     coverage: response.coverage,
+    executionSlice: retrieval?.execution_slice ?? ('execution_slice' in response.pack ? response.pack.execution_slice : undefined),
+    graphPath: response.graph_path,
     missingPhases: missingPhasesFromPayload(response.pack as {
       answer_contract?: { missing_phases?: readonly unknown[] }
       execution_slice?: { phase_coverage?: { missing?: readonly unknown[] } }
@@ -737,8 +758,9 @@ function buildPackSchemaV1<TPack extends PackPayload>(
       response.implementation?.likely_edit_files.map((entry) => entry.path) ?? [],
       response.implementation?.likely_test_files.map((entry) => entry.path) ?? [],
     ),
-    score,
+    score: confidenceScore(response.coverage, response.pack, response.implementation),
   })
+  const { score, ...evidence } = evidenceAssessment
   const compatibilityFields: PackGuidanceCompatibilityFields = {
     workflow_centers: centers,
     recommended_first_read: firstRead,
@@ -767,6 +789,7 @@ function buildPackSchemaV1<TPack extends PackPayload>(
       response.coverage,
       score,
       response.implementation,
+      evidence.confidence_reasons,
     ),
   }
 }
@@ -1113,7 +1136,7 @@ export async function runContextPackCommand(
     ...baseResponse(options, initialPlan, plannerBudget, resolvedTask.task_kind),
     ...(
       resolvedTask.task_kind === 'explain'
-        ? buildExplainPackPayloadCore(dependencies.compactRetrieveResult(retrieval), retrieval, implementation)
+        ? buildExplainPackPayloadCore(dependencies.compactRetrieveResult(retrieval), retrieval, implementation, options.graphPath)
         : buildExplainPackPayload(dependencies.compactRetrieveResult(retrieval), retrieval, implementation)
     ),
     retrieval,

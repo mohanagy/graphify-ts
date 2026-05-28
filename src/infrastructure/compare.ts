@@ -69,6 +69,7 @@ export interface BuildBaselinePromptPackInput {
 }
 
 export interface BuildMadarPromptPackInput {
+  graphPath?: string
   question: string
   retrieval: RetrieveResult
   session?: ContextSessionState
@@ -1817,7 +1818,7 @@ export function buildBaselinePromptPack(input: BuildBaselinePromptPackInput): Co
 
 export function buildMadarPromptPack(input: BuildMadarPromptPackInput): ComparePromptPack {
   const explainPayload = JSON.stringify(
-    buildExplainPackPayloadCore(compactRetrieveResult(input.retrieval), input.retrieval),
+    buildExplainPackPayloadCore(compactRetrieveResult(input.retrieval), input.retrieval, undefined, input.graphPath),
     null,
     2,
   )
@@ -1921,6 +1922,7 @@ export function generateCompareArtifacts(input: GenerateCompareArtifactsInput): 
 
     const retrieval = retrieveCompareContext(graph, question, retrievalBudget, projectRoot)
     const madarPrompt = buildMadarPromptPack({
+      graphPath: input.graphPath,
       question,
       retrieval,
       ...(madarSession ? { session: madarSession } : {}),
