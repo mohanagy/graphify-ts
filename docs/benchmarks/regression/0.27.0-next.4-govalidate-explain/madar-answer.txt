@@ -1,0 +1,39 @@
+Here's the idea-report generation pipeline, end-to-end:
+
+## 1. HTTP entry — `POST /ideas/analyze`
+`IdeaGenerationController.generateFromProblem()` — `src/modules/ideas/interface/http/idea-generation.controller.ts:75`
+- Validates problem-statement length, runs `AuthGuard` + `PlanEnforcementGuard`, wraps in `CreditRefundInterceptor`.
+- `IdeasService.createIdea()` persists a `DRAFT` row.
+- `TitleGenerationService.generateTitle()` makes an LLM call (with `generateFallbackTitle()` as deterministic backup) and stores `summarizedTitle`.
+- `IdeasService.claimQueuedPipelineRun()` atomically consumes the credit reservation.
+- `PipelineTriggerService.startPipeline()` enqueues the background pipeline job — controller returns immediately with `status: QUEUED`.
+
+## 2. Planner — classify and pick sections
+`PlannerService.classifyIdea()` — `src/modules/pipeline/planner/planner.service.ts:143`
+- One LLM call (via `LlmProviderResolverService.callLlm()`) to classify the idea and decide which research sections (executors) to run.
+
+## 3. Research executors — parallel section LLM jobs
+`src/modules/ideas/infrastructure/executors/micro/...` (market-research, business-model, tech-feasibility, user-personas, lets-build, …) each call `ResearchAgentService.researchSection()` — `src/modules/pipeline/research/research-agent.service.ts:99`
+- Per-section LLM call; result written by `FileStorageService`; run state tracked in `IndexManagerService` (sections: `running` → `complete`/`failed`).
+
+## 4. Assembly — `AssemblyService.assembleReport()`
+`src/modules/pipeline/assembly/assembly.service.ts:107` (the orchestration "god node" per the graph). Steps:
+1. Read index, abort if the run is stale/superseded, flip status to `assembling`, broadcast `assembling_started`.
+2. Read completed section files, build placeholder bodies for failed sections, drop ones < 50 chars.
+3. `mergeReportSections()` → merged markdown; `buildEvidencePack()` → source manifest + evidence cards from research artifacts.
+4. **Quality pre-gate**: `ReportQualityGateService.evaluateMarkdown/Evidence/FinalReport()` (with `validateFinalReport()` in `report-quality.validators.ts`). Recoverable blockers (`missing_required_section`, `prompt_leakage`, `placeholder_url`) are relaxed; otherwise → `handleQualityGateFailure()` and shadow-eval.
+5. `compressResearchSections()` (deduplicates URLs, shrinks tokens).
+6. `LlmProviderResolverService.resolve(userId, 'assembly')` picks model tier.
+7. **Parallel phase 1** via `Promise.allSettled`:
+   - `AssemblyExtractorService.runUnified()` — single LLM call producing structured JSON (with `runRecovery()` as fallback).
+   - `MetricsScoringService.scoreMetrics()` → 6 parallel `scoreMetricBatch()` LLM calls (one per metric — components + evidenceRefs).
+8. **Phase 2 (sequential)**: `AssemblyFinalSynthesisService.run()` composes the final markdown; on failure, `renderDeterministicFinalReport()` is the rescue path (safe against placeholder URLs because it pulls from `sourceManifest`).
+9. Final publish gate via `evaluateFinalReport()`; normalize artifacts (`normalizeStructuredArtifactsInPlace`, `normalizeCredibilityScoresInPlace`), persist via `FileStorageService` + `AssemblyArtifactsService`, aggregate costs (`CostAggregatorService`), broadcast progress (`AssemblyBroadcasterService`).
+
+## Shared infrastructure
+- `LlmProviderResolverService` (`src/modules/pipeline/providers/llm-provider-resolver.service.ts`) — single broker for every LLM call (`.callLlm()` / `.getClient()`); tiered by `MODEL_TIER_DEFAULTS`.
+- `IndexManagerService` — per-idea run JSON (status, sections, `createdAt` used as stale-run guard).
+- `QueueRegistryService` — BullMQ jobs (`AssemblyJobData`, `DbSyncJobData`).
+- `StructuredLogger` — every stage logs `info/warn/error` (god nodes in the graph).
+
+**Net flow:** controller → title LLM → enqueue → planner LLM → N parallel research LLMs → assembly orchestrator (extraction LLM + 6 metric LLMs in parallel → final-synthesis LLM) → quality gates → persisted report + broadcast.

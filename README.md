@@ -1,6 +1,8 @@
 # madar
 
-**Start AI coding agents with what runs for this task — the execution slice or structural subset worth reading first.** madar builds local graph artifacts and task-aware context packs for Claude Code, Codex CLI, Copilot CLI, Cursor, Windsurf, Aider, and other agent workflows.
+**Madar is a local, task-aware context-pack compiler for AI coding agents.**
+
+A structural graph tells the agent what exists in your codebase. Madar tells the agent **what runs for this task** — usually a much smaller execution slice or structural subset — then returns a compact pack with inline snippets so the agent can answer from the pack before it starts searching the repo by hand.
 
 [![npm](https://img.shields.io/npm/v/%40lubab%2Fmadar)](https://www.npmjs.com/package/@lubab/madar)
 [![node >=20](https://img.shields.io/badge/node-%E2%89%A520-3c873a)](https://nodejs.org/)
@@ -22,6 +24,17 @@ https://github.com/user-attachments/assets/a502185f-fa12-4a8f-80d2-172847f209fd
 30 seconds: install → `madar generate .` on the GoValidate repo (1,048 files) → `madar claude install --profile core` → `madar compare "Explain the auth flow End to End"`. The repo includes the saved artifact for that run plus the follow-up benchmark notes and caveats. Treat it as a worked receipt, not a universal benchmark headline. Receipts: [`docs/benchmarks/2026-05-09-govalidate-auth-e2e/`](docs/benchmarks/2026-05-09-govalidate-auth-e2e/).
 
 ---
+
+## Requirements
+
+Madar is two steps and requires both. Running `madar generate` alone produces a local graph artifact that nothing consumes until you install the agent integration that exposes the Madar MCP tools or prompt flow.
+
+```bash
+madar generate .              # produces out/graph.json
+madar <agent> install         # registers the MCP server / local install rules
+```
+
+Without `<agent> install` (or the equivalent manual wiring for your runtime), the agent has no Madar MCP tools available and the measured benchmark cell below does not apply.
 
 ## Quickstart
 
@@ -75,13 +88,13 @@ Want a broader local-first walkthrough that also covers install, `prompt`, and a
 
 ---
 
-## What's new in 0.27.0-next.4
+## What's new in 0.27.1
 
-- Managed install detection now matches the real generated hook shape: `madar compare` and `madar bench:suite` no longer mistake a fresh Claude install for a missing hook just because the managed command is base64-wrapped.
-- Installed Claude, Gemini, and Codex hooks now carry stable Madar identity markers, so compare/install/uninstall logic stays aligned on the same managed-hook contract across supported agent surfaces.
-- Native-agent install validation is more precise: compare now keeps hook matcher families distinct, which avoids treating the wrong managed hook type as a valid Claude install.
+- `compare --baseline-mode native_agent` now stays honest when Madar was not actually invoked: degraded provider-only runs no longer print favorable reduction percentages or suite-summary wins.
+- Native-agent compare is more failure-tolerant: stalled baseline or Madar arms can time out, emit stderr heartbeat lines, and leave a `run-state.json` breadcrumb plus partial report artifacts instead of hanging forever.
+- `madar summary` runtime paths now stay closer to backend workflow spines instead of drifting toward helper-style endpoint chains.
 
-See the [`0.27.0-next.4` changelog entry](CHANGELOG.md#0270-next4---2026-05-27) for the full release notes.
+See the [`0.27.1` changelog entry](CHANGELOG.md#0271---2026-05-28) for the full release notes.
 
 The larger **What's new in 0.23.0** additions are still part of the main flow too: `madar summary`, the core MCP `graph_summary` tool, runtime `execution_slice` output, share-safe `report.share-safe.json` compare artifacts, and `compare --baseline-mode pack_only`.
 
@@ -89,7 +102,7 @@ If you want the broader proof-oriented workflow behind the current surfaces, sta
 
 ### When to use `--spi`
 
-`--spi` is **still opt-in** in 0.27.0-next.4. Use it when your repo is framework-heavy TypeScript/JavaScript and you want the extra framework-shaped metadata plus disk cache behavior.
+`--spi` is **still opt-in** in 0.27.1. Use it when your repo is framework-heavy TypeScript/JavaScript and you want the extra framework-shaped metadata plus disk cache behavior.
 
 `--spi` is usually worth it for NestJS, Next.js App Router, Prisma, tRPC, Hono, Fastify, and similar repos where users ask storage-oriented prompts, client/server boundary questions, or request-flow questions. The default pipeline is still fine for simpler repos, non-JS/TS workspaces, or quick first runs when you do not need the extra framework detail yet.
 
@@ -152,22 +165,36 @@ That means the same selected nodes can render differently for `explain`, `review
 
 ## Demonstrated today
 
-- **Local, deterministic, task-aware first-pass context.** `madar generate`, `madar pack`, and the MCP graph tools build compact, reviewable evidence bundles from local graph artifacts.
-- **Static runtime-path modeling for runtime questions.** `execution_slice` and `phase_coverage` are explicit static hypotheses from graph evidence, not live traces.
-- **Runtime-generation prompts stay compact.** The current pack shaping follows the strongest backend path first and suppresses sibling-route noise plus shared-hub fan-out on broad runtime-generation questions.
-- **Share-safe proof artifacts.** `report.share-safe.json`, Pack Schema v1, and the dated benchmark folders make it possible to inspect what happened without leaking private paths.
-- **Mixed-but-real benchmark receipts.** The public benchmark folders show what happened on specific repos and prompts, including both wins and regressions. Start with [`docs/claims-and-evidence.md`](docs/claims-and-evidence.md) for the current claim map.
+On the GoValidate backend service (NestJS + BullMQ, SPI graph, install verified), for the prompt *"How idea report is being generated"*, Madar produced this measured release cell versus the same agent without Madar:
+
+| metric | baseline | Madar | delta |
+| --- | --- | --- | --- |
+| total tool calls | 28 | 7 | **4x fewer** |
+| broad search (`Glob`/`Grep`/`Bash`) after first Madar call | 11 | 0 | eliminated |
+| input tokens (Anthropic-reported) | 2,366,946 | 498,688 | **4.75x less** |
+| uncached input tokens | 229,691 | 103,764 | 125,927 fewer |
+| wall-clock latency | 158,995 ms | 72,420 ms | **2.2x faster** |
+| cost (USD) | 2.6595 | 0.9728 | **2.73x cheaper** |
+| `measurement_validity` | n/a | `valid` | — |
+| `token_regression` | n/a | `false` | — |
+
+This cell also recorded `install_verified: true`, `madar_mcp_call_count: 1`, and `exploration_outcome: madar_invoked`, meaning the first Madar tool call was `mcp__madar__retrieve` and there was no broad exploration after it. Trace artifact: [`docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/`](docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/).
+
+This is **one cell**: one prompt, one repo, one agent runtime, one verified install path. Your results will vary by repo shape, prompt type, agent runtime, and what other MCPs or skills you have loaded.
+
+Runtime-generation prompts stay compact: the pack shaping follows the strongest backend path first and suppresses sibling-route noise plus shared-hub fan-out on broad runtime-generation questions.
 
 ## In progress
 
 - **Reproducible benchmark suite with per-repo spread.** The public suite now ships fixed manifests, methodology, and the `madar bench:suite` runner under [`docs/benchmarks/suite/`](docs/benchmarks/suite/).
-- **Exploration reduction as a product outcome.** Strict install guidance now pushes agents toward one graph/pack-first pass, but the public evidence is still mixed. The current counterexample note is in [`docs/benchmarks/2026-05-25-founder-command-center-auth-flow/`](docs/benchmarks/2026-05-25-founder-command-center-auth-flow/).
+- **Exploration behavior across more repos and prompts.** Strict install guidance now pushes agents toward one graph/pack-first pass, but the public evidence is still mixed. The current counterexample note is in [`docs/benchmarks/2026-05-25-founder-command-center-auth-flow/`](docs/benchmarks/2026-05-25-founder-command-center-auth-flow/).
 - **Clearer compare evidence.** Native-agent compare traces now preserve more machine-readable metadata, but we still treat them as repo/task-specific receipts rather than a universal claim.
 
 ## Not yet measured
 
-- **Fewer wrong-file edits.** Madar surfaces likely edit files, likely test files, and risk boundaries, but the effect on edit correctness is not measured yet.
-- **A single latency or exploration headline that holds across repos.** Current public artifacts do not justify a universal turns / latency / exploration claim.
+- **Implement tasks.** The demonstrated release cell is an `explain` prompt. Whether Madar improves implementation work or wrong-file edit rates is still unmeasured and belongs under [#332](https://github.com/mohanagy/madar/issues/332).
+- **Lower-confidence packs.** This release cell is a strong-path, install-verified receipt; lower-confidence prompt behavior still needs its own measured cells.
+- **Repos beyond the demonstrated GoValidate backend cell.** Current public artifacts do not justify a universal turns / latency / exploration claim across repo shapes.
 - **Cross-repo aggregate benchmark marketing.** We do not publish a single-number cross-repo headline.
 
 ## What Madar does not do today
@@ -180,9 +207,11 @@ That means the same selected nodes can render differently for `explain`, `review
 ## How we measure
 
 - We publish dated artifact folders under [`docs/benchmarks/`](docs/benchmarks/) and map each public claim to evidence in [`docs/claims-and-evidence.md`](docs/claims-and-evidence.md).
-- We separate **cold-cache** and **warm-cache** observations, and we call out mixed evidence when a repo or prompt regresses.
+- This release README cites one verified cell under [`docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/`](docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/), not a universal benchmark headline.
+- The benchmark-suite direction is **per-repo spread**, fixed tasks, and reproducible artifacts under [`docs/benchmarks/suite/`](docs/benchmarks/suite/). There is **no single-number cross-repo headline** in the public docs.
+- Suite runs use the same prompt against a baseline path and an install-verified Madar path, capture verbose tool traces, and keep multi-trial reporting attached to the specific repo/task cell rather than flattening it into one marketing number.
 - Published benchmark cells run in isolation mode ([`docs/benchmarks/suite/isolation/`](docs/benchmarks/suite/isolation/)). Your local numbers may differ if your Claude Code config differs.
-- The benchmark-suite direction is **per-repo spread**, fixed tasks, and reproducible artifacts under [`docs/benchmarks/suite/`](docs/benchmarks/suite/). Run `madar bench:suite --dry-run` to inspect the current matrix, then `madar bench:suite --repo nestjs-mid --task explain-runtime ...` to populate a wired cell. There is **no single-number cross-repo headline** in the public docs.
+- Run `madar bench:suite --dry-run` to inspect the current matrix, then `madar bench:suite --repo nestjs-mid --task explain-runtime ...` to populate a wired cell.
 - Any stronger public claim belongs behind a reproducible suite artifact, not a one-off anecdote.
 
 ---

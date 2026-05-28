@@ -2,6 +2,43 @@
 
 All notable changes to the TypeScript package will be documented in this file.
 
+## [0.27.2] - 2026-05-28
+
+### Changed
+
+- **Native-agent compare now explains missing verbose traces explicitly**: `report.json` records whether Claude verbose trace data was available, and the CLI/docs clarify that `--verbose` is required for MCP-call attribution while provider usage can still come from `--output-format json`. Closes #368.
+- **Native-agent traces distinguish pre-Madar broad exploration**: verbose compare reports now classify `ToolSearch`/`Glob`/`Grep`/`Bash` before the first Madar MCP call as `madar_invoked_after_broad_exploration`, preserving valid attribution while surfacing the routing drift. Closes #369.
+- **Native-agent benchmark summaries separate routing wins from token proof**: valid attributed runs now carry `claim_assessment` so fewer tools/faster latency can be reported separately from provider-token reduction, and fresh-token regressions keep token-reduction claims marked `not_proven`. Closes #370.
+
+## [0.27.1] - 2026-05-28
+
+### Fixed
+
+- **Native-agent compare no longer reports favorable reductions for degraded no-trace runs**: `report.json.reductions` and suite-summary win lines now stay suppressed unless the run is attributable to a valid Madar invocation. Closes #361.
+- **`madar summary` runtime paths stay closer to real workflow spines**: runtime-path scoring now admits worker-style starts with runtime predecessors, recognizes metadata-less worker/job file hints, and keeps helper-style endpoint pairs from outranking backend workflow boundaries. Closes #362.
+- **Native-agent compare no longer stalls silently on hung arms**: `compare --baseline-mode native_agent` now supports per-arm timeouts, stderr heartbeats, and `run-state.json` progress receipts, and it writes partial reports instead of hanging forever when the baseline or Madar arm gets stuck. Closes #363.
+
+## [0.27.0] - 2026-05-27
+
+### Added
+
+- **Agent-directive evidence blocks on Madar MCP responses**: relevant `mcp__madar__*` responses now carry a deterministic top-level `evidence` block with `pack_confidence`, `coverage`, `missing_phases`, `covered_workflow_owners`, and `agent_directive`, and the install rules use that directive to gate broader exploration. Closes #339 via #348.
+- **Decision-table install templates**: `madar claude install` and the other agent installers now write concrete tool-routing guidance for prompt types like explain-runtime, impact, relevant-files, and repo-overview work instead of generic "use Madar tools" copy. Closes #337.
+- **Snippets in `mcp__madar__retrieve` responses**: `retrieve` now carries inline `nodes[].snippet` content plus a `snippet_budget` so callers can answer from the first response instead of immediately following up with raw file reads. Closes #338.
+- **Install presence gates and stable install sentinels**: `madar compare` and `madar bench:suite` now refuse to produce a "valid" Madar benchmark when no install is detected unless `--allow-no-install` is passed, and managed installs write a stable `name: "madar"` / `source: "madar"` sentinel so that detection works across hook encodings. Closes #341 and #349.
+- **Environment capture and isolation scaffolding for benchmarks**: benchmark artifacts now record active MCP servers, plugin/skill counts, CLAUDE.md hashes, and active hooks, and the suite ships checked-in isolation assets for reproducible cells. Closes #342 in part.
+
+### Changed
+
+- **Pack assembly post-processing is restored alongside the evidence envelope**: `confidence_score`, `recommended_first_read`, `workflow_centers`, `coverage`, `missing_context`, `negative_guidance`, and related pack fields are again populated at both the response root and inside `.pack` for strong-path runs. Closes #350.
+- **Compare verbose-mode reporting is more honest about token behavior**: `report.json.reductions` now keeps uncached/cache-creation deltas, `token_regression` flags fresh-token regressions even when total input drops, and tool-call counts come from the verbose JSON stream instead of a lossy approximation. Closes #316 and #329.
+- **`madar summary` now marks empty capability buckets explicitly**: empty `source_domains` and `runtime_paths` report `not_detected` plus a reason instead of silently appearing as empty objects. Closes #317.
+- **Public release copy is anchored to a verified benchmark cell**: `README.md`, `CHANGELOG.md`, and `docs/claims-and-evidence.md` now point at the checked-in `0.27.0-next.4` GoValidate release cell instead of generalized benchmark copy.
+
+### Fixed
+
+- **`execution_slice` / `phase_coverage` overclaim on weak evidence**: low-confidence runtime slices no longer pretend they saw every phase in a multi-stage flow, and the surfaced status now reflects the actual trace depth. Closes #315.
+
 ## [0.27.0-next.4] - 2026-05-27
 
 ### Changed

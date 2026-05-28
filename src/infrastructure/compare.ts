@@ -118,6 +118,7 @@ type CompareMadarTraceOutcome =
   | 'no_install'
   | 'madar_available_but_unused'
   | 'madar_invoked'
+  | 'madar_invoked_after_broad_exploration'
   | 'madar_invoked_with_followup_exploration'
 
 export interface CompareMadarTrace {
@@ -129,6 +130,9 @@ export interface CompareMadarTrace {
   agent_directive_seen?: string[]
   madar_mcp_call_count: number
   madar_mcp_calls_by_name: Record<string, number>
+  first_madar_turn?: number
+  pre_madar_broad_exploration_tool_call_count?: number
+  pre_madar_broad_exploration_tool_calls_by_name?: Record<string, number>
   context_pack_call_count: number
   focused_follow_up_tool_call_count: number
   broad_exploration_tool_call_count: number
@@ -138,6 +142,7 @@ export interface CompareMadarTrace {
 }
 
 export type NativeAgentMeasurementValidity = 'valid' | 'degraded' | 'invalid'
+export type NativeAgentTraceStatus = 'trace_available' | 'missing_verbose_trace'
 
 interface NativeAgentInstallArtifactCheck {
   label: string
@@ -220,6 +225,8 @@ export interface GenerateCompareArtifactsInput {
   outputDir: string
   execTemplate: string
   baselineMode: CompareBaselineMode
+  perArmTimeoutSeconds?: number
+  heartbeatIntervalMs?: number
   allowNoInstall?: boolean
   why?: boolean
   corpusText?: string
@@ -888,6 +895,9 @@ function traceToolCountSummary(toolCallsByName: Record<string, number>): string 
 function analyzeMadarTraceExploration(perTurn: CompareMadarTraceTurnSummary[]): {
   madar_mcp_call_count: number
   madar_mcp_calls_by_name: Record<string, number>
+  first_madar_turn?: number
+  pre_madar_broad_exploration_tool_call_count: number
+  pre_madar_broad_exploration_tool_calls_by_name: Record<string, number>
   context_pack_call_count: number
   focused_follow_up_tool_call_count: number
   broad_exploration_tool_call_count: number
@@ -897,9 +907,12 @@ function analyzeMadarTraceExploration(perTurn: CompareMadarTraceTurnSummary[]): 
 } {
   let madarMcpCallCount = 0
   let contextPackCallCount = 0
+  let firstMadarTurn: number | null = null
+  let preMadarBroadExplorationToolCallCount = 0
   let focusedFollowUpToolCallCount = 0
   let broadExplorationToolCallCount = 0
   const madarMcpCallsByName: Record<string, number> = {}
+  const preMadarBroadExplorationToolCallsByName: Record<string, number> = {}
   const focusedFollowUpToolCallsByName: Record<string, number> = {}
   const broadExplorationToolCallsByName: Record<string, number> = {}
   let sawFirstMadarCall = false
@@ -911,6 +924,9 @@ function analyzeMadarTraceExploration(perTurn: CompareMadarTraceTurnSummary[]): 
       if (isMadarTraceToolName(toolName)) {
         madarMcpCallCount += 1
         madarMcpCallsByName[toolName] = (madarMcpCallsByName[toolName] ?? 0) + 1
+        if (!hadSeenMadarCall) {
+          firstMadarTurn = turn.turn
+        }
         if (MADAR_CONTEXT_PACK_TOOL_NAMES.has(canonicalName)) {
           contextPackCallCount += 1
         } else if (hadSeenMadarCall) {
@@ -922,6 +938,10 @@ function analyzeMadarTraceExploration(perTurn: CompareMadarTraceTurnSummary[]): 
       }
 
       if (!hadSeenMadarCall) {
+        if (isBroadExplorationTraceToolName(toolName)) {
+          preMadarBroadExplorationToolCallCount += 1
+          preMadarBroadExplorationToolCallsByName[toolName] = (preMadarBroadExplorationToolCallsByName[toolName] ?? 0) + 1
+        }
         continue
       }
 
@@ -943,6 +963,9 @@ function analyzeMadarTraceExploration(perTurn: CompareMadarTraceTurnSummary[]): 
   const sortedMadarMcpCallsByName = Object.fromEntries(
     Object.entries(madarMcpCallsByName).sort(([leftName], [rightName]) => leftName.localeCompare(rightName)),
   )
+  const sortedPreMadarBroadExplorationToolCallsByName = Object.fromEntries(
+    Object.entries(preMadarBroadExplorationToolCallsByName).sort(([leftName], [rightName]) => leftName.localeCompare(rightName)),
+  )
   const sortedFocusedFollowUpToolCallsByName = Object.fromEntries(
     Object.entries(focusedFollowUpToolCallsByName).sort(([leftName], [rightName]) => leftName.localeCompare(rightName)),
   )
@@ -954,6 +977,8 @@ function analyzeMadarTraceExploration(perTurn: CompareMadarTraceTurnSummary[]): 
     return {
       madar_mcp_call_count: madarMcpCallCount,
       madar_mcp_calls_by_name: sortedMadarMcpCallsByName,
+      pre_madar_broad_exploration_tool_call_count: preMadarBroadExplorationToolCallCount,
+      pre_madar_broad_exploration_tool_calls_by_name: sortedPreMadarBroadExplorationToolCallsByName,
       context_pack_call_count: 0,
       focused_follow_up_tool_call_count: 0,
       broad_exploration_tool_call_count: 0,
@@ -973,6 +998,37 @@ function analyzeMadarTraceExploration(perTurn: CompareMadarTraceTurnSummary[]): 
     focusedFollowUpToolCallCount > 0
       ? `${focusedFollowUpToolCallCount} focused follow-up ${focusedFollowUpToolCallCount === 1 ? 'call' : 'calls'}`
       : null
+  const preMadarBroadSummary =
+    preMadarBroadExplorationToolCallCount > 0
+      ? `${preMadarBroadExplorationToolCallCount} broad exploration ${preMadarBroadExplorationToolCallCount === 1 ? 'call' : 'calls'} before the first Madar call${Object.keys(sortedPreMadarBroadExplorationToolCallsByName).length > 0 ? ` (${traceToolCountSummary(sortedPreMadarBroadExplorationToolCallsByName)})` : ''}`
+      : null
+  const baseTraceFields = {
+    ...(firstMadarTurn !== null ? { first_madar_turn: firstMadarTurn } : {}),
+    pre_madar_broad_exploration_tool_call_count: preMadarBroadExplorationToolCallCount,
+    pre_madar_broad_exploration_tool_calls_by_name: sortedPreMadarBroadExplorationToolCallsByName,
+  }
+  if (preMadarBroadSummary !== null) {
+    const summaryParts = [madarInvocationSummary, preMadarBroadSummary]
+    if (focusedSummary !== null) {
+      summaryParts.push(focusedSummary)
+    }
+    if (broadExplorationToolCallCount > 0) {
+      summaryParts.push(`${broadExplorationToolCallCount} broad exploration ${broadExplorationToolCallCount === 1 ? 'call' : 'calls'} after the first Madar call${Object.keys(sortedBroadExplorationToolCallsByName).length > 0 ? ` (${traceToolCountSummary(sortedBroadExplorationToolCallsByName)})` : ''}`)
+    } else {
+      summaryParts.push('no broad exploration after the first Madar call.')
+    }
+    return {
+      madar_mcp_call_count: madarMcpCallCount,
+      madar_mcp_calls_by_name: sortedMadarMcpCallsByName,
+      ...baseTraceFields,
+      context_pack_call_count: contextPackCallCount,
+      focused_follow_up_tool_call_count: focusedFollowUpToolCallCount,
+      broad_exploration_tool_call_count: broadExplorationToolCallCount,
+      broad_exploration_tool_calls_by_name: sortedBroadExplorationToolCallsByName,
+      exploration_outcome: 'madar_invoked_after_broad_exploration',
+      exploration_summary: summaryParts.join('; '),
+    }
+  }
   if (broadExplorationToolCallCount === 0) {
     const summaryParts = [madarInvocationSummary]
     if (contextPackSummary !== null) {
@@ -985,6 +1041,7 @@ function analyzeMadarTraceExploration(perTurn: CompareMadarTraceTurnSummary[]): 
     return {
       madar_mcp_call_count: madarMcpCallCount,
       madar_mcp_calls_by_name: sortedMadarMcpCallsByName,
+      ...baseTraceFields,
       context_pack_call_count: contextPackCallCount,
       focused_follow_up_tool_call_count: focusedFollowUpToolCallCount,
       broad_exploration_tool_call_count: 0,
@@ -1007,6 +1064,7 @@ function analyzeMadarTraceExploration(perTurn: CompareMadarTraceTurnSummary[]): 
   return {
     madar_mcp_call_count: madarMcpCallCount,
     madar_mcp_calls_by_name: sortedMadarMcpCallsByName,
+    ...baseTraceFields,
     context_pack_call_count: contextPackCallCount,
     focused_follow_up_tool_call_count: focusedFollowUpToolCallCount,
     broad_exploration_tool_call_count: broadExplorationToolCallCount,
@@ -2029,6 +2087,8 @@ function formatCompareMadarTraceSummary(result: GenerateCompareArtifactsResult):
   const noInstallRuns = traces.filter((trace) => trace.exploration_outcome === 'no_install').length
   const madarAvailableButUnusedRuns = traces.filter((trace) => trace.exploration_outcome === 'madar_available_but_unused').length
   const madarInvokedRuns = traces.filter((trace) => trace.exploration_outcome === 'madar_invoked').length
+  const madarInvokedAfterBroadExplorationRuns =
+    traces.filter((trace) => trace.exploration_outcome === 'madar_invoked_after_broad_exploration').length
   const madarInvokedWithFollowUpExplorationRuns =
     traces.filter((trace) => trace.exploration_outcome === 'madar_invoked_with_followup_exploration').length
   const topTools = [...toolCallsByName.entries()]
@@ -2046,6 +2106,9 @@ function formatCompareMadarTraceSummary(result: GenerateCompareArtifactsResult):
   }
   if (madarInvokedRuns > 0) {
     outcomeParts.push(`${madarInvokedRuns} madar invoked`)
+  }
+  if (madarInvokedAfterBroadExplorationRuns > 0) {
+    outcomeParts.push(`${madarInvokedAfterBroadExplorationRuns} madar invoked after broad exploration`)
   }
   if (madarInvokedWithFollowUpExplorationRuns > 0) {
     outcomeParts.push(`${madarInvokedWithFollowUpExplorationRuns} madar invoked with follow-up exploration`)
@@ -2196,11 +2259,22 @@ export type NativeAgentRunStatus =
       result_path: string
     }
   | { kind: 'answer_only'; evidence: string | null; exit_code: number; stderr: string | null; result_path: string }
-  | { kind: 'runner_error'; evidence: string | null; exit_code: number | null; stderr: string | null }
+  | { kind: 'runner_error'; evidence: string | null; exit_code: number | null; stderr: string | null; failure_reason?: 'timed_out' }
 
 export type NativeAgentTokenRegressionMetric =
   | 'uncached_input_tokens'
   | 'cache_creation_input_tokens'
+
+export interface NativeAgentClaimAssessment {
+  routing_efficiency: {
+    status: 'improved' | 'not_improved' | 'not_measured'
+    evidence: string[]
+  }
+  token_reduction: {
+    status: 'proven' | 'not_proven' | 'not_measured'
+    evidence: string[]
+  }
+}
 
 export interface NativeAgentToolCallCountsEntry {
   total: number
@@ -2229,6 +2303,7 @@ export interface NativeAgentCompareReport {
   madar: NativeAgentRunStatus
   install_verified: boolean
   measurement_validity: NativeAgentMeasurementValidity
+  trace_status: NativeAgentTraceStatus
   madar_mcp_call_count: number
   tool_call_counts?: NativeAgentToolCallCounts
   madar_trace?: CompareMadarTrace
@@ -2242,6 +2317,7 @@ export interface NativeAgentCompareReport {
   } | null
   token_regression: boolean
   token_regression_reasons: NativeAgentTokenRegressionMetric[]
+  claim_assessment?: NativeAgentClaimAssessment
   prompt_token_source: {
     baseline: 'anthropic_provider_reported' | 'unknown'
     madar: 'anthropic_provider_reported' | 'unknown'
@@ -2310,6 +2386,7 @@ export interface NativeAgentRunnerInput {
   promptFile: string
   outputFile: string
   command: string
+  signal?: AbortSignal
 }
 
 export interface NativeAgentRunnerResult {
@@ -2324,7 +2401,28 @@ export type NativeAgentRunner = (input: NativeAgentRunnerInput) => Promise<Nativ
 export interface ExecuteNativeAgentCompareDependencies {
   runner?: NativeAgentRunner
   now?: () => Date
+  writeStderr?: (message: string) => void
 }
+
+interface NativeAgentRunStateRecord {
+  phase: 'baseline_pending' | 'baseline_done' | 'baseline_timed_out' | 'madar_pending' | 'madar_done' | 'madar_timed_out'
+  arm: 'baseline' | 'madar'
+  updated_at: string
+  baseline?: {
+    kind: NativeAgentRunStatus['kind']
+    exit_code?: number | null
+    duration_ms?: number | null
+  }
+  madar?: {
+    kind: NativeAgentRunStatus['kind']
+    exit_code?: number | null
+    duration_ms?: number | null
+    failure_reason?: 'timed_out'
+  }
+}
+
+const DEFAULT_COMPARE_PER_ARM_TIMEOUT_SECONDS = 600
+const DEFAULT_COMPARE_HEARTBEAT_INTERVAL_MS = 30000
 
 const MADAR_SECTION_MARKER = '## madar'
 function readJsonObject(filePath: string): Record<string, unknown> | null {
@@ -2672,6 +2770,24 @@ async function defaultNativeAgentRunner(input: NativeAgentRunnerInput): Promise<
     const child = spawn(command.file, command.args, { shell: false, stdio: ['ignore', 'pipe', 'pipe'] })
     let stdout = ''
     let stderr = ''
+    let settled = false
+
+    const cleanupAbortListener = () => {
+      input.signal?.removeEventListener('abort', handleAbort)
+    }
+
+    const handleAbort = () => {
+      child.kill()
+    }
+
+    if (input.signal) {
+      if (input.signal.aborted) {
+        handleAbort()
+      } else {
+        input.signal.addEventListener('abort', handleAbort, { once: true })
+      }
+    }
+
     child.stdout?.on('data', (chunk: string | Buffer) => {
       stdout += chunk.toString()
     })
@@ -2679,11 +2795,139 @@ async function defaultNativeAgentRunner(input: NativeAgentRunnerInput): Promise<
       stderr += chunk.toString()
     })
     child.on('error', (error) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      cleanupAbortListener()
       rejectExecution(error)
     })
     child.on('close', (code) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      cleanupAbortListener()
       resolveExecution({ exitCode: code ?? 1, stdout, stderr, elapsedMs: Date.now() - startedAt })
     })
+  })
+}
+
+function perArmTimeoutMs(seconds: number | undefined): number {
+  if (seconds === undefined) {
+    return DEFAULT_COMPARE_PER_ARM_TIMEOUT_SECONDS * 1000
+  }
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new Error(`[madar compare] per-arm timeout must be > 0 seconds, got ${seconds}`)
+  }
+  return Math.max(1, Math.round(seconds * 1000))
+}
+
+function compareHeartbeatIntervalMs(intervalMs: number | undefined): number {
+  if (intervalMs === undefined) {
+    return DEFAULT_COMPARE_HEARTBEAT_INTERVAL_MS
+  }
+  if (!Number.isFinite(intervalMs) || intervalMs < 0) {
+    throw new Error(`[madar compare] heartbeat interval must be >= 0ms, got ${intervalMs}`)
+  }
+  return Math.round(intervalMs)
+}
+
+function runStateSnapshot(status: NativeAgentRunStatus | undefined): NativeAgentRunStateRecord['baseline'] | NativeAgentRunStateRecord['madar'] | undefined {
+  if (!status) {
+    return undefined
+  }
+  if (status.kind === 'succeeded') {
+    return {
+      kind: status.kind,
+      duration_ms: status.duration_ms,
+    }
+  }
+  if (status.kind === 'answer_only') {
+    return {
+      kind: status.kind,
+      exit_code: status.exit_code,
+    }
+  }
+  return {
+    kind: status.kind,
+    exit_code: status.exit_code,
+    ...(status.failure_reason ? { failure_reason: status.failure_reason } : {}),
+  }
+}
+
+function writeNativeAgentRunState(runStatePath: string, state: NativeAgentRunStateRecord): void {
+  writeFileSync(runStatePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+}
+
+function runStateDetails(statuses: {
+  baseline?: NativeAgentRunStatus
+  madar?: NativeAgentRunStatus
+}): Pick<NativeAgentRunStateRecord, 'baseline' | 'madar'> {
+  const details: Pick<NativeAgentRunStateRecord, 'baseline' | 'madar'> = {}
+  const baseline = runStateSnapshot(statuses.baseline)
+  if (baseline) {
+    details.baseline = baseline
+  }
+  const madar = runStateSnapshot(statuses.madar)
+  if (madar) {
+    details.madar = madar
+  }
+  return details
+}
+
+async function runNativeAgentArmWithTimeout(
+  runner: NativeAgentRunner,
+  input: NativeAgentRunnerInput,
+  timeoutMs: number,
+  heartbeatIntervalMs: number,
+  writeStderr: (message: string) => void,
+): Promise<{ kind: 'completed'; result: NativeAgentRunnerResult } | { kind: 'timed_out' }> {
+  const controller = new AbortController()
+  const runnerPromise = runner({ ...input, signal: controller.signal })
+
+  return await new Promise((resolveExecution, rejectExecution) => {
+    let settled = false
+    const startedAt = Date.now()
+    const heartbeatId = heartbeatIntervalMs > 0
+      ? setInterval(() => {
+          writeStderr(`[madar compare] ${input.mode} arm running... ${Date.now() - startedAt}ms elapsed\n`)
+        }, heartbeatIntervalMs)
+      : null
+    const cleanup = () => {
+      if (heartbeatId !== null) {
+        clearInterval(heartbeatId)
+      }
+      clearTimeout(timeoutId)
+    }
+    const timeoutId = setTimeout(() => {
+      if (settled) {
+        return
+      }
+      settled = true
+      controller.abort()
+      cleanup()
+      resolveExecution({ kind: 'timed_out' } as const)
+    }, timeoutMs)
+
+    runnerPromise.then(
+      (result) => {
+        if (settled) {
+          return
+        }
+        settled = true
+        cleanup()
+        resolveExecution({ kind: 'completed', result } as const)
+      },
+      (error) => {
+        if (settled) {
+          return
+        }
+        settled = true
+        cleanup()
+        rejectExecution(error)
+      },
+    )
   })
 }
 
@@ -2772,6 +3016,60 @@ function formatTokenRegressionWarning(
   return `WARNING: fresh-token regression — ${reasons.map((metric) => formatTokenRegressionMetric(metric, baseline, madar)).join('; ')}`
 }
 
+function assessNativeAgentClaims(report: NativeAgentCompareReport): NativeAgentClaimAssessment | undefined {
+  if (report.baseline.kind !== 'succeeded' || report.madar.kind !== 'succeeded') {
+    return undefined
+  }
+
+  if (!nativeAgentReductionsAttributable(report)) {
+    return {
+      routing_efficiency: {
+        status: 'not_measured',
+        evidence: ['Madar MCP attribution is missing.'],
+      },
+      token_reduction: {
+        status: 'not_measured',
+        evidence: ['Madar MCP attribution is missing.'],
+      },
+    }
+  }
+
+  const routingEvidence: string[] = []
+  const toolCallsImproved = report.tool_call_counts
+    ? report.tool_call_counts.madar.total < report.tool_call_counts.baseline.total
+    : false
+  if (report.tool_call_counts) {
+    routingEvidence.push(
+      `tool calls ${toolCallsImproved ? 'decreased' : 'did not decrease'}: baseline ${report.tool_call_counts.baseline.total} → madar ${report.tool_call_counts.madar.total}${formatDirectionalDelta(report.tool_call_counts.baseline.total, report.tool_call_counts.madar.total, 'fewer', 'more')}`,
+    )
+  }
+
+  const latencyImproved = report.madar.duration_ms < report.baseline.duration_ms
+  routingEvidence.push(
+    `latency ${latencyImproved ? 'improved' : 'did not improve'}: baseline ${report.baseline.duration_ms}ms → madar ${report.madar.duration_ms}ms${formatDirectionalDelta(report.baseline.duration_ms, report.madar.duration_ms, 'faster', 'slower')}`,
+  )
+
+  const tokenEvidence: string[] = []
+  const totalInputImproved = report.madar.total_input_tokens_anthropic_exact < report.baseline.total_input_tokens_anthropic_exact
+  tokenEvidence.push(
+    `provider input ${totalInputImproved ? 'decreased' : report.madar.total_input_tokens_anthropic_exact > report.baseline.total_input_tokens_anthropic_exact ? 'grew' : 'did not decrease'}: baseline ${report.baseline.total_input_tokens_anthropic_exact} → madar ${report.madar.total_input_tokens_anthropic_exact}${formatDirectionalDelta(report.baseline.total_input_tokens_anthropic_exact, report.madar.total_input_tokens_anthropic_exact, 'less', 'more')}`,
+  )
+  if (report.token_regression_reasons.length > 0) {
+    tokenEvidence.push(`fresh-token regression: ${report.token_regression_reasons.join(', ')}`)
+  }
+
+  return {
+    routing_efficiency: {
+      status: toolCallsImproved || latencyImproved ? 'improved' : 'not_improved',
+      evidence: routingEvidence,
+    },
+    token_reduction: {
+      status: totalInputImproved && report.token_regression_reasons.length === 0 ? 'proven' : 'not_proven',
+      evidence: tokenEvidence,
+    },
+  }
+}
+
 type NativeAgentComparableReport = NativeAgentCompareReport & {
   baseline: Extract<NativeAgentRunStatus, { kind: 'succeeded' }>
   madar: Extract<NativeAgentRunStatus, { kind: 'succeeded' }>
@@ -2782,8 +3080,16 @@ interface NativeAgentSuiteChange {
   percentReduction: number
 }
 
+function nativeAgentReductionsAttributable(
+  report: Pick<NativeAgentCompareReport, 'measurement_validity'>,
+): boolean {
+  return report.measurement_validity === 'valid'
+}
+
 function isComparableNativeAgentReport(report: NativeAgentCompareReport): report is NativeAgentComparableReport {
-  return report.baseline.kind === 'succeeded' && report.madar.kind === 'succeeded'
+  return report.baseline.kind === 'succeeded'
+    && report.madar.kind === 'succeeded'
+    && nativeAgentReductionsAttributable(report)
 }
 
 function computeReductionPercent(baseline: number, madar: number): number | null {
@@ -2922,6 +3228,9 @@ export async function executeNativeAgentCompare(
   const questions = resolveCompareQuestions(input)
   const outputDir = validateGraphOutputPath(input.outputDir)
   const now = dependencies.now ?? (() => new Date())
+  const writeStderr = dependencies.writeStderr ?? ((message: string) => process.stderr.write(message))
+  const timeoutMs = perArmTimeoutMs(input.perArmTimeoutSeconds)
+  const heartbeatIntervalMs = compareHeartbeatIntervalMs(input.heartbeatIntervalMs)
   const timestamp = now()
   const outputRoot = createCompareOutputRoot(outputDir, timestamp)
   const runner = dependencies.runner ?? defaultNativeAgentRunner
@@ -2944,6 +3253,7 @@ export async function executeNativeAgentCompare(
     const madarAnswerPath = answerFilePath(questionDir, 'madar')
     const reportPath = join(questionDir, 'report.json')
     const shareSafeReportPath = join(questionDir, 'report.share-safe.json')
+    const runStatePath = join(questionDir, 'run-state.json')
 
     const reportShell: NativeAgentCompareReport = {
       baseline_mode: 'native_agent',
@@ -2957,6 +3267,7 @@ export async function executeNativeAgentCompare(
       madar: { kind: 'runner_error', evidence: null, exit_code: null, stderr: null },
       install_verified: installCheck.verified,
       measurement_validity: installCheck.verified ? 'degraded' : 'invalid',
+      trace_status: 'missing_verbose_trace',
       madar_mcp_call_count: 0,
       reductions: null,
       token_regression: false,
@@ -2991,6 +3302,11 @@ export async function executeNativeAgentCompare(
         prompt_file: promptFile,
       },
     }
+    writeNativeAgentRunState(runStatePath, {
+      phase: 'baseline_pending',
+      arm: 'baseline',
+      updated_at: now().toISOString(),
+    })
 
     // Step 1: snapshot madar artifacts and run baseline.
     const stamp = timestamp.toISOString().replace(/[^0-9]/g, '').slice(0, 14)
@@ -3006,12 +3322,39 @@ export async function executeNativeAgentCompare(
         outputFile: baselineAnswerPath,
       })
       let baselineRun: NativeAgentRunnerResult | null = null
+      let baselineTimedOut = false
       try {
-        baselineRun = await runner({ mode: 'baseline', question, promptFile, outputFile: baselineAnswerPath, command: baselineCommand })
+        const baselineExecution = await runNativeAgentArmWithTimeout(
+          runner,
+          { mode: 'baseline', question, promptFile, outputFile: baselineAnswerPath, command: baselineCommand },
+          timeoutMs,
+          heartbeatIntervalMs,
+          writeStderr,
+        )
+        if (baselineExecution.kind === 'timed_out') {
+          baselineTimedOut = true
+        } else {
+          baselineRun = baselineExecution.result
+        }
       } catch (error) {
         baselineCrashed = error
       }
-      if (baselineRun !== null) {
+      if (baselineTimedOut) {
+        reportShell.baseline = {
+          kind: 'runner_error',
+          evidence: `Timed out after ${timeoutMs}ms`,
+          exit_code: null,
+          stderr: null,
+          failure_reason: 'timed_out',
+        }
+        ensureCompareAnswerFile(baselineAnswerPath, '')
+        writeNativeAgentRunState(runStatePath, {
+          phase: 'baseline_timed_out',
+          arm: 'baseline',
+          updated_at: now().toISOString(),
+          ...runStateDetails({ baseline: reportShell.baseline }),
+        })
+      } else if (baselineRun !== null) {
         baselineToolCallCounts = extractNativeAgentToolCallCounts(baselineRun.stdout)
         const event = parseAnthropicResultEvent(baselineRun.stdout)
         if (event !== null) {
@@ -3055,6 +3398,12 @@ export async function executeNativeAgentCompare(
                 }
           ensureCompareAnswerFile(baselineAnswerPath, baselineRun.stdout)
         }
+        writeNativeAgentRunState(runStatePath, {
+                phase: 'baseline_done',
+                arm: 'baseline',
+                updated_at: now().toISOString(),
+                ...runStateDetails({ baseline: reportShell.baseline }),
+        })
       }
     } finally {
       restoreMadarArtifacts(snapshot)
@@ -3068,7 +3417,21 @@ export async function executeNativeAgentCompare(
       throw baselineCrashed instanceof Error ? baselineCrashed : new Error(String(baselineCrashed))
     }
 
+    if (reportShell.baseline.kind === 'runner_error' && reportShell.baseline.failure_reason === 'timed_out') {
+      writeStderr(`[madar compare] baseline arm timed out after ${timeoutMs}ms\n`)
+      reportShell.completed_at = now().toISOString()
+      writeNativeAgentReport(reportShell)
+      reports.push(reportShell)
+      continue
+    }
+
     // Step 2: run madar (artifacts are restored, MCP server is in place).
+    writeNativeAgentRunState(runStatePath, {
+      phase: 'madar_pending',
+      arm: 'madar',
+      updated_at: now().toISOString(),
+      ...runStateDetails({ baseline: reportShell.baseline }),
+    })
     const madarCommand = expandCompareExecTemplate(input.execTemplate, {
       promptFile,
       question,
@@ -3078,7 +3441,32 @@ export async function executeNativeAgentCompare(
     let madarRun: NativeAgentRunnerResult | null = null
     let madarToolCallCounts: NativeAgentToolCallCountsEntry | null = null
     try {
-      madarRun = await runner({ mode: 'madar', question, promptFile, outputFile: madarAnswerPath, command: madarCommand })
+      const madarExecution = await runNativeAgentArmWithTimeout(
+        runner,
+        { mode: 'madar', question, promptFile, outputFile: madarAnswerPath, command: madarCommand },
+        timeoutMs,
+        heartbeatIntervalMs,
+        writeStderr,
+      )
+      if (madarExecution.kind === 'timed_out') {
+        reportShell.madar = {
+          kind: 'runner_error',
+          evidence: `Timed out after ${timeoutMs}ms`,
+          exit_code: null,
+          stderr: null,
+          failure_reason: 'timed_out',
+        }
+        ensureCompareAnswerFile(madarAnswerPath, '')
+        writeNativeAgentRunState(runStatePath, {
+          phase: 'madar_timed_out',
+          arm: 'madar',
+          updated_at: now().toISOString(),
+          ...runStateDetails({ baseline: reportShell.baseline, madar: reportShell.madar }),
+        })
+        writeStderr(`[madar compare] madar arm timed out after ${timeoutMs}ms\n`)
+      } else {
+        madarRun = madarExecution.result
+      }
     } catch (error) {
       reportShell.madar = {
         kind: 'runner_error',
@@ -3099,9 +3487,11 @@ export async function executeNativeAgentCompare(
       if (madarTrace) {
         reportShell.madar_trace = madarTrace
         reportShell.madar_mcp_call_count = madarTrace.madar_mcp_call_count
+        reportShell.trace_status = 'trace_available'
       } else {
         delete reportShell.madar_trace
         reportShell.madar_mcp_call_count = 0
+        reportShell.trace_status = 'missing_verbose_trace'
       }
       const event = parseAnthropicResultEvent(madarRun.stdout)
       if (event !== null) {
@@ -3145,6 +3535,12 @@ export async function executeNativeAgentCompare(
               }
         ensureCompareAnswerFile(madarAnswerPath, madarRun.stdout)
       }
+      writeNativeAgentRunState(runStatePath, {
+              phase: 'madar_done',
+              arm: 'madar',
+              updated_at: now().toISOString(),
+              ...runStateDetails({ baseline: reportShell.baseline, madar: reportShell.madar }),
+      })
     }
 
     if (baselineToolCallCounts !== null && madarToolCallCounts !== null) {
@@ -3188,6 +3584,15 @@ export async function executeNativeAgentCompare(
           ? 'valid'
           : 'degraded'
         : 'invalid'
+    const claimAssessment = assessNativeAgentClaims(reportShell)
+    if (claimAssessment !== undefined) {
+      reportShell.claim_assessment = claimAssessment
+    } else {
+      delete reportShell.claim_assessment
+    }
+    if (!nativeAgentReductionsAttributable(reportShell)) {
+      reportShell.reductions = null
+    }
     const answerQuality = evaluateNativeAgentAnswerQualityReport(
       answerQualityGates,
       question,
@@ -3269,12 +3674,30 @@ function formatMadarMcpCallCountLine(report: NativeAgentCompareReport): string {
     : `madar_mcp_call_count: ${report.madar_mcp_call_count}`
 }
 
+function formatNativeAgentTraceStatusLine(report: NativeAgentCompareReport): string {
+  if (report.trace_status === 'missing_verbose_trace') {
+    return 'trace_status: missing_verbose_trace (Claude --verbose is required for MCP-call attribution)'
+  }
+  return 'trace_status: trace_available'
+}
+
 function appendNativeAgentValidityLines(lines: string[], report: NativeAgentCompareReport): void {
   lines.push(
     `    ${formatMeasurementValidityLine(report)}`,
     `    install_verified: ${report.install_verified}`,
     `    ${formatMadarMcpCallCountLine(report)}`,
+    `    ${formatNativeAgentTraceStatusLine(report)}`,
   )
+}
+
+function formatNativeAgentClaimAssessmentLine(assessment: NativeAgentClaimAssessment): string {
+  const routingEvidence = assessment.routing_efficiency.evidence.length > 0
+    ? ` (${assessment.routing_efficiency.evidence.join('; ')})`
+    : ''
+  const tokenEvidence = assessment.token_reduction.evidence.length > 0
+    ? ` (${assessment.token_reduction.evidence.join('; ')})`
+    : ''
+  return `claim_assessment: routing_efficiency ${assessment.routing_efficiency.status}${routingEvidence}; token_reduction ${assessment.token_reduction.status}${tokenEvidence}`
 }
 
 export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult): string {
@@ -3353,13 +3776,30 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
       madar.usage.cache_creation_input_tokens > 0 ||
       madar.cached_input_tokens_anthropic_exact > 0
 
+    lines.push(`- "${report.question}"`)
+    appendNativeAgentValidityLines(lines, report)
+    if (report.claim_assessment) {
+      lines.push(`    ${formatNativeAgentClaimAssessmentLine(report.claim_assessment)}`)
+    }
+    const derivedTokenRegressionReasons = collectTokenRegressionReasons(baseline, madar)
+    const tokenRegressionReasons =
+      report.token_regression_reasons && report.token_regression_reasons.length > 0
+        ? report.token_regression_reasons
+        : derivedTokenRegressionReasons
+    if (!nativeAgentReductionsAttributable(report)) {
+      lines.push('    Cannot attribute outcome differences to Madar. Raw numbers preserved in report.json.')
+      const tokenRegressionWarning = formatTokenRegressionWarning(baseline, madar, tokenRegressionReasons)
+      if (tokenRegressionWarning) {
+        lines.push(`    ${tokenRegressionWarning}`)
+      }
+      if (report.madar_trace) {
+        lines.push(`    madar_trace: ${report.madar_trace.exploration_outcome} · ${report.madar_trace.exploration_summary}`)
+      }
+      lines.push('    provider/runtime proof: Anthropic reported input, cache, and total tokens for both runs')
+      continue
+    }
+
     lines.push(
-      `- "${report.question}"`,
-      ...(() => {
-        const validityLines: string[] = []
-        appendNativeAgentValidityLines(validityLines, report)
-        return validityLines
-      })(),
       `    num_turns: baseline ${baseline.num_turns} → madar ${madar.num_turns}${formatDirectionalDelta(baseline.num_turns, madar.num_turns, 'fewer', 'more')}`,
       `    latency:   baseline ${baseline.duration_ms}ms → madar ${madar.duration_ms}ms${formatDirectionalDelta(baseline.duration_ms, madar.duration_ms, 'faster', 'slower')}`,
       `    input_tokens (Anthropic-reported): baseline ${baseline.total_input_tokens_anthropic_exact} → madar ${madar.total_input_tokens_anthropic_exact}${formatDirectionalDelta(baseline.total_input_tokens_anthropic_exact, madar.total_input_tokens_anthropic_exact, 'less', 'more', { noMeaningfulChangeThreshold: 0.1, neutralLabel: 'no meaningful change' })}`,
@@ -3376,11 +3816,6 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
         `    tool calls: baseline ${report.tool_call_counts.baseline.total} → madar ${report.tool_call_counts.madar.total}${formatDirectionalDelta(report.tool_call_counts.baseline.total, report.tool_call_counts.madar.total, 'fewer', 'more')}`,
       )
     }
-    const derivedTokenRegressionReasons = collectTokenRegressionReasons(baseline, madar)
-    const tokenRegressionReasons =
-      report.token_regression_reasons && report.token_regression_reasons.length > 0
-        ? report.token_regression_reasons
-        : derivedTokenRegressionReasons
     const tokenRegressionWarning = formatTokenRegressionWarning(baseline, madar, tokenRegressionReasons)
     if (tokenRegressionWarning) {
       lines.push(`    ${tokenRegressionWarning}`)

@@ -6,35 +6,38 @@ This file is the public map between what Madar says and what the repo can actual
 
 | Claim | Surface | Evidence |
 | --- | --- | --- |
-| Madar builds local, task-aware, verifiable context packs from graph artifacts. | `README.md`, install docs, package metadata | `madar generate`, `madar pack`, Pack Schema v1 surfaces, MCP tool docs |
-| `execution_slice` is a static runtime-path hypothesis, not a live trace. | `README.md`, tutorials, proof docs | runtime-routing docs and tests, benchmark artifacts that persist static slice output |
-| Madar can publish share-safe compare artifacts. | `README.md`, benchmark docs | `report.share-safe.json` artifacts in `docs/benchmarks/**` |
-| Some repo/task pairs show token and cost wins on explain-style work. | `README.md`, benchmark receipts | Dated artifact folders under `docs/benchmarks/` |
+| 4x fewer tool calls on the verified GoValidate backend explain cell. | `README.md`, `CHANGELOG.md` | [`docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/report.json`](docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/report.json) (`tool_call_counts.baseline.total = 28`, `tool_call_counts.madar.total = 7`) |
+| 4.75x fewer input tokens, 2.21x fewer uncached input tokens, 2.2x lower latency, and 2.73x lower cost on that same cell. | `README.md`, `CHANGELOG.md` | Same artifact (`reductions.input_tokens = 4.75`, `reductions.uncached_input_tokens = 2.21`, `reductions.duration_ms = 2.2`, `reductions.cost_usd = 2.73`) |
+| The verified release cell stayed bounded after the first Madar call. | `README.md`, benchmark notes | Same artifact (`install_verified = true`, `measurement_validity = "valid"`, `madar_trace.madar_mcp_call_count = 1`, `madar_trace.exploration_outcome = "madar_invoked"`, `madar_trace.broad_exploration_tool_call_count = 0`) |
+| Madar ships deterministic, share-safe benchmark receipts. | `README.md`, benchmark docs | [`docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/report.share-safe.json`](docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/report.share-safe.json) and other `report.share-safe.json` artifacts under `docs/benchmarks/**` |
+| Pack Schema v1 and the MCP response shape are documented surfaces, not ad hoc output. | `README.md`, pack docs | [`docs/mcp-response-shape.md`](docs/mcp-response-shape.md), `tests/unit/pack-quality-fixtures.test.ts`, `tests/unit/pack-quality-helper.test.ts` |
 
 ## In progress
 
 | Claim | Current status | Next evidence |
 | --- | --- | --- |
-| Strict install guidance reduces exploration in practice. | Mixed evidence today; the FounderCommandCenter contrast note shows a regression case where the pack was treated as extra context instead of a stop condition. | Track per-repo/task tool-call spread and future measured rows under [`docs/benchmarks/suite/`](docs/benchmarks/suite/README.md). |
-| Public benchmark claims should be reproducible across repos. | The repo now ships the fixed manifests, methodology, `madar bench:suite` runner, and the first measured warm-cache `nestjs-mid` / `explain-runtime` row. The broader matrix is still incomplete. | Add more measured rows under `docs/benchmarks/suite/results/` and keep the manifests/methodology current. |
+| Public benchmark claims should hold up as per-repo receipts instead of a single headline number. | The repo ships the methodology, manifests, isolation assets, and `madar bench:suite` runner under [`docs/benchmarks/suite/`](docs/benchmarks/suite/README.md), but the populated matrix is still small. | Add more measured rows under `docs/benchmarks/suite/results/` and keep each row tied to its repo/task cell. |
+| Install-guided bounded retrieval should hold across more repos and prompts. | Evidence is mixed today; the FounderCommandCenter contrast note shows a case where the pack acted as extra context instead of a stop condition. | Keep publishing counterexamples and positive receipts side-by-side, starting with [`docs/benchmarks/2026-05-25-founder-command-center-auth-flow/`](docs/benchmarks/2026-05-25-founder-command-center-auth-flow/README.md) and future suite rows. |
 
 ## Not yet measured
 
 | Claim | Why it is not public copy today |
 | --- | --- |
-| Fewer wrong-file edits | We do not yet have an implementation-task benchmark that measures edit correctness. |
-| Universal turns / latency / exploration wins | Public receipts are repo- and prompt-specific; they do not justify a single-number cross-repo headline. |
-| Agent always stops exploring after one pack | Madar can shape the first pass, but it does not control the runtime or guarantee tool behavior. |
+| Madar improves implement-task outcomes or wrong-file edit accuracy. | We do not yet have an implementation-task benchmark cell that measures edit correctness or implementation success. Track that under [#332](https://github.com/mohanagy/madar/issues/332). |
+| Lower-confidence packs behave as well as the demonstrated high-confidence release cell. | The `0.27.0` public receipt is one strong, install-verified explain cell; medium/low-confidence prompts still need their own measured rows. |
+| A universal turns / latency / exploration win across repos. | Public receipts are repo- and prompt-specific, so they do not justify a single-number cross-repo headline. |
+| The agent always stops exploring after one pack. | Madar shapes the first pass, but it does not control the runtime or guarantee tool behavior. |
 
 ## How this maps to README.md
 
-- `README.md` should only state what is demonstrated, what is in progress, and what is not yet measured.
+- `README.md` should state the demonstrated release cell, the benchmark-suite direction, and the not-yet-measured limits in the same place.
 - Any new public claim should link back to a dated artifact or to the reproducible suite surface under [`docs/benchmarks/suite/`](docs/benchmarks/suite/README.md).
 - When evidence is mixed, the README should say that directly and point to the counterexample note or issue instead of smoothing it into marketing.
 
 ## Related evidence
 
+- [`docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/`](docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/) — the verified `0.27.0` release cell cited in `README.md` and `CHANGELOG.md`.
 - [`docs/benchmarks/2026-05-25-founder-command-center-auth-flow/`](docs/benchmarks/2026-05-25-founder-command-center-auth-flow/README.md) — mixed exploration evidence, including the FounderCommandCenter contrast note.
 - [`docs/benchmarks/govalidate-suite/`](docs/benchmarks/govalidate-suite/README.md) — public prompt set plus deterministic pack/answer quality gates.
 - [`docs/benchmarks/suite/`](docs/benchmarks/suite/README.md) — fixed manifests, methodology, CLI runner, and per-repo spread results.
-- [`docs/benchmarks/suite/results/2026-05-26T18-31-04/summary.md`](docs/benchmarks/suite/results/2026-05-26T18-31-04/summary.md) — first measured warm-cache `nestjs-mid` / `explain-runtime` suite row.
+- [`docs/benchmarks/suite/results/2026-05-26T18-31-04/summary.md`](docs/benchmarks/suite/results/2026-05-26T18-31-04/summary.md) — the first measured warm-cache `nestjs-mid` / `explain-runtime` suite row.

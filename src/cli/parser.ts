@@ -105,6 +105,8 @@ export interface CompareCliOptions {
   questionsPath: string | null
   outputDir: string
   baselineMode: 'full' | 'bounded' | 'pack_only' | 'native_agent'
+  perArmTimeoutSeconds: number
+  heartbeatIntervalMs: number
   allowNoInstall: boolean
   yes: boolean
   limit: number | null
@@ -187,7 +189,7 @@ export interface InstallCliOptions {
   platform: InstallPlatform
 }
 
-const COMPARE_USAGE = 'Usage: madar compare [question] --exec TEMPLATE [--graph path] [--questions PATH] [--output-dir DIR] [--baseline-mode MODE] [--allow-no-install] [--yes] [--limit N]'
+const COMPARE_USAGE = 'Usage: madar compare [question] --exec TEMPLATE [--graph path] [--questions PATH] [--output-dir DIR] [--baseline-mode MODE] [--per-arm-timeout S] [--heartbeat-interval-ms N] [--allow-no-install] [--yes] [--limit N]'
 
 export interface PlatformActionCliOptions {
   action: 'install' | 'uninstall'
@@ -1078,6 +1080,8 @@ export function parseCompareArgs(args: string[]): CompareCliOptions {
   let questionsPath: string | null = null
   let outputDir = 'out/compare'
   let baselineMode: 'full' | 'bounded' | 'pack_only' | 'native_agent' = 'full'
+  let perArmTimeoutSeconds = 600
+  let heartbeatIntervalMs = 30000
   let allowNoInstall = false
   let yes = false
   let limit: number | null = null
@@ -1161,6 +1165,30 @@ export function parseCompareArgs(args: string[]): CompareCliOptions {
       continue
     }
 
+    if (argument === '--per-arm-timeout') {
+      perArmTimeoutSeconds = parsePositiveDecimalInteger('--per-arm-timeout', requireOptionValue('--per-arm-timeout', args[index + 1]))
+      index += 1
+      continue
+    }
+
+    if (argument.startsWith('--per-arm-timeout=')) {
+      const [, value] = argument.split('=', 2)
+      perArmTimeoutSeconds = parsePositiveDecimalInteger('--per-arm-timeout', requireOptionValue('--per-arm-timeout', value))
+      continue
+    }
+
+    if (argument === '--heartbeat-interval-ms') {
+      heartbeatIntervalMs = parseNonNegativeInteger('--heartbeat-interval-ms', requireOptionValue('--heartbeat-interval-ms', args[index + 1]))
+      index += 1
+      continue
+    }
+
+    if (argument.startsWith('--heartbeat-interval-ms=')) {
+      const [, value] = argument.split('=', 2)
+      heartbeatIntervalMs = parseNonNegativeInteger('--heartbeat-interval-ms', requireOptionValue('--heartbeat-interval-ms', value))
+      continue
+    }
+
     if (argument === '--yes') {
       yes = true
       continue
@@ -1212,6 +1240,8 @@ export function parseCompareArgs(args: string[]): CompareCliOptions {
     questionsPath,
     outputDir,
     baselineMode,
+    perArmTimeoutSeconds,
+    heartbeatIntervalMs,
     allowNoInstall,
     yes,
     limit,
