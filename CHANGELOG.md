@@ -2,6 +2,18 @@
 
 All notable changes to the TypeScript package will be documented in this file.
 
+## [0.27.3] - 2026-05-28
+
+### Added
+
+- **Explain packs now default to compact answer-ready output**: `madar pack`, MCP `context_pack`, and compare prompt packs can return bounded answer-ready JSON by default while preserving full diagnostics behind verbose mode. Closes #376.
+- **Runtime-generation fixtures cover the full report path**: pack-quality regression coverage now includes the runtime-generation explain/report flow so spine selection is tested against the real orchestrator, storage, and quality-gate handoff. Closes #377.
+
+### Changed
+
+- **Installed-agent guidance is stricter about Madar-first exploration**: generated Claude/Codex/Copilot/Cursor/Gemini instructions now tell agents to inspect `evidence.pack_confidence`, `recommended_first_read`, and `evidence.agent_directive`, and to try one focused Madar follow-up before broad raw search. Closes #378.
+- **Native-agent benchmark outcomes now gate full wins on regressions**: compare reports include `benchmark_outcome` checks for routing/tool/latency, total tokens, fresh-token usage, provider cost, and turns, so faster routing with worse cost or fresh-token behavior is marked as a partial win instead of a full win. Closes #379.
+
 ## [0.27.2] - 2026-05-28
 
 ### Changed
