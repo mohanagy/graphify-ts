@@ -915,6 +915,181 @@ describe('executeNativeAgentCompare', () => {
     }
   })
 
+  it('times out a stuck madar arm after baseline and writes partial artifacts instead of hanging', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const request = {
+        graphPath,
+        question: 'stalled madar arm',
+        outputDir,
+        execTemplate: 'mock-runner',
+        baselineMode: 'native_agent',
+        perArmTimeoutSeconds: 0.01,
+      } as Parameters<typeof executeNativeAgentCompare>[0] & { perArmTimeoutSeconds: number }
+
+      const stalledRunner: NativeAgentRunner = async (input) => {
+        if (input.mode === 'baseline') {
+          return {
+            exitCode: 0,
+            stdout: `${JSON.stringify(BASELINE_USAGE_PAYLOAD)}\n`,
+            stderr: '',
+            elapsedMs: 10,
+          }
+        }
+        return await new Promise(() => {})
+      }
+
+      const outcome = await Promise.race([
+        executeNativeAgentCompare(
+          request,
+          {
+            runner: stalledRunner,
+            now: () => new Date('2026-05-28T00:00:00Z'),
+          },
+        ).then((result) => ({ kind: 'resolved' as const, result })),
+        new Promise<{ kind: 'hung' }>((resolve) => {
+          setTimeout(() => resolve({ kind: 'hung' }), 100)
+        }),
+      ])
+
+      if (outcome.kind !== 'resolved') {
+        throw new Error('compare hung instead of timing out the stuck madar arm')
+      }
+
+      const report = outcome.result.reports[0] as NativeAgentCompareReport
+      const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+      const runStatePath = join(report.paths.output_dir, 'run-state.json')
+      const runState = JSON.parse(readFileSync(runStatePath, 'utf8')) as Record<string, unknown>
+
+      expect(report.baseline.kind).toBe('succeeded')
+      expect(report.madar.kind).toBe('runner_error')
+      expect((report.madar as { failure_reason?: unknown }).failure_reason).toBe('timed_out')
+      expect(savedReport.madar).toEqual(expect.objectContaining({
+        kind: 'runner_error',
+        failure_reason: 'timed_out',
+      }))
+      expect(existsSync(runStatePath)).toBe(true)
+      expect(runState).toEqual(expect.objectContaining({
+        phase: 'madar_timed_out',
+        arm: 'madar',
+      }))
+      expect(readFileSync(report.paths.baseline_answer, 'utf8')).toContain('baseline answer')
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('times out a stuck baseline arm and writes a partial report instead of hanging', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const request = {
+        graphPath,
+        question: 'stalled baseline arm',
+        outputDir,
+        execTemplate: 'mock-runner',
+        baselineMode: 'native_agent',
+        perArmTimeoutSeconds: 0.01,
+      } as Parameters<typeof executeNativeAgentCompare>[0] & { perArmTimeoutSeconds: number }
+      const seenModes: CompareRunMode[] = []
+
+      const stalledRunner: NativeAgentRunner = async (input) => {
+        seenModes.push(input.mode)
+        if (input.mode === 'baseline') {
+          return await new Promise(() => {})
+        }
+        return {
+          exitCode: 0,
+          stdout: `${JSON.stringify(MADAR_USAGE_PAYLOAD)}\n`,
+          stderr: '',
+          elapsedMs: 5,
+        }
+      }
+
+      const outcome = await Promise.race([
+        executeNativeAgentCompare(
+          request,
+          {
+            runner: stalledRunner,
+            now: () => new Date('2026-05-28T00:00:00Z'),
+          },
+        ).then((result) => ({ kind: 'resolved' as const, result })),
+        new Promise<{ kind: 'hung' }>((resolve) => {
+          setTimeout(() => resolve({ kind: 'hung' }), 100)
+        }),
+      ])
+
+      if (outcome.kind !== 'resolved') {
+        throw new Error('compare hung instead of timing out the stuck baseline arm')
+      }
+
+      const report = outcome.result.reports[0] as NativeAgentCompareReport
+      const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+      const runStatePath = join(report.paths.output_dir, 'run-state.json')
+      const runState = JSON.parse(readFileSync(runStatePath, 'utf8')) as Record<string, unknown>
+
+      expect(seenModes).toEqual(['baseline'])
+      expect(report.baseline.kind).toBe('runner_error')
+      expect((report.baseline as { failure_reason?: unknown }).failure_reason).toBe('timed_out')
+      expect(savedReport.baseline).toEqual(expect.objectContaining({
+        kind: 'runner_error',
+        failure_reason: 'timed_out',
+      }))
+      expect(runState).toEqual(expect.objectContaining({
+        phase: 'baseline_timed_out',
+        arm: 'baseline',
+      }))
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('emits stderr heartbeat lines while a native_agent arm is still running', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const request = {
+        graphPath,
+        question: 'slow heartbeat run',
+        outputDir,
+        execTemplate: 'mock-runner',
+        baselineMode: 'native_agent',
+        perArmTimeoutSeconds: 1,
+        heartbeatIntervalMs: 5,
+      } as Parameters<typeof executeNativeAgentCompare>[0] & {
+        perArmTimeoutSeconds: number
+        heartbeatIntervalMs: number
+      }
+      const stderrLines: string[] = []
+
+      const slowRunner: NativeAgentRunner = async (input) => {
+        await new Promise((resolve) => {
+          setTimeout(resolve, input.mode === 'baseline' ? 20 : 1)
+        })
+        const payload = input.mode === 'baseline' ? BASELINE_USAGE_PAYLOAD : MADAR_USAGE_PAYLOAD
+        return {
+          exitCode: 0,
+          stdout: `${JSON.stringify(payload)}\n`,
+          stderr: '',
+          elapsedMs: input.mode === 'baseline' ? 20 : 1,
+        }
+      }
+
+      await executeNativeAgentCompare(
+        request,
+        {
+          runner: slowRunner,
+          now: () => new Date('2026-05-28T00:00:00Z'),
+          writeStderr: (message) => {
+            stderrLines.push(message)
+          },
+        },
+      )
+
+      expect(stderrLines.some((line) => line.includes('baseline arm running'))).toBe(true)
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
   it('absent out files at start mean the baseline run sees an unmodified absent state', async () => {
     // When CLAUDE.md / .mcp.json / .claude don't exist, snapshot is a no-op for them
     // and they should still be absent after the run.
