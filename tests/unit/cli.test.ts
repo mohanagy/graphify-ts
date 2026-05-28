@@ -552,6 +552,7 @@ describe('cli parser', () => {
       perArmTimeoutSeconds: 600,
       heartbeatIntervalMs: 30000,
       strictMadarFirst: false,
+      strictBenchmarkReadiness: false,
       allowNoInstall: false,
       yes: false,
       limit: null,
@@ -567,6 +568,7 @@ describe('cli parser', () => {
       perArmTimeoutSeconds: 600,
       heartbeatIntervalMs: 30000,
       strictMadarFirst: false,
+      strictBenchmarkReadiness: false,
       allowNoInstall: false,
       yes: false,
       limit: null,
@@ -590,6 +592,7 @@ describe('cli parser', () => {
         '--heartbeat-interval-ms',
         '15000',
         '--strict-madar-first',
+        '--strict-benchmark-readiness',
         '--allow-no-install',
         '--yes',
         '--limit',
@@ -605,6 +608,7 @@ describe('cli parser', () => {
       perArmTimeoutSeconds: 900,
       heartbeatIntervalMs: 15000,
       strictMadarFirst: true,
+      strictBenchmarkReadiness: true,
       allowNoInstall: true,
       yes: true,
       limit: 5,
@@ -630,6 +634,32 @@ describe('cli parser', () => {
       perArmTimeoutSeconds: 600,
       heartbeatIntervalMs: 30000,
       strictMadarFirst: false,
+      strictBenchmarkReadiness: false,
+      allowNoInstall: false,
+      yes: false,
+      limit: null,
+    })
+  })
+
+  it('parses compare args with --strict as a benchmark-readiness alias', () => {
+    expect(
+      parseCompareArgs([
+        'how does login work',
+        '--exec',
+        'claude -p "$(cat {prompt_file})"',
+        '--strict',
+      ]),
+    ).toEqual({
+      question: 'how does login work',
+      graphPath: 'out/graph.json',
+      execTemplate: 'claude -p "$(cat {prompt_file})"',
+      questionsPath: null,
+      outputDir: resolve('out/compare'),
+      baselineMode: 'full',
+      perArmTimeoutSeconds: 600,
+      heartbeatIntervalMs: 30000,
+      strictMadarFirst: false,
+      strictBenchmarkReadiness: true,
       allowNoInstall: false,
       yes: false,
       limit: null,
@@ -654,6 +684,7 @@ describe('cli parser', () => {
     perArmTimeoutSeconds: 600,
     heartbeatIntervalMs: 30000,
     strictMadarFirst: false,
+    strictBenchmarkReadiness: false,
     allowNoInstall: false,
     yes: false,
     limit: null,
@@ -1085,6 +1116,7 @@ describe('cli main', () => {
     expect(help).toContain('    --per-arm-timeout S   per-arm timeout seconds for native_agent runs (default 600)')
     expect(help).toContain('    --heartbeat-interval-ms N  stderr heartbeat interval for native_agent runs (default 30000; 0 disables)')
     expect(help).toContain('    --strict-madar-first  treat pre-Madar broad exploration as degraded/non-winning in native_agent mode')
+    expect(help).toContain('    --strict / --strict-benchmark-readiness  fail native_agent compare before runner spend when benchmark readiness is degraded or not_ready')
     expect(help).toContain('    --yes                 skip confirmation before running the paid prompt comparison')
     expect(help).toContain('    --limit N             cap processed prompts/questions for the comparison run')
     expect(help).toContain('    --why                 include retrieval-routing debug metadata in the compare summary and reports')
@@ -1146,6 +1178,7 @@ describe('cli main', () => {
         '--heartbeat-interval-ms',
         '15000',
         '--strict-madar-first',
+        '--strict-benchmark-readiness',
         '--yes',
         '--limit',
         '5',
@@ -1173,6 +1206,7 @@ describe('cli main', () => {
       perArmTimeoutSeconds: 900,
       heartbeatIntervalMs: 15000,
       strictMadarFirst: true,
+      strictBenchmarkReadiness: true,
       allowNoInstall: false,
       yes: true,
       limit: 5,
@@ -1455,7 +1489,7 @@ describe('cli main', () => {
 
     expect(exitCode).toBe(2)
     expect(logs).toEqual([])
-    expect(errors).toEqual(['Usage: madar compare [question] --exec TEMPLATE [--graph path] [--questions PATH] [--output-dir DIR] [--baseline-mode MODE] [--per-arm-timeout S] [--heartbeat-interval-ms N] [--strict-madar-first] [--allow-no-install] [--yes] [--limit N] [--why]'])
+    expect(errors).toEqual(['Usage: madar compare [question] --exec TEMPLATE [--graph path] [--questions PATH] [--output-dir DIR] [--baseline-mode MODE] [--per-arm-timeout S] [--heartbeat-interval-ms N] [--strict-madar-first] [--strict] [--allow-no-install] [--yes] [--limit N] [--why]'])
   })
 
   it('prefers the explicit compare command over an implicit generate path match', async () => {

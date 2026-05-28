@@ -575,6 +575,118 @@ describe('parseAnthropicResultEvent', () => {
 })
 
 describe('executeNativeAgentCompare', () => {
+  it('records benchmark readiness in the native-agent report and summary', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'How idea report is being generated',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({ baseline: VERBOSE_BASELINE_PAYLOAD, madar: VERBOSE_MADAR_MCP_RETRIEVE_PAYLOAD }),
+          now: () => new Date('2026-05-01T00:00:00Z'),
+          assessBenchmarkReadiness: () => ({
+            status: 'not_ready',
+            reasons: ['SPI missing for runtime spine evidence', 'scope locality is weak'],
+            suggested_graph_scope: 'backend/out/graph.json',
+          }),
+        } as Parameters<typeof executeNativeAgentCompare>[1] & {
+          assessBenchmarkReadiness: () => {
+            status: 'ready' | 'degraded' | 'not_ready'
+            reasons: string[]
+            suggested_graph_scope: string | null
+          }
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport & {
+        benchmark_readiness?: {
+          status: 'ready' | 'degraded' | 'not_ready'
+          reasons: string[]
+          suggested_graph_scope: string | null
+        }
+      }
+      const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+      const summary = formatNativeAgentCompareSummary(result)
+
+      expect(report.benchmark_readiness).toEqual({
+        status: 'not_ready',
+        reasons: ['SPI missing for runtime spine evidence', 'scope locality is weak'],
+        suggested_graph_scope: 'backend/out/graph.json',
+      })
+      expect(savedReport.benchmark_readiness).toEqual({
+        status: 'not_ready',
+        reasons: ['SPI missing for runtime spine evidence', 'scope locality is weak'],
+        suggested_graph_scope: 'backend/out/graph.json',
+      })
+      expect(summary).toContain('benchmark_readiness: not_ready')
+      expect(summary).toContain('SPI missing for runtime spine evidence')
+      expect(summary).toContain('Next step: retry with backend/out/graph.json')
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('fails early when strict benchmark readiness is poor', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    let runnerCalled = false
+    try {
+      const reportPath = join(outputDir, '2026-05-01T00-00-00', 'report.json')
+      const runner: NativeAgentRunner = async (input) => {
+        runnerCalled = true
+        return {
+          exitCode: 0,
+          stdout: `${JSON.stringify(input.mode === 'baseline' ? VERBOSE_BASELINE_PAYLOAD : VERBOSE_MADAR_MCP_RETRIEVE_PAYLOAD)}\n`,
+          stderr: '',
+          elapsedMs: 1,
+        }
+      }
+
+      await expect(
+        executeNativeAgentCompare(
+          {
+            graphPath,
+            question: 'How idea report is being generated',
+            outputDir,
+            execTemplate: 'mock-runner',
+            baselineMode: 'native_agent',
+            strictBenchmarkReadiness: true,
+          } as Parameters<typeof executeNativeAgentCompare>[0] & { strictBenchmarkReadiness: boolean },
+          {
+            runner,
+            now: () => new Date('2026-05-01T00:00:00Z'),
+            assessBenchmarkReadiness: () => ({
+              status: 'not_ready',
+              reasons: ['SPI missing for runtime spine evidence'],
+              suggested_graph_scope: 'backend/out/graph.json',
+            }),
+          } as Parameters<typeof executeNativeAgentCompare>[1] & {
+            assessBenchmarkReadiness: () => {
+              status: 'ready' | 'degraded' | 'not_ready'
+              reasons: string[]
+              suggested_graph_scope: string | null
+            }
+          },
+        ),
+      ).rejects.toThrow('benchmark readiness is not_ready')
+      expect(runnerCalled).toBe(false)
+      expect(existsSync(reportPath)).toBe(true)
+      expect(JSON.parse(readFileSync(reportPath, 'utf8'))).toEqual(expect.objectContaining({
+        benchmark_readiness: {
+          status: 'not_ready',
+          reasons: ['SPI missing for runtime spine evidence'],
+          suggested_graph_scope: 'backend/out/graph.json',
+        },
+      }))
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
   it('writes a native-agent prompt that enforces the Madar pack contract', async () => {
     const { projectDir, graphPath, outputDir } = makeFixtureProject()
     try {

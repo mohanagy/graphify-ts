@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
-import type { ContextPackRoutingDebug } from '../contracts/context-pack.js'
+import type { ContextPackExecutionPhase, ContextPackRoutingDebug } from '../contracts/context-pack.js'
 import { KnowledgeGraph } from '../contracts/graph.js'
 import type { ContextSessionState } from '../contracts/context-session.js'
 import { buildContextPrompt, type ContextPromptStableSection } from './context-prompt.js'
@@ -229,6 +229,7 @@ export interface GenerateCompareArtifactsInput {
   perArmTimeoutSeconds?: number
   heartbeatIntervalMs?: number
   strictMadarFirst?: boolean
+  strictBenchmarkReadiness?: boolean
   allowNoInstall?: boolean
   why?: boolean
   corpusText?: string
@@ -1592,6 +1593,126 @@ function retrieveCompareContext(graph: KnowledgeGraph, question: string, budget:
   }
 }
 
+const BENCHMARK_READINESS_CRITICAL_PHASES = new Set<ContextPackExecutionPhase>([
+  'planner',
+  'external_research_or_api',
+  'report_builder',
+  'scoring',
+  'quality_gate',
+  'renderer_or_synthesis',
+  'persistence',
+])
+
+function collectBenchmarkReadinessSourceFiles(retrieval: RetrieveResult): string[] {
+  const sourceFiles = new Set<string>()
+  for (const node of retrieval.matched_nodes) {
+    sourceFiles.add(node.source_file)
+  }
+  for (const step of retrieval.execution_slice?.steps ?? []) {
+    sourceFiles.add(step.source_file)
+  }
+  for (const step of retrieval.execution_slice?.primary_path?.steps ?? []) {
+    sourceFiles.add(step.source_file)
+  }
+  return [...sourceFiles]
+}
+
+function suggestBenchmarkGraphScope(graphPath: string, sourceFiles: readonly string[]): string | null {
+  const scopes = new Set<string>()
+  for (const sourceFile of sourceFiles) {
+    const [scope] = sourceFile.split('/', 1)
+    if (scope && !['src', 'test', 'tests', 'docs'].includes(scope)) {
+      scopes.add(scope)
+    }
+  }
+
+  if (scopes.size !== 1) {
+    return null
+  }
+
+  const [scope] = [...scopes]
+  const suggested = `${scope}/out/graph.json`
+  return graphPath.endsWith(`/${suggested}`) ? null : suggested
+}
+
+function retrievalHasSpiEvidence(retrieval: RetrieveResult): boolean {
+  return collectBenchmarkReadinessSourceFiles(retrieval).some((sourceFile) =>
+    /(^|\/)spi(\/|$)|\.spi\./.test(sourceFile),
+  )
+}
+
+function benchmarkReadinessSeverity(current: BenchmarkReadinessStatus, next: BenchmarkReadinessStatus): BenchmarkReadinessStatus {
+  const rank: Record<BenchmarkReadinessStatus, number> = {
+    ready: 0,
+    degraded: 1,
+    not_ready: 2,
+  }
+  return rank[next] > rank[current] ? next : current
+}
+
+export function assessBenchmarkReadinessFromRetrieveResult(input: {
+  graphPath: string
+  retrieval: RetrieveResult
+}): BenchmarkReadiness {
+  const { graphPath, retrieval } = input
+  const runtimeGeneration =
+    retrieval.answer_contract?.answer_focus === 'runtime_generation'
+    || retrieval.retrieval_gate?.signals.generation_intent === 'runtime_generation'
+  if (!runtimeGeneration) {
+    return {
+      status: 'ready',
+      reasons: [],
+      suggested_graph_scope: null,
+    }
+  }
+
+  let status: BenchmarkReadinessStatus = 'ready'
+  const reasons: string[] = []
+  const sourceFiles = collectBenchmarkReadinessSourceFiles(retrieval)
+  const suggestedGraphScope = suggestBenchmarkGraphScope(graphPath, sourceFiles)
+  const missingPhases = [...new Set([
+    ...(retrieval.answer_contract?.missing_phases ?? []),
+    ...(retrieval.execution_slice?.phase_coverage?.missing ?? []),
+  ])].filter((phase) => BENCHMARK_READINESS_CRITICAL_PHASES.has(phase))
+
+  if (missingPhases.length >= 3) {
+    status = benchmarkReadinessSeverity(status, 'not_ready')
+    reasons.push(`missing downstream runtime phases: ${missingPhases.join(', ')}`)
+  } else if (missingPhases.length > 0) {
+    status = benchmarkReadinessSeverity(status, 'degraded')
+    reasons.push(`missing downstream runtime phases: ${missingPhases.join(', ')}`)
+  }
+
+  const confidence = retrieval.answer_contract?.confidence ?? retrieval.execution_slice?.confidence
+  if (confidence === 'low') {
+    status = benchmarkReadinessSeverity(status, 'not_ready')
+    reasons.push('runtime slice confidence is low')
+  } else if (confidence === 'medium') {
+    status = benchmarkReadinessSeverity(status, 'degraded')
+    reasons.push('runtime slice confidence is medium')
+  }
+
+  if (!retrievalHasSpiEvidence(retrieval)) {
+    status = benchmarkReadinessSeverity(status, suggestedGraphScope ? 'not_ready' : 'degraded')
+    reasons.push(
+      suggestedGraphScope
+        ? `no SPI evidence found in the current pack; retry with ${suggestedGraphScope} or another SPI-scoped graph`
+        : 'no SPI evidence found in the current pack',
+    )
+  }
+
+  if (suggestedGraphScope) {
+    status = benchmarkReadinessSeverity(status, status === 'ready' ? 'degraded' : status)
+    reasons.push(`root graph is broad for this question; retrieved evidence is concentrated under ${suggestedGraphScope.replace('/out/graph.json', '/')}`)
+  }
+
+  return {
+    status,
+    reasons,
+    suggested_graph_scope: suggestedGraphScope,
+  }
+}
+
 function addBaselineCorpusFile(
   files: Map<string, string>,
   candidatePath: string,
@@ -2345,6 +2466,7 @@ export interface NativeAgentCompareReport {
   } | null
   token_regression: boolean
   token_regression_reasons: NativeAgentTokenRegressionMetric[]
+  benchmark_readiness?: BenchmarkReadiness
   prompt_contract?: NativeAgentPromptContractAssessment
   claim_assessment?: NativeAgentClaimAssessment
   prompt_token_source: {
@@ -2427,10 +2549,25 @@ export interface NativeAgentRunnerResult {
 
 export type NativeAgentRunner = (input: NativeAgentRunnerInput) => Promise<NativeAgentRunnerResult>
 
+export type BenchmarkReadinessStatus = 'ready' | 'degraded' | 'not_ready'
+
+export interface BenchmarkReadiness {
+  status: BenchmarkReadinessStatus
+  reasons: string[]
+  suggested_graph_scope: string | null
+}
+
+export interface BenchmarkReadinessInput {
+  graphPath: string
+  projectRoot: string
+  question: string
+}
+
 export interface ExecuteNativeAgentCompareDependencies {
   runner?: NativeAgentRunner
   now?: () => Date
   writeStderr?: (message: string) => void
+  assessBenchmarkReadiness?: (input: BenchmarkReadinessInput) => BenchmarkReadiness
 }
 
 interface NativeAgentRunStateRecord {
@@ -2560,6 +2697,16 @@ export class NativeAgentInstallRequiredError extends Error {
     super(formatNativeAgentInstallRequiredMessage(check))
     this.name = 'NativeAgentInstallRequiredError'
     this.check = check
+  }
+}
+
+export class BenchmarkReadinessError extends Error {
+  readonly readiness: BenchmarkReadiness
+
+  constructor(readiness: BenchmarkReadiness) {
+    super(`Native-agent benchmark readiness is ${readiness.status}.`)
+    this.name = 'BenchmarkReadinessError'
+    this.readiness = readiness
   }
 }
 
@@ -3350,9 +3497,12 @@ export async function executeNativeAgentCompare(
   const writeStderr = dependencies.writeStderr ?? ((message: string) => process.stderr.write(message))
   const timeoutMs = perArmTimeoutMs(input.perArmTimeoutSeconds)
   const heartbeatIntervalMs = compareHeartbeatIntervalMs(input.heartbeatIntervalMs)
+  const retrievalBudget = input.retrievalBudget ?? DEFAULT_RETRIEVAL_BUDGET
   const timestamp = now()
   const outputRoot = createCompareOutputRoot(outputDir, timestamp)
   const runner = dependencies.runner ?? defaultNativeAgentRunner
+  const assessBenchmarkReadiness = dependencies.assessBenchmarkReadiness
+  const graph = assessBenchmarkReadiness ? null : loadGraph(graphPath)
   const reports: NativeAgentCompareReport[] = []
   const answerQualityGates = loadNativeAgentAnswerQualityGates(input.questionsPath)
   const environment = await captureBenchmarkEnvironment({ projectRoot })
@@ -3362,7 +3512,7 @@ export async function executeNativeAgentCompare(
     throw new NativeAgentInstallRequiredError(installCheck)
   }
 
-  for (const [index, question] of questions.entries()) {
+  const preparedQuestions = questions.map((question, index) => {
     const questionDir = questions.length === 1 ? outputRoot : join(outputRoot, `question-${String(index + 1).padStart(3, '0')}`)
     mkdirSync(questionDir, { recursive: true })
 
@@ -3421,6 +3571,54 @@ export async function executeNativeAgentCompare(
         prompt_file: promptFile,
       },
     }
+    if (assessBenchmarkReadiness) {
+      reportShell.benchmark_readiness = assessBenchmarkReadiness({
+        graphPath,
+        projectRoot,
+        question,
+      })
+    } else if (graph) {
+      reportShell.benchmark_readiness = assessBenchmarkReadinessFromRetrieveResult({
+        graphPath,
+        retrieval: retrieveCompareContext(graph, question, retrievalBudget, projectRoot),
+      })
+    }
+    if (reportShell.benchmark_readiness) {
+      reportShell.completed_at = now().toISOString()
+    }
+    return {
+      question,
+      promptFile,
+      baselineAnswerPath,
+      madarAnswerPath,
+      reportPath,
+      shareSafeReportPath,
+      runStatePath,
+      reportShell,
+    }
+  })
+
+  const strictReadinessFailure =
+    input.strictBenchmarkReadiness
+      ? preparedQuestions.find((entry) => entry.reportShell.benchmark_readiness?.status !== 'ready')
+      : undefined
+  if (strictReadinessFailure?.reportShell.benchmark_readiness) {
+    for (const entry of preparedQuestions) {
+      writeNativeAgentReport(entry.reportShell)
+    }
+    throw new BenchmarkReadinessError(strictReadinessFailure.reportShell.benchmark_readiness)
+  }
+
+  for (const entry of preparedQuestions) {
+    const {
+      question,
+      promptFile,
+      baselineAnswerPath,
+      madarAnswerPath,
+      runStatePath,
+      reportShell,
+    } = entry
+
     writeNativeAgentRunState(runStatePath, {
       phase: 'baseline_pending',
       arm: 'baseline',
@@ -3811,6 +4009,12 @@ function appendNativeAgentValidityLines(lines: string[], report: NativeAgentComp
     `    ${formatMadarMcpCallCountLine(report)}`,
     `    ${formatNativeAgentTraceStatusLine(report)}`,
   )
+  if (report.benchmark_readiness) {
+    lines.push(`    ${formatBenchmarkReadinessLine(report.benchmark_readiness)}`)
+    if (report.benchmark_readiness.suggested_graph_scope) {
+      lines.push(`    Next step: retry with ${report.benchmark_readiness.suggested_graph_scope}`)
+    }
+  }
 }
 
 function formatNativeAgentClaimAssessmentLine(assessment: NativeAgentClaimAssessment): string {
@@ -3826,6 +4030,11 @@ function formatNativeAgentClaimAssessmentLine(assessment: NativeAgentClaimAssess
 function formatNativeAgentPromptContractLine(assessment: NativeAgentPromptContractAssessment): string {
   const evidence = assessment.evidence.length > 0 ? ` (${assessment.evidence.join('; ')})` : ''
   return `prompt_contract: ${assessment.status}${evidence}`
+}
+
+function formatBenchmarkReadinessLine(readiness: BenchmarkReadiness): string {
+  const reasons = readiness.reasons.length > 0 ? ` (${readiness.reasons.join('; ')})` : ''
+  return `benchmark_readiness: ${readiness.status}${reasons}`
 }
 
 export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult): string {
