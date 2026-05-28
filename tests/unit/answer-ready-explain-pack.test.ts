@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest'
-import type { ContextPackExplainAnswerReadySummary } from '../../src/contracts/context-pack.js'
+import type { ContextPackExplainAnswerReadySummary, CompiledContextPack, ContextPackTaskContract } from '../../src/contracts/context-pack.js'
 
 describe('answer-ready explain pack', () => {
   test('defines answer_outline structure', () => {
@@ -39,4 +39,47 @@ describe('answer-ready explain pack', () => {
     expect(summary.must_cite[0]).toHaveProperty('line_number')
     expect(summary.must_cite[0]).toHaveProperty('label')
   })
+
+  test('CompiledContextPack includes optional answer_ready field', () => {
+    const taskContract: ContextPackTaskContract = {
+      version: 1,
+      task_kind: 'explain',
+      evidence_recipe_id: 'explain',
+      budget: 5000,
+      required_evidence: [],
+      preferred_evidence: [],
+      semantic_required: [],
+      semantic_optional: [],
+    }
+    
+    const pack: CompiledContextPack = {
+      task_contract: taskContract,
+      token_count: 1000,
+      nodes: [],
+      relationships: [],
+      community_context: [],
+      claims: [],
+      expandable: [],
+      coverage: {
+        required_evidence: [],
+        semantic_required: [],
+        semantic_optional: [],
+        entries: [],
+        semantic_entries: [],
+        missing_required: [],
+        missing_semantic: [],
+        available_relationships: 0,
+        selected_relationships: 0,
+      },
+      answer_ready: {
+        answer_outline: ['Flow starts in controller'],
+        must_cite: [{ source_file: 'src/controller.ts', line_number: 10, label: 'handleRequest()' }],
+        stop_condition: 'answer now; missing_context empty',
+        allowed_followups: [],
+      },
+    }
+    expect(pack.answer_ready).toBeDefined()
+    expect(pack.answer_ready?.answer_outline).toHaveLength(1)
+  })
 })
+

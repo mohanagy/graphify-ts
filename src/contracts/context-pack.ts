@@ -428,6 +428,7 @@ export interface CompiledContextPack<
   slice?: ContextPackSliceMetadata
   execution_slice?: ContextPackExecutionSlice
   answer_contract?: ContextPackRuntimeGenerationAnswerContract
+  answer_ready?: ContextPackExplainAnswerReadySummary
   retrieval_gate?: RetrievalGateDecision
 }
 
