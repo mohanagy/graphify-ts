@@ -761,6 +761,8 @@ describe('context-pack-command', () => {
       }
     }
 
+    expect(payload.evidence?.pack_confidence).toBeTypeOf('string')
+    expect(payload.evidence?.agent_directive).toBeTypeOf('string')
     expect(payload.evidence).toEqual(expect.objectContaining({
       pack_confidence: expect.not.stringMatching(/^high$/),
       agent_directive: expect.not.stringMatching(/^answer_from_pack$/),
@@ -887,6 +889,8 @@ describe('context-pack-command', () => {
       }
     }
 
+    expect(payload.evidence?.pack_confidence).toBeTypeOf('string')
+    expect(payload.evidence?.agent_directive).toBeTypeOf('string')
     expect(payload.evidence).toEqual(expect.objectContaining({
       pack_confidence: expect.not.stringMatching(/^high$/),
       agent_directive: expect.not.stringMatching(/^answer_from_pack$/),

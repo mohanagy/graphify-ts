@@ -23,6 +23,7 @@ const MEDIUM_CONFIDENCE_THRESHOLD = 0.5
 const MEDIUM_CONFIDENCE_MAX = HIGH_CONFIDENCE_THRESHOLD - 0.01
 const LOW_CONFIDENCE_MAX = MEDIUM_CONFIDENCE_THRESHOLD - 0.01
 const GENERIC_SCOPE_SEGMENTS = new Set(['src', 'test', 'tests', 'docs', 'lib', 'libs', 'packages', 'apps'])
+const GENERIC_SCOPE_WRAPPERS = new Set(['libs', 'packages', 'apps'])
 
 function roundScore(value: number): number {
   return Math.round(Math.min(1, Math.max(0, value)) * 100) / 100
@@ -128,8 +129,20 @@ function scopeQualityAssessment(
   const candidateScopes = [...new Set(
     coveredWorkflowOwners
       .map(normalizeSourcePath)
-      .map((value) => value.split('/', 1)[0] ?? '')
-      .filter((value) => value.length > 0 && !GENERIC_SCOPE_SEGMENTS.has(value)),
+      .map((value) => {
+        const segments = value
+          .split('/')
+          .filter((segment) => segment.length > 0)
+        if (segments.length === 0) {
+          return ''
+        }
+        const [firstSegment, secondSegment] = segments
+        if (segments.length > 1 && firstSegment && secondSegment && GENERIC_SCOPE_WRAPPERS.has(firstSegment.toLowerCase())) {
+          return secondSegment
+        }
+        return firstSegment ?? ''
+      })
+      .filter((value): value is string => value.length > 0 && !GENERIC_SCOPE_SEGMENTS.has(value.toLowerCase())),
   )]
   if (candidateScopes.length !== 1) {
     return {
@@ -289,7 +302,15 @@ export function assessMadarResponseEvidence(input: {
 
     const runtimeConfidence = input.answerContract?.confidence ?? input.executionSlice?.confidence
     if (runtimeConfidence) {
-      confidenceCap = moreRestrictiveConfidence(confidenceCap, runtimeConfidence)
+      const previousConfidenceCap = confidenceCap
+      const nextConfidenceCap = moreRestrictiveConfidence(confidenceCap, runtimeConfidence)
+      if (nextConfidenceCap !== previousConfidenceCap) {
+        const source = input.answerContract?.confidence ? 'answer contract' : 'execution slice'
+        confidenceReasons.push(
+          `runtime confidence: ${source} reported ${runtimeConfidence} confidence and lowered the cap from ${previousConfidenceCap} to ${nextConfidenceCap}`,
+        )
+      }
+      confidenceCap = nextConfidenceCap
     }
   }
 
