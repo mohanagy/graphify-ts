@@ -1686,7 +1686,7 @@ export function buildBaselinePromptPack(input: BuildBaselinePromptPackInput): Co
 export function buildMadarPromptPack(input: BuildMadarPromptPackInput): ComparePromptPack {
   const explainPayloadCore = buildAnswerReadyPackSchema(
     buildExplainPackPayloadCore(compactRetrieveResult(input.retrieval), input.retrieval),
-    Math.max(input.retrieval.task_contract?.budget ?? 3000, 3000),
+    input.retrieval.task_contract?.budget ?? 3000,
   )
   delete explainPayloadCore.serialized_budget
   const explainPayload = JSON.stringify(explainPayloadCore, null, 2)
