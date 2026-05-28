@@ -2309,7 +2309,7 @@ function failureHandlingLikeExecutionStep(
   node: Pick<ContextPackExecutionSliceStep, 'label' | 'source_file' | 'node_kind' | 'framework_role'>,
 ): boolean {
   const lower = `${node.label} ${node.source_file} ${node.node_kind ?? ''} ${node.framework_role ?? ''}`.toLowerCase()
-  return /\b(?:fail(?:ed|ure|ures|ing)?|error|exception|fallback|dead(?:\s|-)?letter|write(?:raw|failure)|rawfailure)\b/.test(lower)
+  return /\b(?:fail(?:s|ed|ure|ures|ing)?|error|exception|fallback|dead(?:\s|-)?letter|write(?:raw|failure)|rawfailure)\b/.test(lower)
     || /(?:^|[.#])(?:handle|write|store|record)[A-Za-z_$\w]*(?:fail|failure|error|exception|raw)[A-Za-z_$\w]*\(?\)?$/i.test(node.label)
 }
 

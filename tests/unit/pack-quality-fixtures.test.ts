@@ -128,13 +128,10 @@ describe('pack-quality fixtures (#298)', () => {
         'saveStructuredReport()',
       ]),
     )
-    expect(payload.pack?.execution_slice?.primary_path?.steps?.map((entry) => entry.label)).not.toEqual(
-      expect.arrayContaining([
-        'handleQualityGateFailure()',
-        'writeRawFailureReport()',
-      ]),
-    )
-    expect(payload.pack?.execution_slice?.primary_path?.steps?.map((entry) => entry.label)).toEqual(
+    const normalPrimaryLabels = payload.pack?.execution_slice?.primary_path?.steps?.map((entry) => entry.label) ?? []
+    expect(normalPrimaryLabels).not.toContain('handleQualityGateFailure()')
+    expect(normalPrimaryLabels).not.toContain('writeRawFailureReport()')
+    expect(normalPrimaryLabels).toEqual(
       expect.arrayContaining([
         'saveStructuredReport()',
       ]),

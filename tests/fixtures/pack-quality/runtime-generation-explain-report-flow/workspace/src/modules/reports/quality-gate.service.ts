@@ -1,9 +1,10 @@
 import { writeRawFailureReport } from '../pipeline/workers/failure-storage.service.js'
 
 export async function validateIdeaReportQuality(report: { content: string }): Promise<{ passed: boolean; reason: string }> {
+  const passed = report.content.length > 0
   return {
-    passed: report.content.length > 0,
-    reason: 'empty report',
+    passed,
+    reason: passed ? '' : 'empty report',
   }
 }
 
