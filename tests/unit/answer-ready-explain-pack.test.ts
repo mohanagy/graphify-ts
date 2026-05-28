@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'vitest'
-import type { ContextPackExplainAnswerReadySummary, CompiledContextPack, ContextPackTaskContract, ContextPackSchemaV1 } from '../../src/contracts/context-pack.js'
+import type { ContextPackExplainAnswerReadySummary, CompiledContextPack, ContextPackTaskContract, ContextPackSchemaV1, ContextPackExecutionSlice } from '../../src/contracts/context-pack.js'
+import { generateAnswerReadyFromExecutionSlice } from '../../src/runtime/context-pack.js'
 
 describe('answer-ready explain pack', () => {
   test('defines answer_outline structure', () => {
@@ -131,6 +132,54 @@ describe('answer-ready explain pack', () => {
     expect(schema.answer_ready).toBeDefined()
     expect(schema.answer_ready?.answer_outline).toHaveLength(3)
   })
+
+  test('generateAnswerReadyFromExecutionSlice generates answer_ready for high-confidence explain', () => {
+    const executionSlice: ContextPackExecutionSlice = {
+      status: 'complete',
+      confidence: 'high',
+      confidence_reasons: ['All phases observed', 'Complete path traced'],
+      steps: [
+        { label: 'Controller.handle()', source_file: 'src/controller.ts', line_number: 10 },
+        { label: 'Service.process()', source_file: 'src/service.ts', line_number: 25 },
+        { label: 'Database.save()', source_file: 'src/db.ts', line_number: 45 },
+      ],
+    }
+
+    const result = generateAnswerReadyFromExecutionSlice(executionSlice, 'explain')
+
+    expect(result).toBeDefined()
+    expect(result?.answer_outline.length).toBeGreaterThan(0)
+    expect(result?.must_cite.length).toBeGreaterThan(0)
+    expect(result?.stop_condition).toContain('answer now')
+  })
+
+  test('generateAnswerReadyFromExecutionSlice returns undefined for non-explain tasks', () => {
+    const executionSlice: ContextPackExecutionSlice = {
+      status: 'complete',
+      confidence: 'high',
+      steps: [],
+    }
+
+    const result = generateAnswerReadyFromExecutionSlice(executionSlice, 'implement')
+    expect(result).toBeUndefined()
+  })
+
+  test('generateAnswerReadyFromExecutionSlice returns undefined for low-confidence', () => {
+    const executionSlice: ContextPackExecutionSlice = {
+      status: 'partial',
+      confidence: 'low',
+      steps: [],
+    }
+
+    const result = generateAnswerReadyFromExecutionSlice(executionSlice, 'explain')
+    expect(result).toBeUndefined()
+  })
+
+  test('generateAnswerReadyFromExecutionSlice returns undefined when no execution_slice', () => {
+    const result = generateAnswerReadyFromExecutionSlice(undefined, 'explain')
+    expect(result).toBeUndefined()
+  })
 })
+
 
 
