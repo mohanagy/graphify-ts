@@ -34,7 +34,7 @@ import {
   type MadarResponseEvidence,
 } from '../runtime/mcp-response-evidence.js'
 import { buildRoutingDebug } from '../runtime/routing-debug.js'
-import { communitiesFromGraph, loadGraph } from '../runtime/serve.js'
+import { communitiesFromGraph, estimateQueryTokens, loadGraph } from '../runtime/serve.js'
 
 const DEFAULT_IMPACT_DEPTH = 3
 const IMPLEMENTATION_DISTRACTOR_PATTERN = /(?:helper|util|formatter|serializer|mapper|constant|generated|dist\/|build\/|lockfile|migration)/i
@@ -97,6 +97,21 @@ interface PackGuidanceCompatibilityFields {
 
 type PackPayloadWithCompatibility<TPack extends PackPayload> = TPack & PackGuidanceCompatibilityFields
 
+interface SerializedBudgetReport {
+  max_tokens: number
+  token_count: number
+  enforced: boolean
+}
+
+type JsonRecord = Record<string, unknown>
+
+const ANSWER_READY_MATCHED_NODE_CAP = 8
+const ANSWER_READY_RELATIONSHIP_CAP = 12
+const ANSWER_READY_COMMUNITY_CAP = 6
+const ANSWER_READY_EXPLANATION_CAP = 3
+const ANSWER_READY_FIRST_READ_CAP = 3
+const ANSWER_READY_WORKFLOW_CENTER_CAP = 4
+
 function packWithCompatibilityFields<TPack extends PackPayload>(
   pack: TPack,
   fields: PackGuidanceCompatibilityFields,
@@ -117,6 +132,216 @@ function packForSchema<TPack extends PackPayload>(
   }
 
   return packWithCompatibilityFields(pack, fields)
+}
+
+function cloneJsonRecord(value: object): JsonRecord {
+  return JSON.parse(JSON.stringify(value)) as JsonRecord
+}
+
+function asJsonRecord(value: unknown): JsonRecord | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as JsonRecord
+    : null
+}
+
+function asUnknownArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : []
+}
+
+function trimArrayField(record: JsonRecord, field: string, cap: number, trimmedFields: string[]): void {
+  const values = asUnknownArray(record[field])
+  if (values.length <= cap) {
+    return
+  }
+  record[field] = values.slice(0, cap)
+  trimmedFields.push(field)
+}
+
+function deleteEmptyArrayField(record: JsonRecord, field: string, trimmedFields: string[]): void {
+  const values = asUnknownArray(record[field])
+  if (values.length > 0) {
+    return
+  }
+  delete record[field]
+  trimmedFields.push(field)
+}
+
+function compactAnswerReadyPack(pack: JsonRecord, trimmedFields: string[]): void {
+  delete pack.workflow_centers
+  delete pack.recommended_first_read
+  delete pack.confidence_score
+  trimmedFields.push('pack.workflow_centers', 'pack.recommended_first_read', 'pack.confidence_score')
+
+  const slice = asJsonRecord(pack.slice)
+  if (slice) {
+    const selectedPaths = asUnknownArray(slice.selected_paths)
+    if (selectedPaths.length > 0) {
+      delete slice.selected_paths
+      slice.selected_path_count = selectedPaths.length
+      trimmedFields.push('pack.slice.selected_paths')
+    }
+  }
+
+  const executionSlice = asJsonRecord(pack.execution_slice)
+  if (executionSlice) {
+    const sideEffects = asUnknownArray(executionSlice.side_effects)
+    if (sideEffects.length > 0) {
+      delete executionSlice.side_effects
+      executionSlice.side_effect_count = sideEffects.length
+      trimmedFields.push('pack.execution_slice.side_effects')
+    }
+    const terminalBoundaries = asUnknownArray(executionSlice.terminal_boundaries)
+    if (terminalBoundaries.length > 0) {
+      delete executionSlice.terminal_boundaries
+      executionSlice.terminal_boundary_count = terminalBoundaries.length
+      trimmedFields.push('pack.execution_slice.terminal_boundaries')
+    }
+    const omittedBranches = asUnknownArray(executionSlice.omitted_branches)
+    if (omittedBranches.length > 0) {
+      delete executionSlice.omitted_branches
+      executionSlice.omitted_branch_count = omittedBranches.length
+      trimmedFields.push('pack.execution_slice.omitted_branches')
+    }
+  }
+
+  trimArrayField(pack, 'matched_nodes', ANSWER_READY_MATCHED_NODE_CAP, trimmedFields)
+  trimArrayField(pack, 'relationships', ANSWER_READY_RELATIONSHIP_CAP, trimmedFields)
+  trimArrayField(pack, 'community_context', ANSWER_READY_COMMUNITY_CAP, trimmedFields)
+}
+
+function estimatedJsonTokens(payload: JsonRecord): number {
+  return estimateQueryTokens(JSON.stringify(payload))
+}
+
+function attachSerializedBudget(
+  payload: JsonRecord,
+  maxTokens: number,
+  _trimmedFields: readonly string[],
+): void {
+  payload.serialized_budget = {
+    max_tokens: maxTokens,
+    token_count: 0,
+    enforced: false,
+  } satisfies SerializedBudgetReport
+
+  let tokenCount = estimatedJsonTokens(payload)
+  for (let index = 0; index < 2; index += 1) {
+    payload.serialized_budget = {
+      max_tokens: maxTokens,
+      token_count: tokenCount,
+      enforced: tokenCount <= maxTokens,
+    } satisfies SerializedBudgetReport
+    const nextTokenCount = estimatedJsonTokens(payload)
+    if (nextTokenCount === tokenCount) {
+      break
+    }
+    tokenCount = nextTokenCount
+  }
+  const budget = asJsonRecord(payload.serialized_budget)
+  if (budget) {
+    budget.token_count = tokenCount
+    budget.enforced = tokenCount <= maxTokens
+  }
+}
+
+export function buildAnswerReadyPackSchema(
+  schema: object,
+  maxTokens: number,
+): JsonRecord {
+  const payload = cloneJsonRecord(schema)
+  const trimmedFields: string[] = []
+  if (Object.hasOwn(payload, 'diagnostics')) {
+    delete payload.diagnostics
+    trimmedFields.push('diagnostics')
+  }
+  const pack = asJsonRecord(payload.pack)
+  if (pack) {
+    const packFirstRead = asUnknownArray(pack.recommended_first_read)
+    const payloadFirstRead = asUnknownArray(payload.recommended_first_read)
+    if (payloadFirstRead.length === 0 && packFirstRead.length > 0) {
+      payload.recommended_first_read = packFirstRead.slice(0, ANSWER_READY_FIRST_READ_CAP)
+      trimmedFields.push('pack.recommended_first_read promoted')
+    }
+    const packWorkflowCenters = asUnknownArray(pack.workflow_centers)
+    const payloadWorkflowCenters = asUnknownArray(payload.workflow_centers)
+    if (payloadWorkflowCenters.length === 0 && packWorkflowCenters.length > 0) {
+      payload.workflow_centers = packWorkflowCenters.slice(0, ANSWER_READY_WORKFLOW_CENTER_CAP)
+      trimmedFields.push('pack.workflow_centers promoted')
+    }
+    if (!Object.hasOwn(payload, 'confidence_score') && typeof pack.confidence_score === 'number') {
+      payload.confidence_score = pack.confidence_score
+      trimmedFields.push('pack.confidence_score promoted')
+    }
+    compactAnswerReadyPack(pack, trimmedFields)
+  }
+
+  trimArrayField(payload, 'workflow_centers', ANSWER_READY_WORKFLOW_CENTER_CAP, trimmedFields)
+  trimArrayField(payload, 'recommended_first_read', ANSWER_READY_FIRST_READ_CAP, trimmedFields)
+  trimArrayField(payload, 'why_explanation', ANSWER_READY_EXPLANATION_CAP, trimmedFields)
+  attachSerializedBudget(payload, maxTokens, trimmedFields)
+  if (estimatedJsonTokens(payload) <= maxTokens) {
+    return payload
+  }
+
+  delete payload.plan
+  trimmedFields.push('plan')
+  attachSerializedBudget(payload, maxTokens, trimmedFields)
+  if (estimatedJsonTokens(payload) <= maxTokens) {
+    return payload
+  }
+
+  delete payload.coverage
+  trimmedFields.push('coverage')
+  attachSerializedBudget(payload, maxTokens, trimmedFields)
+  if (estimatedJsonTokens(payload) <= maxTokens) {
+    return payload
+  }
+
+  for (const field of [
+    'claims',
+    'expandable',
+    'likely_edit_files',
+    'likely_test_files',
+    'public_contracts',
+    'risk_boundaries',
+    'validation_commands',
+  ]) {
+    deleteEmptyArrayField(payload, field, trimmedFields)
+  }
+  attachSerializedBudget(payload, maxTokens, trimmedFields)
+  if (estimatedJsonTokens(payload) <= maxTokens) {
+    return payload
+  }
+
+  if (pack) {
+    trimArrayField(pack, 'matched_nodes', 4, trimmedFields)
+    trimArrayField(pack, 'relationships', 4, trimmedFields)
+    trimArrayField(pack, 'community_context', 3, trimmedFields)
+  }
+  trimArrayField(payload, 'expandable', 3, trimmedFields)
+  trimArrayField(payload, 'claims', 3, trimmedFields)
+  attachSerializedBudget(payload, maxTokens, trimmedFields)
+  if (estimatedJsonTokens(payload) <= maxTokens) {
+    return payload
+  }
+
+  if (pack) {
+    delete pack.relationships
+    delete pack.graph_signals
+    delete pack.snippet_budget_tokens_used
+    delete pack.snippet_budget_tokens_remaining
+    trimmedFields.push(
+      'pack.relationships',
+      'pack.graph_signals',
+      'pack.snippet_budget_tokens_used',
+      'pack.snippet_budget_tokens_remaining',
+    )
+  }
+  delete payload.retrieval_gate
+  delete payload.why_explanation
+  trimmedFields.push('retrieval_gate', 'why_explanation')
+  attachSerializedBudget(payload, maxTokens, trimmedFields)
+  return payload
 }
 
 function emptyCoverage(): ContextPackCoverage {
@@ -1025,6 +1250,7 @@ function renderCopilotPack(schema: PackSchemaEnvelope): string {
 function renderContextPackOutput(
   format: ContextPackFormat | undefined,
   schema: PackSchemaEnvelope,
+  options: { verbose?: boolean } = {},
 ): string {
   switch (format) {
     case 'text':
@@ -1037,7 +1263,7 @@ function renderContextPackOutput(
       return renderCopilotPack(schema)
     case 'json':
     case undefined:
-      return JSON.stringify(schema)
+      return JSON.stringify(options.verbose === true || schema.task !== 'explain' ? schema : buildAnswerReadyPackSchema(schema, schema.budget))
   }
 }
 
@@ -1058,6 +1284,7 @@ export async function runContextPackCommand(
     budget: plannerBudget,
     task_intent: resolvedTask.task_intent,
   })
+  const renderOptions = options.verbose === undefined ? {} : { verbose: options.verbose }
 
   if (resolvedTask.task_kind === 'review') {
     if (options.retrievalStrategy !== undefined) {
@@ -1084,7 +1311,7 @@ export async function runContextPackCommand(
       ...baseResponse(options, plan, plannerBudget, resolvedTask.task_kind),
       pack: reviewPack,
       ...contextMetadata(reviewResult.review_bundle ?? {}),
-    }))
+    }), renderOptions)
   }
 
   if (resolvedTask.task_kind === 'impact') {
@@ -1110,7 +1337,7 @@ export async function runContextPackCommand(
       pack: impactPack,
       ...impactMetadata(impactResult, plannerBudget, options.prompt, initialPlan.evidence.recipe_id, options.retrievalLevel),
       ...(options.why ? { routing: buildRoutingDebug(retrieval) } : {}),
-    }))
+    }), renderOptions)
   }
 
   const effectivePackRetrievalStrategy =
@@ -1141,5 +1368,5 @@ export async function runContextPackCommand(
     ),
     retrieval,
     ...(options.why ? { routing: buildRoutingDebug(retrieval) } : {}),
-  }))
+  }), renderOptions)
 }

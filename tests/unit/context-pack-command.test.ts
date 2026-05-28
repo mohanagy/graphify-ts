@@ -8,6 +8,7 @@ import { KnowledgeGraph } from '../../src/contracts/graph.js'
 import { runContextPackCommand, type ContextPackCommandDependencies } from '../../src/infrastructure/context-pack-command.js'
 import { build } from '../../src/pipeline/build.js'
 import { compactRetrieveResult, retrieveContext, type RetrieveResult } from '../../src/runtime/retrieve.js'
+import { estimateQueryTokens } from '../../src/runtime/serve.js'
 
 const tempFixtureRoots: string[] = []
 
@@ -462,6 +463,214 @@ describe('context-pack-command', () => {
       expect.stringContaining('src/ideas/report-status.ts'),
       expect.stringContaining('src/ideas/next-steps.ts'),
     ]))
+  })
+
+  it('defaults runtime-generation explain JSON to an answer-ready payload with serialized budget enforcement', async () => {
+    const graph = buildRuntimeGenerationGraph()
+    const noisySelectedPaths = Array.from({ length: 80 }, (_, index) => ({
+      from_id: `helper_${index}`,
+      from: `Helper${index}.formatStatus`,
+      to_id: `target_${index}`,
+      to: `Target${index}.renderSummary`,
+      relation: 'calls',
+      direction: 'forward' as const,
+    }))
+    const retrieval = {
+      question: 'How idea report is being generated',
+      token_count: 220,
+      matched_nodes: [
+        {
+          node_id: 'controller_entry',
+          label: 'IdeasController.generateReport',
+          source_file: 'src/ideas/controller.ts',
+          line_number: 40,
+          file_type: 'code',
+          snippet: 'return this.reportService.generateReport(id)',
+          match_score: 0.92,
+          relevance_band: 'direct' as const,
+          community: 0,
+          community_label: 'Idea report runtime',
+        },
+        {
+          node_id: 'service_handoff',
+          label: 'IdeaReportService.generateReport',
+          source_file: 'src/ideas/report-service.ts',
+          line_number: 58,
+          file_type: 'code',
+          snippet: 'await queue.enqueue(reportJob)',
+          match_score: 0.88,
+          relevance_band: 'direct' as const,
+          community: 0,
+          community_label: 'Idea report runtime',
+        },
+      ],
+      relationships: [
+        { from_id: 'controller_entry', from: 'IdeasController.generateReport', to_id: 'service_handoff', to: 'IdeaReportService.generateReport', relation: 'calls' },
+      ],
+      community_context: [
+        { id: 0, label: 'Idea report runtime', node_count: 12 },
+      ],
+      graph_signals: { god_nodes: [], bridge_nodes: [] },
+      claims: [],
+      expandable: [],
+      coverage: {
+        required_evidence: ['primary', 'supporting', 'structural'] as const,
+        semantic_required: ['implementation', 'structure'] as const,
+        semantic_optional: ['contracts', 'configuration', 'tests'] as const,
+        entries: [],
+        semantic_entries: [],
+        missing_required: [],
+        missing_semantic: [],
+        available_relationships: 1,
+        selected_relationships: 1,
+      },
+      retrieval_gate: {
+        level: 4,
+        skipped_retrieval: false,
+        reason: 'manual override',
+        intent: 'explain',
+        signals: {
+          has_pr_diff: false,
+          has_stack_trace: false,
+          mentioned_paths: [],
+          mentioned_symbols: [],
+          generation_intent: 'runtime_generation' as const,
+          target_domain_hint: 'backend_runtime' as const,
+        },
+      },
+      retrieval_strategy: 'slice-v1' as const,
+      slice: {
+        mode: 'explain' as const,
+        anchors: [
+          { node_id: 'controller_entry', label: 'IdeasController.generateReport', reason: 'source path token match' },
+        ],
+        directions: ['forward' as const],
+        selected_paths: noisySelectedPaths,
+      },
+      execution_slice: {
+        status: 'complete' as const,
+        confidence: 'high' as const,
+        confidence_reasons: ['explicit_anchor', 'runtime_handoff_evidence', 'expected_phases_covered'],
+        steps: [
+          {
+            node_id: 'controller_entry',
+            label: 'IdeasController.generateReport',
+            source_file: 'src/ideas/controller.ts',
+            line_number: 40,
+            node_kind: 'method',
+          },
+          {
+            node_id: 'service_handoff',
+            label: 'IdeaReportService.generateReport',
+            source_file: 'src/ideas/report-service.ts',
+            line_number: 58,
+            node_kind: 'method',
+          },
+        ],
+        side_effects: Array.from({ length: 20 }, (_, index) => ({
+          steps: [
+            {
+              label: `Helper${index}.formatStatus`,
+              source_file: `src/ideas/helpers/${index}.ts`,
+              line_number: index + 1,
+            },
+          ],
+        })),
+        phase_coverage: {
+          expected: ['controller', 'service'],
+          observed: ['controller', 'service'],
+          missing: [],
+        },
+      },
+      answer_contract: {
+        version: 1,
+        answer_focus: 'runtime_generation' as const,
+        entrypoint_scope: 'setup_context' as const,
+        required_elements: ['main_pipeline_phases'],
+        do_not_claim: ['irrelevant_model_or_provider_details'],
+        observed_phases: ['controller', 'service'],
+        missing_phases: [],
+        confidence: 'high' as const,
+      },
+    } satisfies import('../../src/runtime/retrieve.js').RetrieveResult
+    const dependencies: ContextPackCommandDependencies = {
+      loadGraph: vi.fn().mockReturnValue(graph),
+      retrieveContext: vi.fn().mockReturnValue(retrieval),
+      compactRetrieveResult,
+      analyzePrImpact: vi.fn(),
+      compactPrImpactResult: vi.fn(),
+      analyzeImpact: vi.fn(),
+      compactImpactResult: vi.fn(),
+    }
+
+    const output = await runContextPackCommand({
+      prompt: retrieval.question,
+      budget: 800,
+      task: 'explain',
+      graphPath: 'out/graph.json',
+      retrievalStrategy: 'slice-v1',
+      format: 'json',
+    }, dependencies)
+    const payload = JSON.parse(output) as {
+      serialized_budget?: { token_count?: number; max_tokens?: number; enforced?: boolean }
+      pack?: {
+        slice?: { selected_paths?: unknown[]; selected_path_count?: number }
+        execution_slice?: { side_effects?: unknown[] }
+      }
+      evidence?: { agent_directive?: string }
+      recommended_first_read?: Array<{ path?: string }>
+    }
+
+    expect(estimateQueryTokens(output)).toBeLessThanOrEqual(800)
+    expect(payload.serialized_budget).toEqual(expect.objectContaining({
+      max_tokens: 800,
+      enforced: true,
+    }))
+    expect(payload.serialized_budget?.token_count).toBeLessThanOrEqual(800)
+    expect(payload.pack?.slice?.selected_paths).toBeUndefined()
+    expect(payload.pack?.slice?.selected_path_count).toBe(noisySelectedPaths.length)
+    expect(payload.pack?.execution_slice?.side_effects).toBeUndefined()
+    expect(payload.evidence?.agent_directive).toBe('answer_from_pack')
+    expect(payload.recommended_first_read?.map((entry) => entry.path)).toEqual([
+      'src/ideas/controller.ts',
+      'src/ideas/report-service.ts',
+    ])
+  })
+
+  it('keeps debug-heavy path details when pack verbose mode is explicitly requested', async () => {
+    const graph = buildRuntimeGenerationGraph()
+    const retrieval = retrieveContext(graph, {
+      question: 'Trace how `POST /login` reaches persistence in the backend runtime pipeline',
+      budget: 1800,
+      taskKind: 'explain',
+      taskIntent: 'explain',
+      retrievalStrategy: 'slice-v1',
+    })
+    const dependencies: ContextPackCommandDependencies = {
+      loadGraph: vi.fn().mockReturnValue(graph),
+      retrieveContext: vi.fn().mockReturnValue(retrieval),
+      compactRetrieveResult,
+      analyzePrImpact: vi.fn(),
+      compactPrImpactResult: vi.fn(),
+      analyzeImpact: vi.fn(),
+      compactImpactResult: vi.fn(),
+    }
+
+    const output = await runContextPackCommand({
+      prompt: retrieval.question,
+      budget: 1800,
+      task: 'explain',
+      graphPath: 'out/graph.json',
+      retrievalStrategy: 'slice-v1',
+      format: 'json',
+      verbose: true,
+    } as never, dependencies)
+    const payload = JSON.parse(output) as {
+      pack?: { slice?: { selected_paths?: unknown[]; selected_path_count?: number } }
+    }
+
+    expect(payload.pack?.slice?.selected_paths?.length).toBeGreaterThan(0)
+    expect(payload.pack?.slice?.selected_path_count).toBeUndefined()
   })
 
   it('deprioritizes helper-like matched nodes when runtime-generation explain falls back without an execution spine', async () => {

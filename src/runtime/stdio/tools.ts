@@ -1,6 +1,7 @@
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 
 import { buildMadarPromptPack } from '../../infrastructure/compare.js'
+import { buildAnswerReadyPackSchema, buildExplainPackPayloadCore } from '../../infrastructure/context-pack-command.js'
 import type { TaskContextPlan } from '../../contracts/task-context-plan.js'
 import type { CompareRefsInput } from '../../infrastructure/time-travel.js'
 import type {
@@ -1233,6 +1234,9 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
       // detect bad runs (missing required evidence, zero claims, weak
       // retrieval, etc.) without re-implementing the heuristics.
       const diagnostics = computeContextPackDiagnostics(fullPack)
+      const explainPayload = task === 'explain'
+        ? buildExplainPackPayloadCore(compactPack, retrieval, implementation)
+        : undefined
 
       // Slice #76/#135: multi-resolution context. Default 'detail'
       // preserves existing behavior; 'summary' drops snippet bodies;
@@ -1328,7 +1332,7 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
         ...contextPackBasePayload(task, prompt, resolvedBudget, graphPath, initialPlan),
         resolution,
         pack: {
-          ...compactPack,
+          ...(explainPayload?.pack ?? compactPack),
           matched_nodes: resolvedNodes.nodes,
         },
         ...(resolvedNodes.bytes_saved > 0
@@ -1349,10 +1353,13 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
           coveredWorkflowOwners: collectWorkflowOwners(resolvedNodes.nodes.map((node) => node.source_file)),
         }),
       }
+      const responsePayload = task === 'explain' && !includeSelectionDiagnostics
+        ? buildAnswerReadyPackSchema(basePayload, Math.max(plannerBudget, 3000))
+        : basePayload
       if (!cacheKey || !cacheGraphVersion) {
-        return helpers.ok(id, helpers.textToolResult(JSON.stringify(basePayload)))
+        return helpers.ok(id, helpers.textToolResult(JSON.stringify(responsePayload)))
       }
-      const payloadText = JSON.stringify(withContextPackCache(basePayload, {
+      const payloadText = JSON.stringify(withContextPackCache(responsePayload, {
         status: 'miss',
         graph_version: cacheGraphVersion,
       }))

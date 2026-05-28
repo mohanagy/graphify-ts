@@ -31,6 +31,7 @@ export interface PackCliOptions {
   graphPath: string
   format?: ContextPackFormat
   why?: boolean
+  verbose?: boolean
   /** #75 manual override for the retrieval gate. When set (0-5), the gate
    *  emits a decision with reason 'manual override' at the supplied level
    *  instead of running its heuristic classifier on the prompt. */
@@ -434,7 +435,7 @@ export function parseQueryArgs(args: string[]): QueryCliOptions {
 }
 
 export function parsePackArgs(args: string[]): PackCliOptions {
-  const usage = 'Usage: madar pack "<prompt>" [--budget N] [--task KIND] [--graph path] [--format json|text|markdown|claude|copilot] [--retrieval-level 0-5] [--retrieval-strategy default|slice-v1]'
+  const usage = 'Usage: madar pack "<prompt>" [--budget N] [--task KIND] [--graph path] [--format json|text|markdown|claude|copilot] [--verbose] [--retrieval-level 0-5] [--retrieval-strategy default|slice-v1]'
   const prompt = args[0]?.trim()
   if (!prompt) {
     throw new UsageError(usage)
@@ -446,6 +447,7 @@ export function parsePackArgs(args: string[]): PackCliOptions {
   let graphPath = 'out/graph.json'
   let format: PackCliOptions['format'] | undefined
   let why = false
+  let verbose = false
   let retrievalLevel: PackCliOptions['retrievalLevel'] | undefined
   let retrievalStrategy: PackCliOptions['retrievalStrategy'] | undefined
 
@@ -540,6 +542,11 @@ export function parsePackArgs(args: string[]): PackCliOptions {
       continue
     }
 
+    if (argument === '--verbose') {
+      verbose = true
+      continue
+    }
+
     throw new UsageError(`error: unknown option for pack: ${argument}`)
   }
 
@@ -551,6 +558,7 @@ export function parsePackArgs(args: string[]): PackCliOptions {
     graphPath,
     ...(format ? { format } : {}),
     ...(why ? { why: true } : {}),
+    ...(verbose ? { verbose: true } : {}),
     ...(retrievalLevel !== undefined ? { retrievalLevel } : {}),
     ...(retrievalStrategy !== undefined ? { retrievalStrategy } : {}),
   }

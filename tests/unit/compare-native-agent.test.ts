@@ -146,6 +146,86 @@ const GOVALIDATE_MADAR_TOKEN_REGRESSION_PAYLOAD = {
   },
 }
 
+const BASELINE_FULL_WIN_PAYLOAD = {
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  duration_ms: 80000,
+  num_turns: 6,
+  result: 'baseline answer',
+  total_cost_usd: 0.8,
+  usage: {
+    input_tokens: 20000,
+    cache_creation_input_tokens: 30000,
+    cache_read_input_tokens: 100000,
+    output_tokens: 1200,
+  },
+}
+
+const MADAR_FULL_WIN_PAYLOAD = {
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  duration_ms: 30000,
+  num_turns: 2,
+  result: 'madar answer',
+  total_cost_usd: 0.3,
+  usage: {
+    input_tokens: 10000,
+    cache_creation_input_tokens: 5000,
+    cache_read_input_tokens: 50000,
+    output_tokens: 1000,
+  },
+}
+
+const BASELINE_NO_TOOL_COUNT_PAYLOAD = {
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  duration_ms: 30000,
+  num_turns: 3,
+  result: 'baseline answer',
+  total_cost_usd: 0.3,
+  usage: {
+    input_tokens: 10000,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+    output_tokens: 1000,
+  },
+}
+
+const MADAR_NO_TOOL_COUNT_LATENCY_REGRESSION_PAYLOAD = {
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  duration_ms: 60000,
+  num_turns: 3,
+  result: 'madar answer',
+  total_cost_usd: 0.3,
+  usage: {
+    input_tokens: 10000,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+    output_tokens: 1000,
+  },
+}
+
+const MADAR_TOOL_COUNT_REGRESSION_FLAT_LATENCY_PAYLOAD = {
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  duration_ms: 30000,
+  num_turns: 3,
+  result: 'madar answer',
+  total_cost_usd: 0.3,
+  usage: {
+    input_tokens: 10000,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+    output_tokens: 1000,
+  },
+}
+
 function toolUses(name: string, count: number): Array<{ type: 'tool_use'; name: string }> {
   return Array.from({ length: count }, () => ({ type: 'tool_use', name }))
 }
@@ -325,6 +405,82 @@ const VERBOSE_GOVALIDATE_MADAR_TOKEN_REGRESSION_PAYLOAD = [
   GOVALIDATE_MADAR_TOKEN_REGRESSION_PAYLOAD,
 ] as const
 
+const VERBOSE_BASELINE_FULL_WIN_PAYLOAD = [
+  { type: 'system', subtype: 'init' },
+  {
+    type: 'assistant',
+    turn: 1,
+    message: {
+      content: [
+        ...toolUses('Read', 6),
+        ...toolUses('Grep', 4),
+      ],
+    },
+  },
+  BASELINE_FULL_WIN_PAYLOAD,
+] as const
+
+const VERBOSE_MADAR_FULL_WIN_PAYLOAD = [
+  { type: 'system', subtype: 'init' },
+  {
+    type: 'assistant',
+    turn: 1,
+    message: {
+      content: [
+        { type: 'tool_use', name: 'mcp__madar__retrieve' },
+      ],
+    },
+  },
+  MADAR_FULL_WIN_PAYLOAD,
+] as const
+
+const RESULT_ONLY_BASELINE_NO_TOOL_COUNT_PAYLOAD = [
+  BASELINE_NO_TOOL_COUNT_PAYLOAD,
+] as const
+
+const VERBOSE_MADAR_NO_TOOL_COUNT_LATENCY_REGRESSION_PAYLOAD = [
+  { type: 'system', subtype: 'init' },
+  {
+    type: 'assistant',
+    turn: 1,
+    message: {
+      content: [
+        { type: 'tool_use', name: 'mcp__madar__retrieve' },
+      ],
+    },
+  },
+  MADAR_NO_TOOL_COUNT_LATENCY_REGRESSION_PAYLOAD,
+] as const
+
+const VERBOSE_BASELINE_TOOL_COUNT_REGRESSION_FLAT_LATENCY_PAYLOAD = [
+  { type: 'system', subtype: 'init' },
+  {
+    type: 'assistant',
+    turn: 1,
+    message: {
+      content: [
+        { type: 'tool_use', name: 'Read' },
+      ],
+    },
+  },
+  BASELINE_NO_TOOL_COUNT_PAYLOAD,
+] as const
+
+const VERBOSE_MADAR_TOOL_COUNT_REGRESSION_FLAT_LATENCY_PAYLOAD = [
+  { type: 'system', subtype: 'init' },
+  {
+    type: 'assistant',
+    turn: 1,
+    message: {
+      content: [
+        { type: 'tool_use', name: 'mcp__madar__retrieve' },
+        { type: 'tool_use', name: 'Read' },
+      ],
+    },
+  },
+  MADAR_TOOL_COUNT_REGRESSION_FLAT_LATENCY_PAYLOAD,
+] as const
+
 const VERBOSE_MADAR_MCP_RETRIEVE_WITH_FOLLOWUP_EXPLORATION_PAYLOAD = [
   { type: 'system', subtype: 'init' },
   {
@@ -342,6 +498,103 @@ const VERBOSE_MADAR_MCP_RETRIEVE_WITH_FOLLOWUP_EXPLORATION_PAYLOAD = [
     message: {
       content: [
         { type: 'tool_use', name: 'Glob' },
+        { type: 'tool_use', name: 'Read' },
+      ],
+    },
+  },
+  MADAR_USAGE_PAYLOAD,
+] as const
+
+const VERBOSE_MADAR_FIRST_BOUNDED_PAYLOAD = [
+  { type: 'system', subtype: 'init' },
+  {
+    type: 'assistant',
+    turn: 1,
+    message: {
+      content: [
+        { type: 'tool_use', name: 'mcp__madar__context_pack' },
+        {
+          type: 'tool_result',
+          tool_name: 'mcp__madar__context_pack',
+          content: JSON.stringify({
+            evidence: {
+              pack_confidence: 'high',
+              agent_directive: 'answer_from_pack',
+            },
+            recommended_first_read: [
+              { path: 'src/runtime/retrieve.ts', reason: 'primary runtime context' },
+            ],
+          }),
+        },
+        { type: 'tool_use', name: 'Read' },
+      ],
+    },
+  },
+  MADAR_USAGE_PAYLOAD,
+] as const
+
+const VERBOSE_MADAR_FIRST_LOW_CONFIDENCE_THEN_READY_PAYLOAD = [
+  { type: 'system', subtype: 'init' },
+  {
+    type: 'assistant',
+    turn: 1,
+    message: {
+      content: [
+        { type: 'tool_use', name: 'mcp__madar__context_pack' },
+        {
+          type: 'tool_result',
+          tool_name: 'mcp__madar__context_pack',
+          content: JSON.stringify({
+            evidence: {
+              pack_confidence: 'low',
+              agent_directive: 'explore_with_caution',
+            },
+          }),
+        },
+      ],
+    },
+  },
+  {
+    type: 'assistant',
+    turn: 2,
+    message: {
+      content: [
+        { type: 'tool_use', name: 'mcp__madar__retrieve' },
+        {
+          type: 'tool_result',
+          tool_name: 'mcp__madar__retrieve',
+          content: JSON.stringify({
+            evidence: {
+              pack_confidence: 'high',
+              agent_directive: 'answer_from_pack',
+            },
+          }),
+        },
+      ],
+    },
+  },
+  MADAR_USAGE_PAYLOAD,
+] as const
+
+const VERBOSE_MADAR_FIRST_WITH_TWO_READS_PAYLOAD = [
+  { type: 'system', subtype: 'init' },
+  {
+    type: 'assistant',
+    turn: 1,
+    message: {
+      content: [
+        { type: 'tool_use', name: 'mcp__madar__context_pack' },
+        {
+          type: 'tool_result',
+          tool_name: 'mcp__madar__context_pack',
+          content: JSON.stringify({
+            evidence: {
+              pack_confidence: 'high',
+              agent_directive: 'answer_from_pack',
+            },
+          }),
+        },
+        { type: 'tool_use', name: 'Read' },
         { type: 'tool_use', name: 'Read' },
       ],
     },
@@ -575,13 +828,13 @@ describe('parseAnthropicResultEvent', () => {
 })
 
 describe('executeNativeAgentCompare', () => {
-  it('records benchmark readiness in the native-agent report and summary', async () => {
+  it('writes a native-agent prompt that enforces the Madar pack contract', async () => {
     const { projectDir, graphPath, outputDir } = makeFixtureProject()
     try {
       const result = await executeNativeAgentCompare(
         {
           graphPath,
-          question: 'How idea report is being generated',
+          question: 'What is the cluster module?',
           outputDir,
           execTemplate: 'mock-runner',
           baselineMode: 'native_agent',
@@ -589,43 +842,18 @@ describe('executeNativeAgentCompare', () => {
         {
           runner: scriptedRunner({ baseline: VERBOSE_BASELINE_PAYLOAD, madar: VERBOSE_MADAR_MCP_RETRIEVE_PAYLOAD }),
           now: () => new Date('2026-05-01T00:00:00Z'),
-          assessBenchmarkReadiness: () => ({
-            status: 'not_ready',
-            reasons: ['SPI missing for runtime spine evidence', 'scope locality is weak'],
-            suggested_graph_scope: 'backend/out/graph.json',
-          }),
-        } as Parameters<typeof executeNativeAgentCompare>[1] & {
-          assessBenchmarkReadiness: () => {
-            status: 'ready' | 'degraded' | 'not_ready'
-            reasons: string[]
-            suggested_graph_scope: string | null
-          }
         },
       )
 
-      const report = result.reports[0] as NativeAgentCompareReport & {
-        benchmark_readiness?: {
-          status: 'ready' | 'degraded' | 'not_ready'
-          reasons: string[]
-          suggested_graph_scope: string | null
-        }
-      }
-      const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
-      const summary = formatNativeAgentCompareSummary(result)
+      const report = result.reports[0] as NativeAgentCompareReport
+      const prompt = readFileSync(report.paths.prompt_file, 'utf8')
 
-      expect(report.benchmark_readiness).toEqual({
-        status: 'not_ready',
-        reasons: ['SPI missing for runtime spine evidence', 'scope locality is weak'],
-        suggested_graph_scope: 'backend/out/graph.json',
-      })
-      expect(savedReport.benchmark_readiness).toEqual({
-        status: 'not_ready',
-        reasons: ['SPI missing for runtime spine evidence', 'scope locality is weak'],
-        suggested_graph_scope: 'backend/out/graph.json',
-      })
-      expect(summary).toContain('benchmark_readiness: not_ready')
-      expect(summary).toContain('SPI missing for runtime spine evidence')
-      expect(summary).toContain('Next step: retry with backend/out/graph.json')
+      expect(prompt).toContain('Call context_pack first')
+      expect(prompt).toContain('Inspect evidence.pack_confidence, evidence.coverage, evidence.agent_directive, missing_context, and recommended_first_read')
+      expect(prompt).toContain('If evidence.agent_directive is answer_from_pack, answer from the pack and stop without raw search')
+      expect(prompt).toContain('Allow at most one focused Madar follow-up before raw search')
+      expect(prompt).toContain('Broad raw search requires an explicit missing-context reason')
+      expect(prompt).toContain('Question: What is the cluster module?')
     } finally {
       rmSync(projectDir, { recursive: true, force: true })
     }
@@ -687,13 +915,13 @@ describe('executeNativeAgentCompare', () => {
     }
   })
 
-  it('writes a native-agent prompt that enforces the Madar pack contract', async () => {
+  it('records benchmark readiness in the native-agent report and summary', async () => {
     const { projectDir, graphPath, outputDir } = makeFixtureProject()
     try {
       const result = await executeNativeAgentCompare(
         {
           graphPath,
-          question: 'What is the cluster module?',
+          question: 'How idea report is being generated',
           outputDir,
           execTemplate: 'mock-runner',
           baselineMode: 'native_agent',
@@ -701,18 +929,43 @@ describe('executeNativeAgentCompare', () => {
         {
           runner: scriptedRunner({ baseline: VERBOSE_BASELINE_PAYLOAD, madar: VERBOSE_MADAR_MCP_RETRIEVE_PAYLOAD }),
           now: () => new Date('2026-05-01T00:00:00Z'),
+          assessBenchmarkReadiness: () => ({
+            status: 'not_ready',
+            reasons: ['SPI missing for runtime spine evidence', 'scope locality is weak'],
+            suggested_graph_scope: 'backend/out/graph.json',
+          }),
+        } as Parameters<typeof executeNativeAgentCompare>[1] & {
+          assessBenchmarkReadiness: () => {
+            status: 'ready' | 'degraded' | 'not_ready'
+            reasons: string[]
+            suggested_graph_scope: string | null
+          }
         },
       )
 
-      const report = result.reports[0] as NativeAgentCompareReport
-      const prompt = readFileSync(report.paths.prompt_file, 'utf8')
+      const report = result.reports[0] as NativeAgentCompareReport & {
+        benchmark_readiness?: {
+          status: 'ready' | 'degraded' | 'not_ready'
+          reasons: string[]
+          suggested_graph_scope: string | null
+        }
+      }
+      const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+      const summary = formatNativeAgentCompareSummary(result)
 
-      expect(prompt).toContain('Call context_pack first')
-      expect(prompt).toContain('Inspect evidence.pack_confidence, evidence.coverage, evidence.agent_directive, missing_context, and recommended_first_read')
-      expect(prompt).toContain('If evidence.agent_directive is answer_from_pack, answer from the pack and stop without raw search')
-      expect(prompt).toContain('Allow at most one focused Madar follow-up before raw search')
-      expect(prompt).toContain('Broad raw search requires an explicit missing-context reason')
-      expect(prompt).toContain('Question: What is the cluster module?')
+      expect(report.benchmark_readiness).toEqual({
+        status: 'not_ready',
+        reasons: ['SPI missing for runtime spine evidence', 'scope locality is weak'],
+        suggested_graph_scope: 'backend/out/graph.json',
+      })
+      expect(savedReport.benchmark_readiness).toEqual({
+        status: 'not_ready',
+        reasons: ['SPI missing for runtime spine evidence', 'scope locality is weak'],
+        suggested_graph_scope: 'backend/out/graph.json',
+      })
+      expect(summary).toContain('benchmark_readiness: not_ready')
+      expect(summary).toContain('SPI missing for runtime spine evidence')
+      expect(summary).toContain('Next step: retry with backend/out/graph.json')
     } finally {
       rmSync(projectDir, { recursive: true, force: true })
     }
@@ -1030,6 +1283,103 @@ describe('executeNativeAgentCompare', () => {
     }
   })
 
+  it('distinguishes Madar-first bounded traces from generic Madar invocation', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'How does runtime retrieval work?',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({
+            baseline: VERBOSE_BASELINE_PAYLOAD,
+            madar: VERBOSE_MADAR_FIRST_BOUNDED_PAYLOAD,
+          }),
+          now: () => new Date('2026-05-01T00:00:00Z'),
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport
+      expect(report.madar_trace).toEqual(expect.objectContaining({
+        first_madar_turn: 1,
+        context_pack_call_count: 1,
+        focused_follow_up_tool_call_count: 1,
+        broad_exploration_tool_call_count: 0,
+        agent_directive_seen: ['answer_from_pack'],
+        exploration_outcome: 'madar_first_bounded',
+      }))
+      expect(report.madar_trace?.exploration_summary).toContain('Madar-first bounded path')
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not classify low-confidence first packs as Madar-first bounded even when follow-up is answer-ready', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'How does runtime retrieval work?',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({
+            baseline: VERBOSE_BASELINE_PAYLOAD,
+            madar: VERBOSE_MADAR_FIRST_LOW_CONFIDENCE_THEN_READY_PAYLOAD,
+          }),
+          now: () => new Date('2026-05-01T00:00:00Z'),
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport
+      expect(report.madar_trace).toEqual(expect.objectContaining({
+        first_madar_turn: 1,
+        agent_directive_seen: ['explore_with_caution', 'answer_from_pack'],
+        exploration_outcome: 'madar_invoked',
+      }))
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not classify multiple focused reads after a pack as Madar-first bounded', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'How does runtime retrieval work?',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({
+            baseline: VERBOSE_BASELINE_PAYLOAD,
+            madar: VERBOSE_MADAR_FIRST_WITH_TWO_READS_PAYLOAD,
+          }),
+          now: () => new Date('2026-05-01T00:00:00Z'),
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport
+      expect(report.madar_trace).toEqual(expect.objectContaining({
+        first_madar_turn: 1,
+        focused_follow_up_tool_call_count: 2,
+        exploration_outcome: 'madar_invoked',
+      }))
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
   it('flags broad exploration before the first Madar MCP call', async () => {
     const { projectDir, graphPath, outputDir } = makeFixtureProject()
     try {
@@ -1233,6 +1583,137 @@ describe('executeNativeAgentCompare', () => {
     }
   })
 
+  it('classifies native-agent benchmark outcomes as full wins only when every measured gate passes', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'How idea report is being generated',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({
+            baseline: VERBOSE_BASELINE_FULL_WIN_PAYLOAD,
+            madar: VERBOSE_MADAR_FULL_WIN_PAYLOAD,
+          }),
+          now: () => new Date('2026-05-27T00:30:00Z'),
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport
+      const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+      const benchmarkOutcome = savedReport.benchmark_outcome as Record<string, unknown> | undefined
+      const summary = formatNativeAgentCompareSummary(result)
+
+      expect(report.measurement_validity).toBe('valid')
+      expect(report.tool_call_counts?.baseline.total).toBe(10)
+      expect(report.tool_call_counts?.madar.total).toBe(1)
+      expect(savedReport.token_regression).toBe(false)
+      expect(benchmarkOutcome).toEqual(expect.objectContaining({
+        outcome: 'full_win',
+        checks: expect.objectContaining({
+          routing_tool_latency: 'win',
+          token: 'win',
+          fresh_token: 'win',
+          cost: 'win',
+          turns: 'win',
+        }),
+      }))
+      expect(summary).toContain('benchmark_outcome: full_win')
+      expect(summary).toContain('turns win')
+      expect(summary).toContain('fresh_token win')
+      expect(summary).toContain('cost win')
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('marks routing latency as a loss when latency regresses and tool counts are unavailable', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'How idea report is being generated',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({
+            baseline: RESULT_ONLY_BASELINE_NO_TOOL_COUNT_PAYLOAD,
+            madar: VERBOSE_MADAR_NO_TOOL_COUNT_LATENCY_REGRESSION_PAYLOAD,
+          }),
+          now: () => new Date('2026-05-27T01:00:00Z'),
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport
+      const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+      const benchmarkOutcome = savedReport.benchmark_outcome as Record<string, unknown> | undefined
+
+      expect(report.measurement_validity).toBe('valid')
+      expect(report.tool_call_counts).toBeUndefined()
+      expect(benchmarkOutcome).toEqual(expect.objectContaining({
+        outcome: 'regression',
+        checks: expect.objectContaining({
+          routing_tool_latency: 'loss',
+          token: 'flat',
+          fresh_token: 'flat',
+          cost: 'flat',
+          turns: 'flat',
+        }),
+      }))
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('marks routing tool usage as a loss when tool counts regress and latency is flat', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'How idea report is being generated',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({
+            baseline: VERBOSE_BASELINE_TOOL_COUNT_REGRESSION_FLAT_LATENCY_PAYLOAD,
+            madar: VERBOSE_MADAR_TOOL_COUNT_REGRESSION_FLAT_LATENCY_PAYLOAD,
+          }),
+          now: () => new Date('2026-05-27T01:30:00Z'),
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport
+      const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+      const benchmarkOutcome = savedReport.benchmark_outcome as Record<string, unknown> | undefined
+
+      expect(report.measurement_validity).toBe('valid')
+      expect(report.tool_call_counts?.baseline.total).toBe(1)
+      expect(report.tool_call_counts?.madar.total).toBe(2)
+      expect(benchmarkOutcome).toEqual(expect.objectContaining({
+        outcome: 'regression',
+        checks: expect.objectContaining({
+          routing_tool_latency: 'loss',
+          token: 'flat',
+          fresh_token: 'flat',
+          cost: 'flat',
+          turns: 'flat',
+        }),
+      }))
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
   it('separates routing wins from token-reduction proof for GoValidate-style token regressions', async () => {
     const { projectDir, graphPath, outputDir } = makeFixtureProject()
     try {
@@ -1256,31 +1737,17 @@ describe('executeNativeAgentCompare', () => {
       const report = result.reports[0] as NativeAgentCompareReport
       const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
       const claimAssessment = savedReport.claim_assessment as Record<string, unknown> | undefined
-      const promptContract = savedReport.prompt_contract as Record<string, unknown> | undefined
+      const benchmarkOutcome = savedReport.benchmark_outcome as Record<string, unknown> | undefined
       const summary = formatNativeAgentCompareSummary(result)
 
       expect(report.measurement_validity).toBe('valid')
       expect(report.tool_call_counts?.baseline.total).toBe(28)
       expect(report.tool_call_counts?.madar.total).toBe(6)
-      expect(report.prompt_contract).toEqual({
-        status: 'violated',
-        evidence: [
-          'first Madar call was not context_pack',
-          'broad exploration occurred after the first Madar call',
-        ],
-      })
       if (report.baseline.kind !== 'succeeded' || report.madar.kind !== 'succeeded') {
         throw new Error('GoValidate fixture should produce succeeded runs')
       }
       expect(report.madar.duration_ms).toBeLessThan(report.baseline.duration_ms)
       expect(savedReport.token_regression).toBe(true)
-      expect(promptContract).toEqual({
-        status: 'violated',
-        evidence: [
-          'first Madar call was not context_pack',
-          'broad exploration occurred after the first Madar call',
-        ],
-      })
       expect(claimAssessment).toEqual(expect.objectContaining({
         routing_efficiency: expect.objectContaining({
           status: 'improved',
@@ -1289,10 +1756,30 @@ describe('executeNativeAgentCompare', () => {
           status: 'not_proven',
         }),
       }))
+      expect(benchmarkOutcome).toEqual(expect.objectContaining({
+        outcome: 'partial_win',
+        checks: expect.objectContaining({
+          routing_tool_latency: 'win',
+          token: 'loss',
+          fresh_token: 'loss',
+          cost: 'loss',
+          turns: 'loss',
+        }),
+      }))
+      expect(benchmarkOutcome?.evidence).toEqual(expect.arrayContaining([
+        expect.stringContaining('turns regressed'),
+        expect.stringContaining('fresh-token regression'),
+        expect.stringContaining('cost regressed'),
+      ]))
       expect(summary).toContain('claim_assessment: routing_efficiency improved')
       expect(summary).toContain('token_reduction not_proven')
+      expect(summary).toContain('benchmark_outcome: partial_win')
+      expect(summary).toContain('turns loss')
+      expect(summary).toContain('fresh_token loss')
+      expect(summary).toContain('cost loss')
       expect(summary).toContain('provider input grew')
       expect(summary).toContain('fresh-token regression')
+      expect(summary).toContain('cost_usd')
     } finally {
       rmSync(projectDir, { recursive: true, force: true })
     }
@@ -2158,6 +2645,56 @@ describe('formatNativeAgentCompareSummary', () => {
     expect(summary).toContain('measurement_validity: valid')
     expect(summary).toContain('install_verified: true')
     expect(summary).toContain('madar_mcp_call_count: 2 (mcp__madar__retrieve)')
+  })
+
+  it('summarizes Madar-first bounded traces in suite output', () => {
+    const summary = formatNativeAgentCompareSummary(buildSummaryResult({
+      question: 'ideal trace case',
+      baselineTurns: 6,
+      madarTurns: 2,
+      baselineDurationMs: 6000,
+      madarDurationMs: 2000,
+      baselineInputTokens: 600,
+      madarInputTokens: 200,
+      reductions: {
+        num_turns: 3,
+        duration_ms: 3,
+        input_tokens: 3,
+        cost_usd: 1,
+      },
+      madarTrace: {
+        source: 'claude_messages_tool_use',
+        summary: '2 tool calls across 1 turn',
+        tool_call_count: 2,
+        tool_calls_by_name: {
+          'mcp__madar__context_pack': 1,
+          Read: 1,
+        },
+        per_turn: [
+          {
+            turn: 1,
+            tool_call_count: 2,
+            tools: ['mcp__madar__context_pack', 'Read'],
+            agent_directive_seen: ['answer_from_pack'],
+          },
+        ],
+        agent_directive_seen: ['answer_from_pack'],
+        madar_mcp_call_count: 1,
+        madar_mcp_calls_by_name: {
+          'mcp__madar__context_pack': 1,
+        },
+        first_madar_turn: 1,
+        context_pack_call_count: 1,
+        focused_follow_up_tool_call_count: 1,
+        broad_exploration_tool_call_count: 0,
+        broad_exploration_tool_calls_by_name: {},
+        exploration_outcome: 'madar_first_bounded',
+        exploration_summary: 'Madar-first bounded path: no broad exploration after the first Madar call.',
+      },
+    }))
+
+    expect(summary).toContain('madar_trace: madar_first_bounded')
+    expect(summary).toContain('outcomes: 1 madar-first bounded')
   })
 
   it('prints invalid measurement warnings when install is missing', () => {

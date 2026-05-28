@@ -808,6 +808,9 @@ describe('compare runtime', () => {
       missing_context: explainPayload.missing_context,
       missing_semantic: explainPayload.missing_semantic,
       retrieval_gate: explainPayload.retrieval_gate,
+      recommended_first_read: explainPayload.recommended_first_read,
+      workflow_centers: explainPayload.workflow_centers,
+      confidence_score: explainPayload.confidence_score,
     }, null, 2)
 
     expect(pack.prompt).toContain(expectedPromptCore)

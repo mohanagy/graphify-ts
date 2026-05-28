@@ -6,7 +6,7 @@ import type { ContextPackExecutionPhase, ContextPackRoutingDebug } from '../cont
 import { KnowledgeGraph } from '../contracts/graph.js'
 import type { ContextSessionState } from '../contracts/context-session.js'
 import { buildContextPrompt, type ContextPromptStableSection } from './context-prompt.js'
-import { buildExplainPackPayloadCore } from './context-pack-command.js'
+import { buildAnswerReadyPackSchema, buildExplainPackPayloadCore } from './context-pack-command.js'
 import { isMadarProjectHook } from './install.js'
 import { CODE_EXTENSIONS, DOC_EXTENSIONS, MANIFEST_METADATA_KEY, OFFICE_EXTENSIONS, PAPER_EXTENSIONS } from '../pipeline/detect.js'
 import { extractCompareBaselineNonCodeText } from '../pipeline/extract/non-code.js'
@@ -118,6 +118,7 @@ export interface CompareMadarTraceTurnSummary {
 type CompareMadarTraceOutcome =
   | 'no_install'
   | 'madar_available_but_unused'
+  | 'madar_first_bounded'
   | 'madar_invoked'
   | 'madar_invoked_after_broad_exploration'
   | 'madar_invoked_with_followup_exploration'
@@ -901,6 +902,19 @@ function traceToolCountSummary(toolCallsByName: Record<string, number>): string 
     .join(', ')
 }
 
+function traceHasAnswerReadyDirectiveOnFirstMadarTurn(
+  perTurn: CompareMadarTraceTurnSummary[],
+  firstMadarTurn: number | null,
+): boolean {
+  if (firstMadarTurn === null) {
+    return false
+  }
+  const firstTurn = perTurn.find((turn) => turn.turn === firstMadarTurn)
+  return (firstTurn?.agent_directive_seen ?? []).some((directive) =>
+    directive === 'answer_from_pack' || directive === 'verify_one_targeted_file',
+  )
+}
+
 function analyzeMadarTraceExploration(perTurn: CompareMadarTraceTurnSummary[]): {
   madar_mcp_call_count: number
   madar_mcp_calls_by_name: Record<string, number>
@@ -1051,6 +1065,25 @@ function analyzeMadarTraceExploration(perTurn: CompareMadarTraceTurnSummary[]): 
       summaryParts.push(focusedSummary)
     }
     summaryParts.push('no broad exploration after the first Madar call.')
+    if (
+      firstMadarTurn !== null
+      && firstMadarTurn <= 2
+      && contextPackCallCount > 0
+      && focusedFollowUpToolCallCount <= 1
+      && traceHasAnswerReadyDirectiveOnFirstMadarTurn(perTurn, firstMadarTurn)
+    ) {
+      return {
+        madar_mcp_call_count: madarMcpCallCount,
+        madar_mcp_calls_by_name: sortedMadarMcpCallsByName,
+        ...baseTraceFields,
+        context_pack_call_count: contextPackCallCount,
+        focused_follow_up_tool_call_count: focusedFollowUpToolCallCount,
+        broad_exploration_tool_call_count: 0,
+        broad_exploration_tool_calls_by_name: {},
+        exploration_outcome: 'madar_first_bounded',
+        exploration_summary: `Madar-first bounded path: ${summaryParts.join('; ')}`,
+      }
+    }
     return {
       madar_mcp_call_count: madarMcpCallCount,
       madar_mcp_calls_by_name: sortedMadarMcpCallsByName,
@@ -1817,11 +1850,12 @@ export function buildBaselinePromptPack(input: BuildBaselinePromptPackInput): Co
 }
 
 export function buildMadarPromptPack(input: BuildMadarPromptPackInput): ComparePromptPack {
-  const explainPayload = JSON.stringify(
-    buildExplainPackPayloadCore(compactRetrieveResult(input.retrieval), input.retrieval, undefined, input.graphPath),
-    null,
-    2,
+  const explainPayloadCore = buildAnswerReadyPackSchema(
+    buildExplainPackPayloadCore(compactRetrieveResult(input.retrieval), input.retrieval),
+    input.retrieval.task_contract?.budget ?? 3000,
   )
+  delete explainPayloadCore.serialized_budget
+  const explainPayload = JSON.stringify(explainPayloadCore, null, 2)
   const builtPrompt = buildContextPrompt({
     instructions: [
       'Answer the question using only the provided graph-guided retrieval output.',
@@ -2427,6 +2461,21 @@ export interface NativeAgentClaimAssessment {
   }
 }
 
+export type NativeAgentBenchmarkCheckStatus = 'win' | 'loss' | 'flat' | 'not_measured'
+export type NativeAgentBenchmarkOverallOutcome = 'full_win' | 'partial_win' | 'regression' | 'not_measured'
+
+export interface NativeAgentBenchmarkOutcome {
+  outcome: NativeAgentBenchmarkOverallOutcome
+  checks: {
+    routing_tool_latency: NativeAgentBenchmarkCheckStatus
+    token: NativeAgentBenchmarkCheckStatus
+    fresh_token: NativeAgentBenchmarkCheckStatus
+    cost: NativeAgentBenchmarkCheckStatus
+    turns: NativeAgentBenchmarkCheckStatus
+  }
+  evidence: string[]
+}
+
 export interface NativeAgentToolCallCountsEntry {
   total: number
   Read: number
@@ -2471,6 +2520,7 @@ export interface NativeAgentCompareReport {
   benchmark_readiness?: BenchmarkReadiness
   prompt_contract?: NativeAgentPromptContractAssessment
   claim_assessment?: NativeAgentClaimAssessment
+  benchmark_outcome?: NativeAgentBenchmarkOutcome
   prompt_token_source: {
     baseline: 'anthropic_provider_reported' | 'unknown'
     madar: 'anthropic_provider_reported' | 'unknown'
@@ -3249,6 +3299,114 @@ function assessNativeAgentClaims(report: NativeAgentCompareReport): NativeAgentC
   }
 }
 
+function benchmarkMetricStatus(
+  baseline: number | null,
+  madar: number | null,
+): NativeAgentBenchmarkCheckStatus {
+  if (baseline === null || madar === null) {
+    return 'not_measured'
+  }
+  if (madar < baseline) {
+    return 'win'
+  }
+  if (madar > baseline) {
+    return 'loss'
+  }
+  return 'flat'
+}
+
+function benchmarkFreshTokenStatus(
+  baseline: Extract<NativeAgentRunStatus, { kind: 'succeeded' }>,
+  madar: Extract<NativeAgentRunStatus, { kind: 'succeeded' }>,
+  tokenRegressionReasons: readonly NativeAgentTokenRegressionMetric[],
+): NativeAgentBenchmarkCheckStatus {
+  if (tokenRegressionReasons.length > 0) {
+    return 'loss'
+  }
+  if (madar.uncached_input_tokens_anthropic_exact < baseline.uncached_input_tokens_anthropic_exact) {
+    return 'win'
+  }
+  if (madar.uncached_input_tokens_anthropic_exact === baseline.uncached_input_tokens_anthropic_exact) {
+    return 'flat'
+  }
+  return 'loss'
+}
+
+function assessNativeAgentBenchmarkOutcome(report: NativeAgentCompareReport): NativeAgentBenchmarkOutcome | undefined {
+  if (report.baseline.kind !== 'succeeded' || report.madar.kind !== 'succeeded') {
+    return undefined
+  }
+
+  if (!nativeAgentReductionsAttributable(report)) {
+    return {
+      outcome: 'not_measured',
+      checks: {
+        routing_tool_latency: 'not_measured',
+        token: 'not_measured',
+        fresh_token: 'not_measured',
+        cost: 'not_measured',
+        turns: 'not_measured',
+      },
+      evidence: ['Madar MCP attribution is missing.'],
+    }
+  }
+
+  const toolCallsImproved = report.tool_call_counts
+    ? report.tool_call_counts.madar.total < report.tool_call_counts.baseline.total
+    : false
+  const latencyImproved = report.madar.duration_ms < report.baseline.duration_ms
+  const toolCallsRegressed = report.tool_call_counts
+    ? report.tool_call_counts.madar.total > report.tool_call_counts.baseline.total
+    : false
+  const latencyRegressed = report.madar.duration_ms > report.baseline.duration_ms
+  const routingToolLatency =
+    toolCallsImproved || latencyImproved
+      ? 'win'
+      : toolCallsRegressed || latencyRegressed
+        ? 'loss'
+        : 'flat'
+
+  const checks: NativeAgentBenchmarkOutcome['checks'] = {
+    routing_tool_latency: routingToolLatency,
+    token: benchmarkMetricStatus(report.baseline.total_input_tokens_anthropic_exact, report.madar.total_input_tokens_anthropic_exact),
+    fresh_token: benchmarkFreshTokenStatus(report.baseline, report.madar, report.token_regression_reasons),
+    cost: benchmarkMetricStatus(report.baseline.total_cost_usd, report.madar.total_cost_usd),
+    turns: benchmarkMetricStatus(report.baseline.num_turns, report.madar.num_turns),
+  }
+
+  const evidence: string[] = [
+    `routing/tool/latency ${checks.routing_tool_latency}: tool calls ${report.tool_call_counts ? `${report.tool_call_counts.baseline.total} → ${report.tool_call_counts.madar.total}` : 'not measured'}, latency ${report.baseline.duration_ms}ms → ${report.madar.duration_ms}ms`,
+    `provider input ${checks.token}: baseline ${report.baseline.total_input_tokens_anthropic_exact} → madar ${report.madar.total_input_tokens_anthropic_exact}`,
+    `turns ${checks.turns === 'loss' ? 'regressed' : checks.turns}: baseline ${report.baseline.num_turns} → madar ${report.madar.num_turns}`,
+  ]
+  if (checks.fresh_token === 'loss') {
+    evidence.push(`fresh-token regression: ${report.token_regression_reasons.join(', ')}`)
+  } else {
+    evidence.push(`fresh_token ${checks.fresh_token}: baseline ${report.baseline.uncached_input_tokens_anthropic_exact} → madar ${report.madar.uncached_input_tokens_anthropic_exact}`)
+  }
+  if (checks.cost === 'not_measured') {
+    evidence.push('cost not measured: provider cost was unavailable for one or both runs')
+  } else {
+    evidence.push(`cost ${checks.cost === 'loss' ? 'regressed' : checks.cost}: baseline ${report.baseline.total_cost_usd} → madar ${report.madar.total_cost_usd}`)
+  }
+
+  const statuses = Object.values(checks)
+  const hasWin = statuses.includes('win')
+  const hasLoss = statuses.includes('loss')
+  const fullWin =
+    checks.routing_tool_latency === 'win'
+    && checks.token !== 'loss'
+    && checks.fresh_token !== 'loss'
+    && checks.cost !== 'loss'
+    && checks.turns !== 'loss'
+
+  return {
+    outcome: fullWin ? 'full_win' : hasWin ? 'partial_win' : hasLoss ? 'regression' : 'not_measured',
+    checks,
+    evidence,
+  }
+}
+
 type NativeAgentComparableReport = NativeAgentCompareReport & {
   baseline: Extract<NativeAgentRunStatus, { kind: 'succeeded' }>
   madar: Extract<NativeAgentRunStatus, { kind: 'succeeded' }>
@@ -3910,6 +4068,12 @@ export async function executeNativeAgentCompare(
     } else {
       delete reportShell.claim_assessment
     }
+    const benchmarkOutcome = assessNativeAgentBenchmarkOutcome(reportShell)
+    if (benchmarkOutcome !== undefined) {
+      reportShell.benchmark_outcome = benchmarkOutcome
+    } else {
+      delete reportShell.benchmark_outcome
+    }
     if (!nativeAgentReductionsAttributable(reportShell)) {
       reportShell.reductions = null
     }
@@ -4039,6 +4203,36 @@ function formatBenchmarkReadinessLine(readiness: BenchmarkReadiness): string {
   return `benchmark_readiness: ${readiness.status}${reasons}`
 }
 
+function formatNativeAgentBenchmarkOutcomeLine(outcome: NativeAgentBenchmarkOutcome): string {
+  const checks = Object.entries(outcome.checks)
+    .map(([name, status]) => `${name} ${status}`)
+    .join('; ')
+  const evidence = outcome.evidence.length > 0 ? ` (${outcome.evidence.join('; ')})` : ''
+  return `benchmark_outcome: ${outcome.outcome} (${checks})${evidence}`
+}
+
+function formatNativeAgentMadarTraceOutcomeSummary(reports: NativeAgentCompareReport[]): string | null {
+  const traces = reports.flatMap((report) => (report.madar_trace ? [report.madar_trace] : []))
+  if (traces.length === 0) {
+    return null
+  }
+
+  const outcomeLabels: Array<[CompareMadarTraceOutcome, string]> = [
+    ['madar_first_bounded', 'madar-first bounded'],
+    ['madar_invoked', 'madar invoked'],
+    ['madar_invoked_after_broad_exploration', 'madar invoked after broad exploration'],
+    ['madar_invoked_with_followup_exploration', 'madar invoked with follow-up exploration'],
+    ['madar_available_but_unused', 'available but unused'],
+    ['no_install', 'no install'],
+  ]
+  const outcomeParts = outcomeLabels.flatMap(([outcome, label]) => {
+    const count = traces.filter((trace) => trace.exploration_outcome === outcome).length
+    return count > 0 ? [`${count} ${label}`] : []
+  })
+
+  return outcomeParts.length > 0 ? `Madar trace outcomes: ${outcomeParts.join(', ')}` : null
+}
+
 export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult): string {
   const lines: string[] = [
     `[madar compare] completed ${result.reports.length} native_agent question(s)`,
@@ -4088,6 +4282,10 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
       `- Answer quality: madar ${result.answer_quality.madar_passed}/${result.answer_quality.questions_checked} passed deterministic gates · baseline ${result.answer_quality.baseline_passed}/${result.answer_quality.questions_checked} passed deterministic gates · ${formatCount(result.answer_quality.manual_review_required, 'manual-review note', 'manual-review notes')}`,
     )
   }
+  const traceOutcomeSummary = formatNativeAgentMadarTraceOutcomeSummary(result.reports)
+  if (traceOutcomeSummary !== null) {
+    lines.push(`- ${traceOutcomeSummary}`)
+  }
   for (const report of result.reports) {
     if (isNativeAgentRunFailure(report.baseline) || isNativeAgentRunFailure(report.madar)) {
       lines.push(`- "${report.question}"`)
@@ -4123,6 +4321,9 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
     if (report.claim_assessment) {
       lines.push(`    ${formatNativeAgentClaimAssessmentLine(report.claim_assessment)}`)
     }
+    if (report.benchmark_outcome) {
+      lines.push(`    ${formatNativeAgentBenchmarkOutcomeLine(report.benchmark_outcome)}`)
+    }
     const derivedTokenRegressionReasons = collectTokenRegressionReasons(baseline, madar)
     const tokenRegressionReasons =
       report.token_regression_reasons && report.token_regression_reasons.length > 0
@@ -4146,6 +4347,11 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
       `    latency:   baseline ${baseline.duration_ms}ms → madar ${madar.duration_ms}ms${formatDirectionalDelta(baseline.duration_ms, madar.duration_ms, 'faster', 'slower')}`,
       `    input_tokens (Anthropic-reported): baseline ${baseline.total_input_tokens_anthropic_exact} → madar ${madar.total_input_tokens_anthropic_exact}${formatDirectionalDelta(baseline.total_input_tokens_anthropic_exact, madar.total_input_tokens_anthropic_exact, 'less', 'more', { noMeaningfulChangeThreshold: 0.1, neutralLabel: 'no meaningful change' })}`,
     )
+    if (baseline.total_cost_usd !== null && madar.total_cost_usd !== null) {
+      lines.push(
+        `    cost_usd: baseline ${baseline.total_cost_usd} → madar ${madar.total_cost_usd}${formatDirectionalDelta(baseline.total_cost_usd, madar.total_cost_usd, 'less', 'more')}`,
+      )
+    }
     if (hasCacheActivity) {
       lines.push(
         `    uncached_input_tokens (Anthropic-reported): baseline ${baseline.uncached_input_tokens_anthropic_exact} → madar ${madar.uncached_input_tokens_anthropic_exact}${formatDirectionalDelta(baseline.uncached_input_tokens_anthropic_exact, madar.uncached_input_tokens_anthropic_exact, 'less', 'more')}`,

@@ -87,6 +87,8 @@ function renderMarkdownTable(lead: string, rows: RoutingRow[], toolSearchSentenc
     '| --- | --- |',
     ...rows.map((row) => `| ${row.promptType} | ${row.markdownTarget} |`),
     '',
+    'Inspect `evidence.pack_confidence`, `recommended_first_read`, and `evidence.agent_directive` before deciding whether to read files.',
+    'If `evidence.pack_confidence` is low, make one focused follow-up Madar call before broad raw search.',
     toolSearchSentence,
   ]
   return lines.join('\n')
@@ -98,7 +100,7 @@ function renderPlainGuide(
   toolSearchSentence: string,
 ): string {
   const rules = rows.map((row) => `${row.plainTarget} for ${row.plainPromptType ?? row.promptType}`).join('; ')
-  return `${lead}: ${rules}. ${toolSearchSentence}`
+  return `${lead}: ${rules}. Inspect evidence.pack_confidence, recommended_first_read, and evidence.agent_directive before deciding whether to read files. If evidence.pack_confidence is low, make one focused follow-up Madar call before broad raw search. ${toolSearchSentence}`
 }
 
 export function renderMarkdownMcpRoutingTable(): string {
