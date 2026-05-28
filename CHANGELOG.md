@@ -6,7 +6,10 @@ All notable changes to the TypeScript package will be documented in this file.
 
 ### Fixed
 
-- **Placeholder** — fill in before publishing.
+- **`runNativeAgentArmWithTimeout` no longer races ahead of a settling arm**: after aborting a timed-out arm the runner is given a 200 ms grace window to fully settle before the `timed_out` outcome is recorded, preventing a partially-completed result from being misclassified. Truly stuck arms that never respond to abort still resolve via the grace timeout.
+- **`assessNativeAgentPromptContract` returns `not_measured` for post-pack broad exploration**: broad exploration after a pack call can be justified by missing context or coverage gaps that the trace model does not capture, so marking it as `violated` caused false failures. The honest status is `not_measured`.
+- **`suggestBenchmarkGraphScope` handles absolute `source_file` paths**: source files from fixtures using absolute paths (e.g. `/tmp/.../backend/src/auth-route.ts`) now have their project root inferred and stripped before scope extraction, so the reported scope is `backend` instead of the first path segment.
+- **`candidateScopes` in MCP response evidence handles absolute and Windows paths**: scope detection now finds the segment immediately before a generic directory marker (`src`, `test`, `tests`, `lib`, etc.) rather than splitting on the first `/`, fixing incorrect scope attribution for long absolute paths and Windows-style paths.
 
 ## [0.27.3] - 2026-05-28
 
