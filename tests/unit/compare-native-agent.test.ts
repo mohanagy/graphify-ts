@@ -349,6 +349,103 @@ const VERBOSE_MADAR_MCP_RETRIEVE_WITH_FOLLOWUP_EXPLORATION_PAYLOAD = [
   MADAR_USAGE_PAYLOAD,
 ] as const
 
+const VERBOSE_MADAR_FIRST_BOUNDED_PAYLOAD = [
+  { type: 'system', subtype: 'init' },
+  {
+    type: 'assistant',
+    turn: 1,
+    message: {
+      content: [
+        { type: 'tool_use', name: 'mcp__madar__context_pack' },
+        {
+          type: 'tool_result',
+          tool_name: 'mcp__madar__context_pack',
+          content: JSON.stringify({
+            evidence: {
+              pack_confidence: 'high',
+              agent_directive: 'answer_from_pack',
+            },
+            recommended_first_read: [
+              { path: 'src/runtime/retrieve.ts', reason: 'primary runtime context' },
+            ],
+          }),
+        },
+        { type: 'tool_use', name: 'Read' },
+      ],
+    },
+  },
+  MADAR_USAGE_PAYLOAD,
+] as const
+
+const VERBOSE_MADAR_FIRST_LOW_CONFIDENCE_THEN_READY_PAYLOAD = [
+  { type: 'system', subtype: 'init' },
+  {
+    type: 'assistant',
+    turn: 1,
+    message: {
+      content: [
+        { type: 'tool_use', name: 'mcp__madar__context_pack' },
+        {
+          type: 'tool_result',
+          tool_name: 'mcp__madar__context_pack',
+          content: JSON.stringify({
+            evidence: {
+              pack_confidence: 'low',
+              agent_directive: 'explore_with_caution',
+            },
+          }),
+        },
+      ],
+    },
+  },
+  {
+    type: 'assistant',
+    turn: 2,
+    message: {
+      content: [
+        { type: 'tool_use', name: 'mcp__madar__retrieve' },
+        {
+          type: 'tool_result',
+          tool_name: 'mcp__madar__retrieve',
+          content: JSON.stringify({
+            evidence: {
+              pack_confidence: 'high',
+              agent_directive: 'answer_from_pack',
+            },
+          }),
+        },
+      ],
+    },
+  },
+  MADAR_USAGE_PAYLOAD,
+] as const
+
+const VERBOSE_MADAR_FIRST_WITH_TWO_READS_PAYLOAD = [
+  { type: 'system', subtype: 'init' },
+  {
+    type: 'assistant',
+    turn: 1,
+    message: {
+      content: [
+        { type: 'tool_use', name: 'mcp__madar__context_pack' },
+        {
+          type: 'tool_result',
+          tool_name: 'mcp__madar__context_pack',
+          content: JSON.stringify({
+            evidence: {
+              pack_confidence: 'high',
+              agent_directive: 'answer_from_pack',
+            },
+          }),
+        },
+        { type: 'tool_use', name: 'Read' },
+        { type: 'tool_use', name: 'Read' },
+      ],
+    },
+  },
+  MADAR_USAGE_PAYLOAD,
+] as const
+
 const VERBOSE_MADAR_MCP_RETRIEVE_AFTER_PRE_EXPLORATION_PAYLOAD = [
   { type: 'system', subtype: 'init' },
   {
@@ -857,6 +954,103 @@ describe('executeNativeAgentCompare', () => {
       expect(report.madar_trace).toEqual(expect.objectContaining({
         madar_mcp_call_count: 1,
         exploration_outcome: 'madar_invoked_with_followup_exploration',
+      }))
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('distinguishes Madar-first bounded traces from generic Madar invocation', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'How does runtime retrieval work?',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({
+            baseline: VERBOSE_BASELINE_PAYLOAD,
+            madar: VERBOSE_MADAR_FIRST_BOUNDED_PAYLOAD,
+          }),
+          now: () => new Date('2026-05-01T00:00:00Z'),
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport
+      expect(report.madar_trace).toEqual(expect.objectContaining({
+        first_madar_turn: 1,
+        context_pack_call_count: 1,
+        focused_follow_up_tool_call_count: 1,
+        broad_exploration_tool_call_count: 0,
+        agent_directive_seen: ['answer_from_pack'],
+        exploration_outcome: 'madar_first_bounded',
+      }))
+      expect(report.madar_trace?.exploration_summary).toContain('Madar-first bounded path')
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not classify low-confidence first packs as Madar-first bounded even when follow-up is answer-ready', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'How does runtime retrieval work?',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({
+            baseline: VERBOSE_BASELINE_PAYLOAD,
+            madar: VERBOSE_MADAR_FIRST_LOW_CONFIDENCE_THEN_READY_PAYLOAD,
+          }),
+          now: () => new Date('2026-05-01T00:00:00Z'),
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport
+      expect(report.madar_trace).toEqual(expect.objectContaining({
+        first_madar_turn: 1,
+        agent_directive_seen: ['explore_with_caution', 'answer_from_pack'],
+        exploration_outcome: 'madar_invoked',
+      }))
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not classify multiple focused reads after a pack as Madar-first bounded', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'How does runtime retrieval work?',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({
+            baseline: VERBOSE_BASELINE_PAYLOAD,
+            madar: VERBOSE_MADAR_FIRST_WITH_TWO_READS_PAYLOAD,
+          }),
+          now: () => new Date('2026-05-01T00:00:00Z'),
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport
+      expect(report.madar_trace).toEqual(expect.objectContaining({
+        first_madar_turn: 1,
+        focused_follow_up_tool_call_count: 2,
+        exploration_outcome: 'madar_invoked',
       }))
     } finally {
       rmSync(projectDir, { recursive: true, force: true })
@@ -1927,6 +2121,56 @@ describe('formatNativeAgentCompareSummary', () => {
     expect(summary).toContain('measurement_validity: valid')
     expect(summary).toContain('install_verified: true')
     expect(summary).toContain('madar_mcp_call_count: 2 (mcp__madar__retrieve)')
+  })
+
+  it('summarizes Madar-first bounded traces in suite output', () => {
+    const summary = formatNativeAgentCompareSummary(buildSummaryResult({
+      question: 'ideal trace case',
+      baselineTurns: 6,
+      madarTurns: 2,
+      baselineDurationMs: 6000,
+      madarDurationMs: 2000,
+      baselineInputTokens: 600,
+      madarInputTokens: 200,
+      reductions: {
+        num_turns: 3,
+        duration_ms: 3,
+        input_tokens: 3,
+        cost_usd: 1,
+      },
+      madarTrace: {
+        source: 'claude_messages_tool_use',
+        summary: '2 tool calls across 1 turn',
+        tool_call_count: 2,
+        tool_calls_by_name: {
+          'mcp__madar__context_pack': 1,
+          Read: 1,
+        },
+        per_turn: [
+          {
+            turn: 1,
+            tool_call_count: 2,
+            tools: ['mcp__madar__context_pack', 'Read'],
+            agent_directive_seen: ['answer_from_pack'],
+          },
+        ],
+        agent_directive_seen: ['answer_from_pack'],
+        madar_mcp_call_count: 1,
+        madar_mcp_calls_by_name: {
+          'mcp__madar__context_pack': 1,
+        },
+        first_madar_turn: 1,
+        context_pack_call_count: 1,
+        focused_follow_up_tool_call_count: 1,
+        broad_exploration_tool_call_count: 0,
+        broad_exploration_tool_calls_by_name: {},
+        exploration_outcome: 'madar_first_bounded',
+        exploration_summary: 'Madar-first bounded path: no broad exploration after the first Madar call.',
+      },
+    }))
+
+    expect(summary).toContain('madar_trace: madar_first_bounded')
+    expect(summary).toContain('outcomes: 1 madar-first bounded')
   })
 
   it('prints invalid measurement warnings when install is missing', () => {
