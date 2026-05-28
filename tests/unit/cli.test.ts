@@ -549,6 +549,8 @@ describe('cli parser', () => {
       questionsPath: null,
       outputDir: resolve('out/compare'),
       baselineMode: 'full',
+      perArmTimeoutSeconds: 600,
+      heartbeatIntervalMs: 30000,
       allowNoInstall: false,
       yes: false,
       limit: null,
@@ -561,6 +563,8 @@ describe('cli parser', () => {
       questionsPath: 'benchmark-questions.json',
       outputDir: resolve('out/compare'),
       baselineMode: 'full',
+      perArmTimeoutSeconds: 600,
+      heartbeatIntervalMs: 30000,
       allowNoInstall: false,
       yes: false,
       limit: null,
@@ -579,6 +583,10 @@ describe('cli parser', () => {
         'out/compare/custom',
         '--baseline-mode',
         'bounded',
+        '--per-arm-timeout',
+        '900',
+        '--heartbeat-interval-ms',
+        '15000',
         '--allow-no-install',
         '--yes',
         '--limit',
@@ -591,6 +599,8 @@ describe('cli parser', () => {
       questionsPath: null,
       outputDir: resolve('out/compare/custom'),
       baselineMode: 'bounded',
+      perArmTimeoutSeconds: 900,
+      heartbeatIntervalMs: 15000,
       allowNoInstall: true,
       yes: true,
       limit: 5,
@@ -613,6 +623,8 @@ describe('cli parser', () => {
       questionsPath: null,
       outputDir: resolve('out/compare'),
       baselineMode: 'pack_only',
+      perArmTimeoutSeconds: 600,
+      heartbeatIntervalMs: 30000,
       allowNoInstall: false,
       yes: false,
       limit: null,
@@ -634,6 +646,8 @@ describe('cli parser', () => {
     questionsPath: null,
     outputDir: resolve('out/compare'),
     baselineMode: 'full',
+    perArmTimeoutSeconds: 600,
+    heartbeatIntervalMs: 30000,
     allowNoInstall: false,
     yes: false,
     limit: null,
@@ -660,6 +674,12 @@ describe('cli parser', () => {
     )
     expect(() => parseCompareArgs(['how does login work', '--exec', 'claude -p "$(cat {prompt_file})"', '--output-dir', '../outside'])).toThrow(
       'Only paths inside out/ are permitted',
+    )
+    expect(() => parseCompareArgs(['how does login work', '--exec', 'claude -p "$(cat {prompt_file})"', '--per-arm-timeout', '0'])).toThrow(
+      'error: --per-arm-timeout must be a positive integer',
+    )
+    expect(() => parseCompareArgs(['how does login work', '--exec', 'claude -p "$(cat {prompt_file})"', '--heartbeat-interval-ms', '-1'])).toThrow(
+      'error: --heartbeat-interval-ms must be a non-negative integer',
     )
     expect(() => parseCompareArgs(['   ', '--exec', 'claude -p "$(cat {prompt_file})"'])).toThrow('--allow-no-install')
     expect(() => parseCompareArgs(['--exec', 'claude -p "$(cat {prompt_file})"'])).toThrow('--allow-no-install')
@@ -1055,6 +1075,8 @@ describe('cli main', () => {
     expect(help).toContain('    --questions PATH      load questions from a JSON file instead of a positional question')
     expect(help).toContain('    --output-dir DIR      compare output directory (default out/compare)')
     expect(help).toContain('    --baseline-mode MODE  full | bounded | pack_only | native_agent (default full; pack_only compares one bounded raw-context prompt against one compiled madar pack; native_agent runs --exec twice, uses Anthropic JSON usage when available, and otherwise saves answer-only artifacts)')
+    expect(help).toContain('    --per-arm-timeout S   per-arm timeout seconds for native_agent runs (default 600)')
+    expect(help).toContain('    --heartbeat-interval-ms N  stderr heartbeat interval for native_agent runs (default 30000; 0 disables)')
     expect(help).toContain('    --yes                 skip confirmation before running the paid prompt comparison')
     expect(help).toContain('    --limit N             cap processed prompts/questions for the comparison run')
     expect(help).toContain('    --why                 include retrieval-routing debug metadata in the compare summary and reports')
@@ -1111,6 +1133,10 @@ describe('cli main', () => {
         'out/compare/custom',
         '--baseline-mode',
         'bounded',
+        '--per-arm-timeout',
+        '900',
+        '--heartbeat-interval-ms',
+        '15000',
         '--yes',
         '--limit',
         '5',
@@ -1135,6 +1161,8 @@ describe('cli main', () => {
       questionsPath: 'benchmark-questions.json',
       outputDir: resolve('out/compare/custom'),
       baselineMode: 'bounded',
+      perArmTimeoutSeconds: 900,
+      heartbeatIntervalMs: 15000,
       allowNoInstall: false,
       yes: true,
       limit: 5,
@@ -1417,7 +1445,7 @@ describe('cli main', () => {
 
     expect(exitCode).toBe(2)
     expect(logs).toEqual([])
-    expect(errors).toEqual(['Usage: madar compare [question] --exec TEMPLATE [--graph path] [--questions PATH] [--output-dir DIR] [--baseline-mode MODE] [--allow-no-install] [--yes] [--limit N]'])
+    expect(errors).toEqual(['Usage: madar compare [question] --exec TEMPLATE [--graph path] [--questions PATH] [--output-dir DIR] [--baseline-mode MODE] [--per-arm-timeout S] [--heartbeat-interval-ms N] [--allow-no-install] [--yes] [--limit N]'])
   })
 
   it('prefers the explicit compare command over an implicit generate path match', async () => {

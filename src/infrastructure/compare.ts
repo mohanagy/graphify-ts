@@ -220,6 +220,8 @@ export interface GenerateCompareArtifactsInput {
   outputDir: string
   execTemplate: string
   baselineMode: CompareBaselineMode
+  perArmTimeoutSeconds?: number
+  heartbeatIntervalMs?: number
   allowNoInstall?: boolean
   why?: boolean
   corpusText?: string
@@ -2196,7 +2198,7 @@ export type NativeAgentRunStatus =
       result_path: string
     }
   | { kind: 'answer_only'; evidence: string | null; exit_code: number; stderr: string | null; result_path: string }
-  | { kind: 'runner_error'; evidence: string | null; exit_code: number | null; stderr: string | null }
+  | { kind: 'runner_error'; evidence: string | null; exit_code: number | null; stderr: string | null; failure_reason?: 'timed_out' }
 
 export type NativeAgentTokenRegressionMetric =
   | 'uncached_input_tokens'
@@ -2310,6 +2312,7 @@ export interface NativeAgentRunnerInput {
   promptFile: string
   outputFile: string
   command: string
+  signal?: AbortSignal
 }
 
 export interface NativeAgentRunnerResult {
@@ -2324,7 +2327,28 @@ export type NativeAgentRunner = (input: NativeAgentRunnerInput) => Promise<Nativ
 export interface ExecuteNativeAgentCompareDependencies {
   runner?: NativeAgentRunner
   now?: () => Date
+  writeStderr?: (message: string) => void
 }
+
+interface NativeAgentRunStateRecord {
+  phase: 'baseline_pending' | 'baseline_done' | 'baseline_timed_out' | 'madar_pending' | 'madar_done' | 'madar_timed_out'
+  arm: 'baseline' | 'madar'
+  updated_at: string
+  baseline?: {
+    kind: NativeAgentRunStatus['kind']
+    exit_code?: number | null
+    duration_ms?: number | null
+  }
+  madar?: {
+    kind: NativeAgentRunStatus['kind']
+    exit_code?: number | null
+    duration_ms?: number | null
+    failure_reason?: 'timed_out'
+  }
+}
+
+const DEFAULT_COMPARE_PER_ARM_TIMEOUT_SECONDS = 600
+const DEFAULT_COMPARE_HEARTBEAT_INTERVAL_MS = 30000
 
 const MADAR_SECTION_MARKER = '## madar'
 function readJsonObject(filePath: string): Record<string, unknown> | null {
@@ -2672,6 +2696,24 @@ async function defaultNativeAgentRunner(input: NativeAgentRunnerInput): Promise<
     const child = spawn(command.file, command.args, { shell: false, stdio: ['ignore', 'pipe', 'pipe'] })
     let stdout = ''
     let stderr = ''
+    let settled = false
+
+    const cleanupAbortListener = () => {
+      input.signal?.removeEventListener('abort', handleAbort)
+    }
+
+    const handleAbort = () => {
+      child.kill()
+    }
+
+    if (input.signal) {
+      if (input.signal.aborted) {
+        handleAbort()
+      } else {
+        input.signal.addEventListener('abort', handleAbort, { once: true })
+      }
+    }
+
     child.stdout?.on('data', (chunk: string | Buffer) => {
       stdout += chunk.toString()
     })
@@ -2679,11 +2721,139 @@ async function defaultNativeAgentRunner(input: NativeAgentRunnerInput): Promise<
       stderr += chunk.toString()
     })
     child.on('error', (error) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      cleanupAbortListener()
       rejectExecution(error)
     })
     child.on('close', (code) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      cleanupAbortListener()
       resolveExecution({ exitCode: code ?? 1, stdout, stderr, elapsedMs: Date.now() - startedAt })
     })
+  })
+}
+
+function perArmTimeoutMs(seconds: number | undefined): number {
+  if (seconds === undefined) {
+    return DEFAULT_COMPARE_PER_ARM_TIMEOUT_SECONDS * 1000
+  }
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new Error(`[madar compare] per-arm timeout must be > 0 seconds, got ${seconds}`)
+  }
+  return Math.max(1, Math.round(seconds * 1000))
+}
+
+function compareHeartbeatIntervalMs(intervalMs: number | undefined): number {
+  if (intervalMs === undefined) {
+    return DEFAULT_COMPARE_HEARTBEAT_INTERVAL_MS
+  }
+  if (!Number.isFinite(intervalMs) || intervalMs < 0) {
+    throw new Error(`[madar compare] heartbeat interval must be >= 0ms, got ${intervalMs}`)
+  }
+  return Math.round(intervalMs)
+}
+
+function runStateSnapshot(status: NativeAgentRunStatus | undefined): NativeAgentRunStateRecord['baseline'] | NativeAgentRunStateRecord['madar'] | undefined {
+  if (!status) {
+    return undefined
+  }
+  if (status.kind === 'succeeded') {
+    return {
+      kind: status.kind,
+      duration_ms: status.duration_ms,
+    }
+  }
+  if (status.kind === 'answer_only') {
+    return {
+      kind: status.kind,
+      exit_code: status.exit_code,
+    }
+  }
+  return {
+    kind: status.kind,
+    exit_code: status.exit_code,
+    ...(status.failure_reason ? { failure_reason: status.failure_reason } : {}),
+  }
+}
+
+function writeNativeAgentRunState(runStatePath: string, state: NativeAgentRunStateRecord): void {
+  writeFileSync(runStatePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+}
+
+function runStateDetails(statuses: {
+  baseline?: NativeAgentRunStatus
+  madar?: NativeAgentRunStatus
+}): Pick<NativeAgentRunStateRecord, 'baseline' | 'madar'> {
+  const details: Pick<NativeAgentRunStateRecord, 'baseline' | 'madar'> = {}
+  const baseline = runStateSnapshot(statuses.baseline)
+  if (baseline) {
+    details.baseline = baseline
+  }
+  const madar = runStateSnapshot(statuses.madar)
+  if (madar) {
+    details.madar = madar
+  }
+  return details
+}
+
+async function runNativeAgentArmWithTimeout(
+  runner: NativeAgentRunner,
+  input: NativeAgentRunnerInput,
+  timeoutMs: number,
+  heartbeatIntervalMs: number,
+  writeStderr: (message: string) => void,
+): Promise<{ kind: 'completed'; result: NativeAgentRunnerResult } | { kind: 'timed_out' }> {
+  const controller = new AbortController()
+  const runnerPromise = runner({ ...input, signal: controller.signal })
+
+  return await new Promise((resolveExecution, rejectExecution) => {
+    let settled = false
+    const startedAt = Date.now()
+    const heartbeatId = heartbeatIntervalMs > 0
+      ? setInterval(() => {
+          writeStderr(`[madar compare] ${input.mode} arm running... ${Date.now() - startedAt}ms elapsed\n`)
+        }, heartbeatIntervalMs)
+      : null
+    const cleanup = () => {
+      if (heartbeatId !== null) {
+        clearInterval(heartbeatId)
+      }
+      clearTimeout(timeoutId)
+    }
+    const timeoutId = setTimeout(() => {
+      if (settled) {
+        return
+      }
+      settled = true
+      controller.abort()
+      cleanup()
+      resolveExecution({ kind: 'timed_out' } as const)
+    }, timeoutMs)
+
+    runnerPromise.then(
+      (result) => {
+        if (settled) {
+          return
+        }
+        settled = true
+        cleanup()
+        resolveExecution({ kind: 'completed', result } as const)
+      },
+      (error) => {
+        if (settled) {
+          return
+        }
+        settled = true
+        cleanup()
+        rejectExecution(error)
+      },
+    )
   })
 }
 
@@ -2930,6 +3100,9 @@ export async function executeNativeAgentCompare(
   const questions = resolveCompareQuestions(input)
   const outputDir = validateGraphOutputPath(input.outputDir)
   const now = dependencies.now ?? (() => new Date())
+  const writeStderr = dependencies.writeStderr ?? ((message: string) => process.stderr.write(message))
+  const timeoutMs = perArmTimeoutMs(input.perArmTimeoutSeconds)
+  const heartbeatIntervalMs = compareHeartbeatIntervalMs(input.heartbeatIntervalMs)
   const timestamp = now()
   const outputRoot = createCompareOutputRoot(outputDir, timestamp)
   const runner = dependencies.runner ?? defaultNativeAgentRunner
@@ -2952,6 +3125,7 @@ export async function executeNativeAgentCompare(
     const madarAnswerPath = answerFilePath(questionDir, 'madar')
     const reportPath = join(questionDir, 'report.json')
     const shareSafeReportPath = join(questionDir, 'report.share-safe.json')
+    const runStatePath = join(questionDir, 'run-state.json')
 
     const reportShell: NativeAgentCompareReport = {
       baseline_mode: 'native_agent',
@@ -2999,6 +3173,11 @@ export async function executeNativeAgentCompare(
         prompt_file: promptFile,
       },
     }
+    writeNativeAgentRunState(runStatePath, {
+      phase: 'baseline_pending',
+      arm: 'baseline',
+      updated_at: now().toISOString(),
+    })
 
     // Step 1: snapshot madar artifacts and run baseline.
     const stamp = timestamp.toISOString().replace(/[^0-9]/g, '').slice(0, 14)
@@ -3014,12 +3193,39 @@ export async function executeNativeAgentCompare(
         outputFile: baselineAnswerPath,
       })
       let baselineRun: NativeAgentRunnerResult | null = null
+      let baselineTimedOut = false
       try {
-        baselineRun = await runner({ mode: 'baseline', question, promptFile, outputFile: baselineAnswerPath, command: baselineCommand })
+        const baselineExecution = await runNativeAgentArmWithTimeout(
+          runner,
+          { mode: 'baseline', question, promptFile, outputFile: baselineAnswerPath, command: baselineCommand },
+          timeoutMs,
+          heartbeatIntervalMs,
+          writeStderr,
+        )
+        if (baselineExecution.kind === 'timed_out') {
+          baselineTimedOut = true
+        } else {
+          baselineRun = baselineExecution.result
+        }
       } catch (error) {
         baselineCrashed = error
       }
-      if (baselineRun !== null) {
+      if (baselineTimedOut) {
+        reportShell.baseline = {
+          kind: 'runner_error',
+          evidence: `Timed out after ${timeoutMs}ms`,
+          exit_code: null,
+          stderr: null,
+          failure_reason: 'timed_out',
+        }
+        ensureCompareAnswerFile(baselineAnswerPath, '')
+        writeNativeAgentRunState(runStatePath, {
+          phase: 'baseline_timed_out',
+          arm: 'baseline',
+          updated_at: now().toISOString(),
+          ...runStateDetails({ baseline: reportShell.baseline }),
+        })
+      } else if (baselineRun !== null) {
         baselineToolCallCounts = extractNativeAgentToolCallCounts(baselineRun.stdout)
         const event = parseAnthropicResultEvent(baselineRun.stdout)
         if (event !== null) {
@@ -3063,6 +3269,12 @@ export async function executeNativeAgentCompare(
                 }
           ensureCompareAnswerFile(baselineAnswerPath, baselineRun.stdout)
         }
+        writeNativeAgentRunState(runStatePath, {
+                phase: 'baseline_done',
+                arm: 'baseline',
+                updated_at: now().toISOString(),
+                ...runStateDetails({ baseline: reportShell.baseline }),
+        })
       }
     } finally {
       restoreMadarArtifacts(snapshot)
@@ -3076,7 +3288,21 @@ export async function executeNativeAgentCompare(
       throw baselineCrashed instanceof Error ? baselineCrashed : new Error(String(baselineCrashed))
     }
 
+    if (reportShell.baseline.kind === 'runner_error' && reportShell.baseline.failure_reason === 'timed_out') {
+      writeStderr(`[madar compare] baseline arm timed out after ${timeoutMs}ms\n`)
+      reportShell.completed_at = now().toISOString()
+      writeNativeAgentReport(reportShell)
+      reports.push(reportShell)
+      continue
+    }
+
     // Step 2: run madar (artifacts are restored, MCP server is in place).
+    writeNativeAgentRunState(runStatePath, {
+      phase: 'madar_pending',
+      arm: 'madar',
+      updated_at: now().toISOString(),
+      ...runStateDetails({ baseline: reportShell.baseline }),
+    })
     const madarCommand = expandCompareExecTemplate(input.execTemplate, {
       promptFile,
       question,
@@ -3086,7 +3312,32 @@ export async function executeNativeAgentCompare(
     let madarRun: NativeAgentRunnerResult | null = null
     let madarToolCallCounts: NativeAgentToolCallCountsEntry | null = null
     try {
-      madarRun = await runner({ mode: 'madar', question, promptFile, outputFile: madarAnswerPath, command: madarCommand })
+      const madarExecution = await runNativeAgentArmWithTimeout(
+        runner,
+        { mode: 'madar', question, promptFile, outputFile: madarAnswerPath, command: madarCommand },
+        timeoutMs,
+        heartbeatIntervalMs,
+        writeStderr,
+      )
+      if (madarExecution.kind === 'timed_out') {
+        reportShell.madar = {
+          kind: 'runner_error',
+          evidence: `Timed out after ${timeoutMs}ms`,
+          exit_code: null,
+          stderr: null,
+          failure_reason: 'timed_out',
+        }
+        ensureCompareAnswerFile(madarAnswerPath, '')
+        writeNativeAgentRunState(runStatePath, {
+          phase: 'madar_timed_out',
+          arm: 'madar',
+          updated_at: now().toISOString(),
+          ...runStateDetails({ baseline: reportShell.baseline, madar: reportShell.madar }),
+        })
+        writeStderr(`[madar compare] madar arm timed out after ${timeoutMs}ms\n`)
+      } else {
+        madarRun = madarExecution.result
+      }
     } catch (error) {
       reportShell.madar = {
         kind: 'runner_error',
@@ -3153,6 +3404,12 @@ export async function executeNativeAgentCompare(
               }
         ensureCompareAnswerFile(madarAnswerPath, madarRun.stdout)
       }
+      writeNativeAgentRunState(runStatePath, {
+              phase: 'madar_done',
+              arm: 'madar',
+              updated_at: now().toISOString(),
+              ...runStateDetails({ baseline: reportShell.baseline, madar: reportShell.madar }),
+      })
     }
 
     if (baselineToolCallCounts !== null && madarToolCallCounts !== null) {
