@@ -627,6 +627,104 @@ describe('buildGraphSummary', () => {
     })
   })
 
+  it('admits metadata-less worker starts from camel-cased labels and files', () => {
+    const graph = new KnowledgeGraph(true)
+
+    graph.addNode('registration', {
+      label: 'QueueRegistrar.register',
+      source_file: 'src/queue/register.ts',
+      source_location: 'L1',
+      file_type: 'code',
+      community: 0,
+      source_domain: 'production',
+    })
+    graph.addNode('worker', {
+      label: 'ReportWorker.process',
+      source_file: 'src/runtime/reportWorker.ts',
+      source_location: 'L1',
+      file_type: 'code',
+      community: 0,
+      source_domain: 'production',
+    })
+    graph.addNode('repository', {
+      label: 'ReportRepository.save',
+      source_file: 'src/reports/report.repository.ts',
+      source_location: 'L1',
+      file_type: 'code',
+      community: 0,
+      source_domain: 'production',
+      framework_role: 'repository',
+    })
+
+    graph.addEdge('registration', 'worker', {
+      relation: 'calls',
+      confidence: 'EXTRACTED',
+      source_file: 'src/queue/register.ts',
+    })
+    graph.addEdge('worker', 'repository', {
+      relation: 'calls',
+      confidence: 'EXTRACTED',
+      source_file: 'src/runtime/reportWorker.ts',
+    })
+
+    const summary = buildGraphSummary(graph)
+
+    expect(summary.runtime_paths).toContainEqual({
+      from: 'ReportWorker.process',
+      to: 'ReportRepository.save',
+      hops: 1,
+    })
+  })
+
+  it('admits metadata-less job starts from source-file hints', () => {
+    const graph = new KnowledgeGraph(true)
+
+    graph.addNode('registration', {
+      label: 'QueueRegistrar.register',
+      source_file: 'src/queue/register.ts',
+      source_location: 'L1',
+      file_type: 'code',
+      community: 0,
+      source_domain: 'production',
+    })
+    graph.addNode('job', {
+      label: 'SendEmail.run',
+      source_file: 'src/jobs/email-job.ts',
+      source_location: 'L1',
+      file_type: 'code',
+      community: 0,
+      source_domain: 'production',
+    })
+    graph.addNode('gateway', {
+      label: 'MailerGateway.deliver',
+      source_file: 'src/mail/mailer.gateway.ts',
+      source_location: 'L1',
+      file_type: 'code',
+      community: 0,
+      source_domain: 'production',
+      framework_role: 'gateway',
+    })
+
+    graph.addEdge('registration', 'job', {
+      relation: 'enqueues_job',
+      confidence: 'EXTRACTED',
+      source_file: 'src/queue/register.ts',
+    })
+    graph.addEdge('job', 'gateway', {
+      relation: 'calls',
+      confidence: 'EXTRACTED',
+      source_file: 'src/jobs/email-job.ts',
+    })
+
+    const summary = buildGraphSummary(graph)
+
+    expect(summary.runtime_paths).toContainEqual({
+      from: 'SendEmail.run',
+      to: 'MailerGateway.deliver',
+      hops: 1,
+    })
+  })
+
   it('keeps queue-backed runtime paths detectable even when reverse runtime edges exist', () => {
     const graph = makeBidirectionalRuntimePipelineGraph()
     const summary = buildGraphSummary(graph)

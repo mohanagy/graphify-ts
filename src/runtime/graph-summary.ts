@@ -135,6 +135,7 @@ function normalizedRuntimeStartText(...values: unknown[]): string {
   return values
     .map(normalizeString)
     .join(' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
@@ -157,7 +158,12 @@ function isExplicitRuntimeStart(attributes: Record<string, unknown>): boolean {
     attributes.label,
     attributes.source_file,
   )
-  return /\b(worker|processor|consumer|queue consumer|event handler)\b/.test(nodeText)
+  if (/\b(worker|processor|consumer|queue consumer|event handler)\b/.test(nodeText)) {
+    return true
+  }
+
+  const sourceFileText = normalizedRuntimeStartText(attributes.source_file)
+  return /\bjobs?\b|\btasks?\b/.test(sourceFileText)
 }
 
 function normalizedFramework(attributes: Record<string, unknown>): string {
