@@ -146,6 +146,70 @@ const GOVALIDATE_MADAR_TOKEN_REGRESSION_PAYLOAD = {
   },
 }
 
+const BASELINE_FULL_WIN_PAYLOAD = {
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  duration_ms: 80000,
+  num_turns: 6,
+  result: 'baseline answer',
+  total_cost_usd: 0.8,
+  usage: {
+    input_tokens: 20000,
+    cache_creation_input_tokens: 30000,
+    cache_read_input_tokens: 100000,
+    output_tokens: 1200,
+  },
+}
+
+const MADAR_FULL_WIN_PAYLOAD = {
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  duration_ms: 30000,
+  num_turns: 2,
+  result: 'madar answer',
+  total_cost_usd: 0.3,
+  usage: {
+    input_tokens: 10000,
+    cache_creation_input_tokens: 5000,
+    cache_read_input_tokens: 50000,
+    output_tokens: 1000,
+  },
+}
+
+const BASELINE_NO_TOOL_COUNT_PAYLOAD = {
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  duration_ms: 30000,
+  num_turns: 3,
+  result: 'baseline answer',
+  total_cost_usd: 0.3,
+  usage: {
+    input_tokens: 10000,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+    output_tokens: 1000,
+  },
+}
+
+const MADAR_NO_TOOL_COUNT_LATENCY_REGRESSION_PAYLOAD = {
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  duration_ms: 60000,
+  num_turns: 3,
+  result: 'madar answer',
+  total_cost_usd: 0.3,
+  usage: {
+    input_tokens: 10000,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+    output_tokens: 1000,
+  },
+}
+
 function toolUses(name: string, count: number): Array<{ type: 'tool_use'; name: string }> {
   return Array.from({ length: count }, () => ({ type: 'tool_use', name }))
 }
@@ -323,6 +387,53 @@ const VERBOSE_GOVALIDATE_MADAR_TOKEN_REGRESSION_PAYLOAD = [
     },
   },
   GOVALIDATE_MADAR_TOKEN_REGRESSION_PAYLOAD,
+] as const
+
+const VERBOSE_BASELINE_FULL_WIN_PAYLOAD = [
+  { type: 'system', subtype: 'init' },
+  {
+    type: 'assistant',
+    turn: 1,
+    message: {
+      content: [
+        ...toolUses('Read', 6),
+        ...toolUses('Grep', 4),
+      ],
+    },
+  },
+  BASELINE_FULL_WIN_PAYLOAD,
+] as const
+
+const VERBOSE_MADAR_FULL_WIN_PAYLOAD = [
+  { type: 'system', subtype: 'init' },
+  {
+    type: 'assistant',
+    turn: 1,
+    message: {
+      content: [
+        { type: 'tool_use', name: 'mcp__madar__retrieve' },
+      ],
+    },
+  },
+  MADAR_FULL_WIN_PAYLOAD,
+] as const
+
+const RESULT_ONLY_BASELINE_NO_TOOL_COUNT_PAYLOAD = [
+  BASELINE_NO_TOOL_COUNT_PAYLOAD,
+] as const
+
+const VERBOSE_MADAR_NO_TOOL_COUNT_LATENCY_REGRESSION_PAYLOAD = [
+  { type: 'system', subtype: 'init' },
+  {
+    type: 'assistant',
+    turn: 1,
+    message: {
+      content: [
+        { type: 'tool_use', name: 'mcp__madar__retrieve' },
+      ],
+    },
+  },
+  MADAR_NO_TOOL_COUNT_LATENCY_REGRESSION_PAYLOAD,
 ] as const
 
 const VERBOSE_MADAR_MCP_RETRIEVE_WITH_FOLLOWUP_EXPLORATION_PAYLOAD = [
@@ -1211,6 +1322,95 @@ describe('executeNativeAgentCompare', () => {
     }
   })
 
+  it('classifies native-agent benchmark outcomes as full wins only when every measured gate passes', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'How idea report is being generated',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({
+            baseline: VERBOSE_BASELINE_FULL_WIN_PAYLOAD,
+            madar: VERBOSE_MADAR_FULL_WIN_PAYLOAD,
+          }),
+          now: () => new Date('2026-05-27T00:30:00Z'),
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport
+      const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+      const benchmarkOutcome = savedReport.benchmark_outcome as Record<string, unknown> | undefined
+      const summary = formatNativeAgentCompareSummary(result)
+
+      expect(report.measurement_validity).toBe('valid')
+      expect(report.tool_call_counts?.baseline.total).toBe(10)
+      expect(report.tool_call_counts?.madar.total).toBe(1)
+      expect(savedReport.token_regression).toBe(false)
+      expect(benchmarkOutcome).toEqual(expect.objectContaining({
+        outcome: 'full_win',
+        checks: expect.objectContaining({
+          routing_tool_latency: 'win',
+          token: 'win',
+          fresh_token: 'win',
+          cost: 'win',
+          turns: 'win',
+        }),
+      }))
+      expect(summary).toContain('benchmark_outcome: full_win')
+      expect(summary).toContain('turns win')
+      expect(summary).toContain('fresh_token win')
+      expect(summary).toContain('cost win')
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('marks routing latency as a loss when latency regresses and tool counts are unavailable', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'How idea report is being generated',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({
+            baseline: RESULT_ONLY_BASELINE_NO_TOOL_COUNT_PAYLOAD,
+            madar: VERBOSE_MADAR_NO_TOOL_COUNT_LATENCY_REGRESSION_PAYLOAD,
+          }),
+          now: () => new Date('2026-05-27T01:00:00Z'),
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport
+      const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
+      const benchmarkOutcome = savedReport.benchmark_outcome as Record<string, unknown> | undefined
+
+      expect(report.measurement_validity).toBe('valid')
+      expect(report.tool_call_counts).toBeUndefined()
+      expect(benchmarkOutcome).toEqual(expect.objectContaining({
+        outcome: 'regression',
+        checks: expect.objectContaining({
+          routing_tool_latency: 'loss',
+          token: 'flat',
+          fresh_token: 'flat',
+          cost: 'flat',
+          turns: 'flat',
+        }),
+      }))
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
   it('separates routing wins from token-reduction proof for GoValidate-style token regressions', async () => {
     const { projectDir, graphPath, outputDir } = makeFixtureProject()
     try {
@@ -1234,6 +1434,7 @@ describe('executeNativeAgentCompare', () => {
       const report = result.reports[0] as NativeAgentCompareReport
       const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as Record<string, unknown>
       const claimAssessment = savedReport.claim_assessment as Record<string, unknown> | undefined
+      const benchmarkOutcome = savedReport.benchmark_outcome as Record<string, unknown> | undefined
       const summary = formatNativeAgentCompareSummary(result)
 
       expect(report.measurement_validity).toBe('valid')
@@ -1252,10 +1453,30 @@ describe('executeNativeAgentCompare', () => {
           status: 'not_proven',
         }),
       }))
+      expect(benchmarkOutcome).toEqual(expect.objectContaining({
+        outcome: 'partial_win',
+        checks: expect.objectContaining({
+          routing_tool_latency: 'win',
+          token: 'loss',
+          fresh_token: 'loss',
+          cost: 'loss',
+          turns: 'loss',
+        }),
+      }))
+      expect(benchmarkOutcome?.evidence).toEqual(expect.arrayContaining([
+        expect.stringContaining('turns regressed'),
+        expect.stringContaining('fresh-token regression'),
+        expect.stringContaining('cost regressed'),
+      ]))
       expect(summary).toContain('claim_assessment: routing_efficiency improved')
       expect(summary).toContain('token_reduction not_proven')
+      expect(summary).toContain('benchmark_outcome: partial_win')
+      expect(summary).toContain('turns loss')
+      expect(summary).toContain('fresh_token loss')
+      expect(summary).toContain('cost loss')
       expect(summary).toContain('provider input grew')
       expect(summary).toContain('fresh-token regression')
+      expect(summary).toContain('cost_usd')
     } finally {
       rmSync(projectDir, { recursive: true, force: true })
     }
