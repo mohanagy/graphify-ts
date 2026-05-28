@@ -204,9 +204,166 @@ function compactAnswerReadyPack(pack: JsonRecord, trimmedFields: string[]): void
     }
   }
 
+  preserveTrimmedRuntimePrimaryPathPreview(pack, trimmedFields)
   trimArrayField(pack, 'matched_nodes', ANSWER_READY_MATCHED_NODE_CAP, trimmedFields)
   trimArrayField(pack, 'relationships', ANSWER_READY_RELATIONSHIP_CAP, trimmedFields)
   trimArrayField(pack, 'community_context', ANSWER_READY_COMMUNITY_CAP, trimmedFields)
+}
+
+function preserveTrimmedRuntimePrimaryPathPreview(pack: JsonRecord, trimmedFields: string[]): void {
+  const executionSlice = asJsonRecord(pack.execution_slice)
+  const primaryPath = executionSlice ? asJsonRecord(executionSlice.primary_path) : null
+  const primarySteps = primaryPath ? asUnknownArray(primaryPath.steps) : []
+  const matchedNodes = asUnknownArray(pack.matched_nodes)
+  if (primarySteps.length === 0 || matchedNodes.length <= ANSWER_READY_MATCHED_NODE_CAP) {
+    return
+  }
+
+  const primaryLabels = primarySteps.flatMap((step) => {
+    const record = asJsonRecord(step)
+    return typeof record?.label === 'string' && record.label.length > 0 ? [record.label] : []
+  })
+  if (primaryLabels.length === 0) {
+    return
+  }
+
+  const keptLabels = new Set(
+    matchedNodes
+      .slice(0, ANSWER_READY_MATCHED_NODE_CAP)
+      .flatMap((node) => {
+        const record = asJsonRecord(node)
+        return typeof record?.label === 'string' && record.label.length > 0 ? [record.label] : []
+      }),
+  )
+  const matchedByLabel = new Map<string, JsonRecord>()
+  for (const node of matchedNodes) {
+    const record = asJsonRecord(node)
+    if (!record || typeof record.label !== 'string' || record.label.length === 0 || matchedByLabel.has(record.label)) {
+      continue
+    }
+    matchedByLabel.set(record.label, record)
+  }
+
+  const preview = primaryLabels
+    .filter((label) => !keptLabels.has(label))
+    .flatMap((label) => {
+      const node = matchedByLabel.get(label)
+      if (!node || typeof node.source_file !== 'string' || node.source_file.length === 0) {
+        return []
+      }
+      return [{
+        ...(typeof node.node_id === 'string' && node.node_id.length > 0 ? { node_id: node.node_id } : {}),
+        label,
+        source_file: node.source_file,
+      }]
+    })
+
+  if (preview.length === 0) {
+    return
+  }
+
+  const expandable = asUnknownArray(pack.expandable)
+  expandable.unshift({
+    kind: 'nodes',
+    handle_id: 'runtime-primary-path',
+    evidence_class: 'supporting',
+    count: preview.length,
+    preview: preview.slice(0, 3),
+    follow_up: {
+      kind: 'context_pack',
+      task_kind: 'explain',
+      evidence_class: 'supporting',
+      focus_files: [...new Set(preview.map((entry) => entry.source_file))],
+      focus_ranges: [],
+    },
+  })
+  pack.expandable = expandable
+  trimmedFields.push('pack.matched_nodes.primary_path_promoted_to_expandable')
+}
+
+function preserveFinalRuntimePrimaryPathPreview(
+  payload: JsonRecord,
+  pack: JsonRecord,
+  matchedNodeCap: number,
+  trimmedFields: string[],
+): void {
+  const executionSlice = asJsonRecord(pack.execution_slice)
+  const primaryPath = executionSlice ? asJsonRecord(executionSlice.primary_path) : null
+  const primarySteps = primaryPath ? asUnknownArray(primaryPath.steps) : []
+  const matchedNodes = asUnknownArray(pack.matched_nodes)
+  if (primarySteps.length === 0 || matchedNodes.length <= matchedNodeCap) {
+    return
+  }
+
+  const primaryLabels = primarySteps.flatMap((step) => {
+    const record = asJsonRecord(step)
+    return typeof record?.label === 'string' && record.label.length > 0 ? [record.label] : []
+  })
+  if (primaryLabels.length === 0) {
+    return
+  }
+
+  const keptLabels = new Set(
+    matchedNodes
+      .slice(0, matchedNodeCap)
+      .flatMap((node) => {
+        const record = asJsonRecord(node)
+        return typeof record?.label === 'string' && record.label.length > 0 ? [record.label] : []
+      }),
+  )
+  const existingPreviewLabels = new Set(
+    asUnknownArray(payload.expandable).flatMap((entry) => {
+      const record = asJsonRecord(entry)
+      return asUnknownArray(record?.preview).flatMap((preview) => {
+        const previewRecord = asJsonRecord(preview)
+        return typeof previewRecord?.label === 'string' && previewRecord.label.length > 0 ? [previewRecord.label] : []
+      })
+    }),
+  )
+  const matchedByLabel = new Map<string, JsonRecord>()
+  for (const node of matchedNodes) {
+    const record = asJsonRecord(node)
+    if (!record || typeof record.label !== 'string' || record.label.length === 0 || matchedByLabel.has(record.label)) {
+      continue
+    }
+    matchedByLabel.set(record.label, record)
+  }
+
+  const preview = primaryLabels
+    .filter((label) => !keptLabels.has(label) && !existingPreviewLabels.has(label))
+    .flatMap((label) => {
+      const node = matchedByLabel.get(label)
+      if (!node || typeof node.source_file !== 'string' || node.source_file.length === 0) {
+        return []
+      }
+      return [{
+        ...(typeof node.node_id === 'string' && node.node_id.length > 0 ? { node_id: node.node_id } : {}),
+        label,
+        source_file: node.source_file,
+      }]
+    })
+
+  if (preview.length === 0) {
+    return
+  }
+
+  const expandable = asUnknownArray(payload.expandable)
+  expandable.unshift({
+    kind: 'nodes',
+    handle_id: `runtime-primary-path-${matchedNodeCap}`,
+    evidence_class: 'supporting',
+    count: preview.length,
+    preview: preview.slice(0, 3),
+    follow_up: {
+      kind: 'context_pack',
+      task_kind: 'explain',
+      evidence_class: 'supporting',
+      focus_files: [...new Set(preview.map((entry) => entry.source_file))],
+      focus_ranges: [],
+    },
+  })
+  payload.expandable = expandable
+  trimmedFields.push(`pack.matched_nodes.primary_path_promoted_to_expandable_${matchedNodeCap}`)
 }
 
 function estimatedJsonTokens(payload: JsonRecord): number {
@@ -273,6 +430,13 @@ export function buildAnswerReadyPackSchema(
       trimmedFields.push('pack.confidence_score promoted')
     }
     compactAnswerReadyPack(pack, trimmedFields)
+    const packExpandable = asUnknownArray(pack.expandable)
+    const payloadExpandable = asUnknownArray(payload.expandable)
+    if (payloadExpandable.length === 0 && packExpandable.length > 0) {
+      payload.expandable = packExpandable
+      delete pack.expandable
+      trimmedFields.push('pack.expandable promoted')
+    }
   }
 
   trimArrayField(payload, 'workflow_centers', ANSWER_READY_WORKFLOW_CENTER_CAP, trimmedFields)
@@ -314,6 +478,7 @@ export function buildAnswerReadyPackSchema(
   }
 
   if (pack) {
+    preserveFinalRuntimePrimaryPathPreview(payload, pack, 4, trimmedFields)
     trimArrayField(pack, 'matched_nodes', 4, trimmedFields)
     trimArrayField(pack, 'relationships', 4, trimmedFields)
     trimArrayField(pack, 'community_context', 3, trimmedFields)
