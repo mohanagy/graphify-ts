@@ -70,6 +70,8 @@ function expectMarkdownRoutingTable(content: string): void {
   expect(normalized).toContain('`relevant_files`')
   expect(normalized).toContain('`graph_summary`')
   expect(normalized).toContain('Do not run ToolSearch before calling a Madar tool')
+  expect(normalized).toContain('Inspect `evidence.pack_confidence`, `recommended_first_read`, and `evidence.agent_directive` before deciding whether to read files.')
+  expect(normalized).toContain('If `evidence.pack_confidence` is low, make one focused follow-up Madar call before broad raw search.')
 }
 
 function expectPlainRoutingGuide(content: string): void {
@@ -80,6 +82,8 @@ function expectPlainRoutingGuide(content: string): void {
   expect(normalized).toContain('relevant_files for "which files should I open first?"')
   expect(normalized).toContain('graph_summary for "give me a repo overview?"')
   expect(normalized).toContain('Do not run ToolSearch before calling a Madar tool')
+  expect(normalized).toContain('Inspect evidence.pack_confidence, recommended_first_read, and evidence.agent_directive before deciding whether to read files.')
+  expect(normalized).toContain('If evidence.pack_confidence is low, make one focused follow-up Madar call before broad raw search.')
 }
 
 function expectMarkdownPackRoutingTable(content: string): void {
@@ -99,6 +103,8 @@ function expectMarkdownPackRoutingTable(content: string): void {
   expect(normalized).toContain('`risk_map` before editing')
   expect(normalized).toContain('`implementation_checklist` for edit order and validation checkpoints')
   expect(normalized).toContain('Do not run ToolSearch before calling a Madar command or graph tool')
+  expect(normalized).toContain('Inspect `evidence.pack_confidence`, `recommended_first_read`, and `evidence.agent_directive` before deciding whether to read files.')
+  expect(normalized).toContain('If `evidence.pack_confidence` is low, make one focused follow-up Madar call before broad raw search.')
 }
 
 function expectPlainPackRoutingGuide(content: string): void {
@@ -109,6 +115,8 @@ function expectPlainPackRoutingGuide(content: string): void {
   expect(normalized).toContain('relevant_files when MCP graph tools are available; otherwise madar pack "<task or question>" --task explain for "which files should I open first?"')
   expect(normalized).toContain('graph_summary when MCP graph tools are available; otherwise madar pack "<task or question>" --task explain for "give me a repo overview?"')
   expect(normalized).toContain('Do not run ToolSearch before calling a Madar command or graph tool')
+  expect(normalized).toContain('Inspect evidence.pack_confidence, recommended_first_read, and evidence.agent_directive before deciding whether to read files.')
+  expect(normalized).toContain('If evidence.pack_confidence is low, make one focused follow-up Madar call before broad raw search.')
 }
 
 describe('install hook payload', () => {

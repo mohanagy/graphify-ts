@@ -268,18 +268,18 @@ function strictSkillOverrideRule(markdown: boolean): string {
 }
 function strictContextPackStopRule(markdown: boolean): string {
   if (markdown) {
-    return 'After calling a Madar tool, inspect the response\'s `evidence.agent_directive`: `answer_from_pack` means answer using the pack snippets and you may `Read` at most ONE file for verification; `verify_one_targeted_file` means answer using the pack and `Read` at most one specific supporting file; `explore_with_caution` means the pack is partial and permits at most ONE targeted `Glob` or `Grep` scoped to a single directory.'
+    return 'After calling a Madar tool, inspect the response\'s `evidence.pack_confidence`, `recommended_first_read`, and `evidence.agent_directive`: `answer_from_pack` means answer using the pack snippets and do not read files unless `recommended_first_read` names a specific file; `verify_one_targeted_file` means answer using the pack and `Read` at most one file from `recommended_first_read`; `explore_with_caution` means the pack is low-confidence or partial.'
   }
 
-  return 'after calling a Madar tool, inspect the response\'s evidence.agent_directive: answer_from_pack means answer using the pack snippets and you may Read at most ONE file for verification; verify_one_targeted_file means answer using the pack and Read at most one specific supporting file; explore_with_caution means the pack is partial and permits at most ONE targeted Glob or Grep scoped to a single directory'
+  return 'after calling a Madar tool, inspect the response\'s evidence.pack_confidence, recommended_first_read, and evidence.agent_directive: answer_from_pack means answer using the pack snippets and do not read files unless recommended_first_read names a specific file; verify_one_targeted_file means answer using the pack and Read at most one file from recommended_first_read; explore_with_caution means the pack is low-confidence or partial'
 }
 
 function strictContextPackExpandRule(markdown: boolean): string {
   if (markdown) {
-    return 'Only widen exploration for deeper verification when `evidence.agent_directive` is `explore_with_caution`; if `missing_context` or `missing_semantic` is still non-empty, use at most ONE targeted `Glob` or `Grep` scoped to a single directory before answering.'
+    return 'If `evidence.pack_confidence` is low or `missing_context` / `missing_semantic` is non-empty, make ONE focused follow-up Madar call (`context_expand`, `retrieve`, or `relevant_files`) before raw search; only when the follow-up still says `explore_with_caution`, use at most ONE targeted `Glob` or `Grep` scoped to a single directory before answering.'
   }
 
-  return 'only widen exploration for deeper verification when evidence.agent_directive is explore_with_caution; if missing_context or missing_semantic is still non-empty, use at most ONE targeted Glob or Grep scoped to a single directory before answering'
+  return 'if evidence.pack_confidence is low or missing_context / missing_semantic is non-empty, make ONE focused follow-up Madar call (context_expand, retrieve, or relevant_files) before raw search; only when the follow-up still says explore_with_caution, use at most ONE targeted Glob or Grep scoped to a single directory before answering'
 }
 
 function strictGraphReportFallbackRule(markdown: boolean): string {

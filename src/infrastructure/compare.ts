@@ -117,6 +117,7 @@ export interface CompareMadarTraceTurnSummary {
 type CompareMadarTraceOutcome =
   | 'no_install'
   | 'madar_available_but_unused'
+  | 'madar_first_bounded'
   | 'madar_invoked'
   | 'madar_invoked_after_broad_exploration'
   | 'madar_invoked_with_followup_exploration'
@@ -892,6 +893,19 @@ function traceToolCountSummary(toolCallsByName: Record<string, number>): string 
     .join(', ')
 }
 
+function traceHasAnswerReadyDirectiveOnFirstMadarTurn(
+  perTurn: CompareMadarTraceTurnSummary[],
+  firstMadarTurn: number | null,
+): boolean {
+  if (firstMadarTurn === null) {
+    return false
+  }
+  const firstTurn = perTurn.find((turn) => turn.turn === firstMadarTurn)
+  return (firstTurn?.agent_directive_seen ?? []).some((directive) =>
+    directive === 'answer_from_pack' || directive === 'verify_one_targeted_file',
+  )
+}
+
 function analyzeMadarTraceExploration(perTurn: CompareMadarTraceTurnSummary[]): {
   madar_mcp_call_count: number
   madar_mcp_calls_by_name: Record<string, number>
@@ -1038,6 +1052,25 @@ function analyzeMadarTraceExploration(perTurn: CompareMadarTraceTurnSummary[]): 
       summaryParts.push(focusedSummary)
     }
     summaryParts.push('no broad exploration after the first Madar call.')
+    if (
+      firstMadarTurn !== null
+      && firstMadarTurn <= 2
+      && contextPackCallCount > 0
+      && focusedFollowUpToolCallCount <= 1
+      && traceHasAnswerReadyDirectiveOnFirstMadarTurn(perTurn, firstMadarTurn)
+    ) {
+      return {
+        madar_mcp_call_count: madarMcpCallCount,
+        madar_mcp_calls_by_name: sortedMadarMcpCallsByName,
+        ...baseTraceFields,
+        context_pack_call_count: contextPackCallCount,
+        focused_follow_up_tool_call_count: focusedFollowUpToolCallCount,
+        broad_exploration_tool_call_count: 0,
+        broad_exploration_tool_calls_by_name: {},
+        exploration_outcome: 'madar_first_bounded',
+        exploration_summary: `Madar-first bounded path: ${summaryParts.join('; ')}`,
+      }
+    }
     return {
       madar_mcp_call_count: madarMcpCallCount,
       madar_mcp_calls_by_name: sortedMadarMcpCallsByName,
@@ -3701,6 +3734,28 @@ function formatNativeAgentClaimAssessmentLine(assessment: NativeAgentClaimAssess
   return `claim_assessment: routing_efficiency ${assessment.routing_efficiency.status}${routingEvidence}; token_reduction ${assessment.token_reduction.status}${tokenEvidence}`
 }
 
+function formatNativeAgentMadarTraceOutcomeSummary(reports: NativeAgentCompareReport[]): string | null {
+  const traces = reports.flatMap((report) => (report.madar_trace ? [report.madar_trace] : []))
+  if (traces.length === 0) {
+    return null
+  }
+
+  const outcomeLabels: Array<[CompareMadarTraceOutcome, string]> = [
+    ['madar_first_bounded', 'madar-first bounded'],
+    ['madar_invoked', 'madar invoked'],
+    ['madar_invoked_after_broad_exploration', 'madar invoked after broad exploration'],
+    ['madar_invoked_with_followup_exploration', 'madar invoked with follow-up exploration'],
+    ['madar_available_but_unused', 'available but unused'],
+    ['no_install', 'no install'],
+  ]
+  const outcomeParts = outcomeLabels.flatMap(([outcome, label]) => {
+    const count = traces.filter((trace) => trace.exploration_outcome === outcome).length
+    return count > 0 ? [`${count} ${label}`] : []
+  })
+
+  return outcomeParts.length > 0 ? `Madar trace outcomes: ${outcomeParts.join(', ')}` : null
+}
+
 export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult): string {
   const lines: string[] = [
     `[madar compare] completed ${result.reports.length} native_agent question(s)`,
@@ -3749,6 +3804,10 @@ export function formatNativeAgentCompareSummary(result: NativeAgentCompareResult
     lines.push(
       `- Answer quality: madar ${result.answer_quality.madar_passed}/${result.answer_quality.questions_checked} passed deterministic gates · baseline ${result.answer_quality.baseline_passed}/${result.answer_quality.questions_checked} passed deterministic gates · ${formatCount(result.answer_quality.manual_review_required, 'manual-review note', 'manual-review notes')}`,
     )
+  }
+  const traceOutcomeSummary = formatNativeAgentMadarTraceOutcomeSummary(result.reports)
+  if (traceOutcomeSummary !== null) {
+    lines.push(`- ${traceOutcomeSummary}`)
   }
   for (const report of result.reports) {
     if (isNativeAgentRunFailure(report.baseline) || isNativeAgentRunFailure(report.madar)) {
