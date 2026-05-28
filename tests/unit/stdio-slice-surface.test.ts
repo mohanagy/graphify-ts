@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { handleStdioRequest } from '../../src/runtime/stdio-server.js'
+import { estimateQueryTokens } from '../../src/runtime/serve.js'
 
 const tempRoots: string[] = []
 const scratchRoot = join(process.cwd(), '.test-artifacts', 'stdio-slice-surface')
@@ -247,6 +248,68 @@ describe('stdio slice-v1 surface', () => {
     expect(contextPackText).toContain('"execution_slice"')
     expect(contextPackText).toContain('"confidence"')
     expect(contextPackText).toContain('"confidence_reasons"')
+  })
+
+  it('defaults context_pack runtime-generation output to answer-ready compact JSON and keeps verbose debug paths', async () => {
+    const graphPath = createGraphPath()
+
+    const compactResponse = await Promise.resolve(handleStdioRequest(graphPath, {
+      id: 8,
+      method: 'tools/call',
+      params: {
+        name: 'context_pack',
+        arguments: {
+          prompt: 'Trace how `AuthController.login` reaches persistence in the backend runtime pipeline',
+          budget: 3000,
+          task: 'explain',
+          retrieval_level: 4,
+          retrieval_strategy: 'slice-v1',
+        },
+      },
+    }))
+    const verboseResponse = await Promise.resolve(handleStdioRequest(graphPath, {
+      id: 9,
+      method: 'tools/call',
+      params: {
+        name: 'context_pack',
+        arguments: {
+          prompt: 'Trace how `AuthController.login` reaches persistence in the backend runtime pipeline',
+          budget: 3000,
+          task: 'explain',
+          retrieval_level: 4,
+          retrieval_strategy: 'slice-v1',
+          verbose: true,
+        },
+      },
+    }))
+
+    const compactText = ((compactResponse as { result?: { content?: Array<{ text: string }> } }).result?.content ?? [])[0]?.text ?? ''
+    const verboseText = ((verboseResponse as { result?: { content?: Array<{ text: string }> } }).result?.content ?? [])[0]?.text ?? ''
+    const compactPayload = JSON.parse(compactText) as {
+      serialized_budget?: { max_tokens?: number; token_count?: number; enforced?: boolean }
+      diagnostics?: unknown
+      pack?: { slice?: { selected_paths?: unknown[]; selected_path_count?: number } }
+      recommended_first_read?: Array<{ path?: string }>
+    }
+    const verbosePayload = JSON.parse(verboseText) as {
+      serialized_budget?: unknown
+      diagnostics?: unknown
+      pack?: { slice?: { selected_paths?: unknown[]; selected_path_count?: number } }
+    }
+
+    expect(estimateQueryTokens(compactText)).toBeLessThanOrEqual(3000)
+    expect(compactPayload.serialized_budget).toEqual(expect.objectContaining({
+      max_tokens: 3000,
+      enforced: true,
+    }))
+    expect(compactPayload.diagnostics).toBeUndefined()
+    expect(compactPayload.pack?.slice?.selected_paths).toBeUndefined()
+    expect(compactPayload.pack?.slice?.selected_path_count).toBeGreaterThan(0)
+    expect(compactPayload.recommended_first_read?.length).toBeGreaterThan(0)
+    expect(verbosePayload.serialized_budget).toBeUndefined()
+    expect(verbosePayload.diagnostics).toBeDefined()
+    expect(verbosePayload.pack?.slice?.selected_paths?.length).toBeGreaterThan(0)
+    expect(verbosePayload.pack?.slice?.selected_path_count).toBeUndefined()
   })
 
   it('rejects retrieval_strategy for review context packs instead of ignoring it', async () => {

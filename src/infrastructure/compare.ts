@@ -6,7 +6,7 @@ import type { ContextPackRoutingDebug } from '../contracts/context-pack.js'
 import { KnowledgeGraph } from '../contracts/graph.js'
 import type { ContextSessionState } from '../contracts/context-session.js'
 import { buildContextPrompt, type ContextPromptStableSection } from './context-prompt.js'
-import { buildExplainPackPayloadCore } from './context-pack-command.js'
+import { buildAnswerReadyPackSchema, buildExplainPackPayloadCore } from './context-pack-command.js'
 import { isMadarProjectHook } from './install.js'
 import { CODE_EXTENSIONS, DOC_EXTENSIONS, MANIFEST_METADATA_KEY, OFFICE_EXTENSIONS, PAPER_EXTENSIONS } from '../pipeline/detect.js'
 import { extractCompareBaselineNonCodeText } from '../pipeline/extract/non-code.js'
@@ -1684,11 +1684,12 @@ export function buildBaselinePromptPack(input: BuildBaselinePromptPackInput): Co
 }
 
 export function buildMadarPromptPack(input: BuildMadarPromptPackInput): ComparePromptPack {
-  const explainPayload = JSON.stringify(
+  const explainPayloadCore = buildAnswerReadyPackSchema(
     buildExplainPackPayloadCore(compactRetrieveResult(input.retrieval), input.retrieval),
-    null,
-    2,
+    Math.max(input.retrieval.task_contract?.budget ?? 3000, 3000),
   )
+  delete explainPayloadCore.serialized_budget
+  const explainPayload = JSON.stringify(explainPayloadCore, null, 2)
   const builtPrompt = buildContextPrompt({
     instructions: [
       'Answer the question using only the provided graph-guided retrieval output.',

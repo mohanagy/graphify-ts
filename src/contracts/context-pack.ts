@@ -91,6 +91,7 @@ export interface ContextPackSliceMetadata {
   anchors: ContextPackSliceAnchor[]
   directions: Array<'forward' | 'backward'>
   selected_paths: ContextPackSlicePath[]
+  selected_path_count?: number
 }
 
 export type ContextPackExecutionPhase =
@@ -157,8 +158,11 @@ export interface ContextPackExecutionSlice {
   steps: ContextPackExecutionSliceStep[]
   primary_path?: ContextPackExecutionSlicePrimaryPath
   side_effects?: ContextPackExecutionSliceBranch[]
+  side_effect_count?: number
   terminal_boundaries?: ContextPackExecutionSliceBranch[]
+  terminal_boundary_count?: number
   omitted_branches?: ContextPackExecutionSliceOmittedBranch[]
+  omitted_branch_count?: number
   phase_coverage?: ContextPackExecutionSlicePhaseCoverage
 }
 
