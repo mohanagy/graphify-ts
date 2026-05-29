@@ -2,6 +2,13 @@
 
 All notable changes to the TypeScript package will be documented in this file.
 
+## [0.27.5] - 2026-05-29
+
+### Fixed
+
+- **Answer-ready explain packs now keep promoted runtime-path workflow centers**: explain pack assembly preserves nodes that are simultaneously part of the runtime primary path and promoted into `workflow_centers`, so scope-matched runs no longer emit `slice_path_nodes_not_promoted` for evidence already kept in the pack. Closes #399.
+- **Explain serialization now enforces the declared budget**: answer-ready `madar pack`, MCP `context_pack`, and stdio explain responses now trim lower-value evidence until the serialized payload fits the requested budget, set `serialized_budget.enforced: true` when trimming occurs, and reject malformed stored follow-up handles instead of expanding them silently. Closes #400.
+
 ## [0.27.4] - 2026-05-29
 
 ### Fixed
