@@ -1206,6 +1206,23 @@ describe('compare runtime', () => {
   it('snapshots the native-agent prompt contract', () => {
     expect(buildNativeAgentPrompt('What is the cluster module?')).toMatchInlineSnapshot(`
       "Follow the Madar pack contract exactly.
+      Call retrieve first for explain or runtime questions before any raw file or broad repo search.
+      Inspect matched_nodes, snippets, relationships, and community context before deciding what to do next.
+      If retrieve already answers the question, answer from the retrieved evidence and stop without raw search.
+      Allow at most one focused Madar follow-up before raw search when retrieve leaves a specific gap.
+      Broad raw search requires an explicit missing-context reason grounded in gaps from the retrieve result.
+      Any broad search before the first Madar call violates the prompt contract.
+
+      Question: What is the cluster module?
+
+      Answer:
+      "
+    `)
+  })
+
+  it('snapshots the full-profile native-agent prompt contract', () => {
+    expect(buildNativeAgentPrompt('What is the cluster module?', 'full')).toMatchInlineSnapshot(`
+      "Follow the Madar pack contract exactly.
       Call context_pack first for explain or runtime questions before any raw file or broad repo search.
       Inspect evidence.pack_confidence, evidence.coverage, evidence.agent_directive, missing_context, and recommended_first_read before deciding what to do next.
       If evidence.agent_directive is answer_from_pack, answer from the pack and stop without raw search.

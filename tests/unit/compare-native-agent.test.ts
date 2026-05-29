@@ -22,7 +22,12 @@ function writeClaudeInstallArtifacts(projectDir: string): void {
   claudeInstall(projectDir)
 }
 
-function makeFixtureProject(options: { installState?: 'managed' | 'valid' | 'missing' } = {}): { projectDir: string; graphPath: string; outputDir: string } {
+function makeFixtureProject(
+  options: {
+    installState?: 'managed' | 'valid' | 'missing'
+    profile?: 'core' | 'full'
+  } = {},
+): { projectDir: string; graphPath: string; outputDir: string } {
   mkdirSync(FIXTURE_PARENT, { recursive: true })
   mkdirSync(COMPARE_OUTPUT_PARENT, { recursive: true })
   const projectDir = mkdtempSync(join(FIXTURE_PARENT, 'project-'))
@@ -42,10 +47,11 @@ function makeFixtureProject(options: { installState?: 'managed' | 'valid' | 'mis
     'utf8',
   )
   const graphPath = join(projectDir, 'out', 'graph.json')
+  const installClaudeWithProfile = claudeInstall as (projectDir?: string, options?: { profile?: 'core' | 'full' }) => string
   if (options.installState === 'managed') {
-    claudeInstall(projectDir)
+    installClaudeWithProfile(projectDir, options.profile ? { profile: options.profile } : undefined)
   } else if (options.installState !== 'missing') {
-    writeClaudeInstallArtifacts(projectDir)
+    installClaudeWithProfile(projectDir, options.profile ? { profile: options.profile } : undefined)
   }
   return { projectDir, graphPath, outputDir }
 }
@@ -828,8 +834,39 @@ describe('parseAnthropicResultEvent', () => {
 })
 
 describe('executeNativeAgentCompare', () => {
-  it('writes a native-agent prompt that enforces the Madar pack contract', async () => {
+  it('writes a native-agent prompt that targets retrieve first on the default core profile', async () => {
     const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'What is the cluster module?',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({ baseline: VERBOSE_BASELINE_PAYLOAD, madar: VERBOSE_MADAR_MCP_RETRIEVE_PAYLOAD }),
+          now: () => new Date('2026-05-01T00:00:00Z'),
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport
+      const prompt = readFileSync(report.paths.prompt_file, 'utf8')
+
+      expect(prompt).toContain('Call retrieve first')
+      expect(prompt).toContain('Inspect matched_nodes, snippets, relationships, and community context before deciding what to do next')
+      expect(prompt).toContain('If retrieve already answers the question, answer from the retrieved evidence and stop without raw search')
+      expect(prompt).toContain('Allow at most one focused Madar follow-up before raw search')
+      expect(prompt).toContain('Broad raw search requires an explicit missing-context reason')
+      expect(prompt).toContain('Question: What is the cluster module?')
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('writes a full-profile native-agent prompt that keeps context_pack first', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject({ profile: 'full' })
     try {
       const result = await executeNativeAgentCompare(
         {
@@ -851,9 +888,6 @@ describe('executeNativeAgentCompare', () => {
       expect(prompt).toContain('Call context_pack first')
       expect(prompt).toContain('Inspect evidence.pack_confidence, evidence.coverage, evidence.agent_directive, missing_context, and recommended_first_read')
       expect(prompt).toContain('If evidence.agent_directive is answer_from_pack, answer from the pack and stop without raw search')
-      expect(prompt).toContain('Allow at most one focused Madar follow-up before raw search')
-      expect(prompt).toContain('Broad raw search requires an explicit missing-context reason')
-      expect(prompt).toContain('Question: What is the cluster module?')
     } finally {
       rmSync(projectDir, { recursive: true, force: true })
     }
@@ -1168,7 +1202,7 @@ describe('executeNativeAgentCompare', () => {
     }
   })
 
-  it('reports a prompt-contract violation when the first Madar call is not context_pack', async () => {
+  it('reports a followed prompt contract when a core install starts with retrieve', async () => {
     const { projectDir, graphPath, outputDir } = makeFixtureProject()
     try {
       const result = await executeNativeAgentCompare(
@@ -1186,7 +1220,63 @@ describe('executeNativeAgentCompare', () => {
       )
 
       const summary = formatNativeAgentCompareSummary(result)
+      expect(summary).toContain('prompt_contract: followed (started with retrieve and avoided disallowed exploration)')
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a prompt-contract violation when a full install starts with retrieve instead of context_pack', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject({ profile: 'full' })
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'What is the cluster module?',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({ baseline: VERBOSE_BASELINE_PAYLOAD, madar: VERBOSE_MADAR_MCP_RETRIEVE_PAYLOAD }),
+          now: () => new Date('2026-05-01T00:00:00Z'),
+        },
+      )
+
+      const summary = formatNativeAgentCompareSummary(result)
       expect(summary).toContain('prompt_contract: violated (first Madar call was not context_pack)')
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves a full-profile first-tool violation even when broad exploration happens later', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject({ profile: 'full' })
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'What is the cluster module?',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({
+            baseline: VERBOSE_BASELINE_PAYLOAD,
+            madar: VERBOSE_MADAR_MCP_RETRIEVE_WITH_FOLLOWUP_EXPLORATION_PAYLOAD,
+          }),
+          now: () => new Date('2026-05-01T00:00:00Z'),
+        },
+      )
+
+      expect((result.reports[0] as NativeAgentCompareReport).prompt_contract).toEqual({
+        status: 'violated',
+        evidence: [
+          'first Madar call was not context_pack',
+          'broad exploration occurred after the first Madar call, but the trace does not show whether missing_context justified it',
+        ],
+      })
     } finally {
       rmSync(projectDir, { recursive: true, force: true })
     }
