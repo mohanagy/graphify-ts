@@ -581,6 +581,8 @@ describe('cli parser', () => {
         'how does login work',
         '--exec',
         'claude -p "$(cat {prompt_file})"',
+        '--task',
+        'implement',
         '--graph',
         'custom.json',
         '--output-dir',
@@ -602,6 +604,7 @@ describe('cli parser', () => {
       question: 'how does login work',
       graphPath: 'custom.json',
       execTemplate: 'claude -p "$(cat {prompt_file})"',
+      task: 'implement',
       questionsPath: null,
       outputDir: resolve('out/compare/custom'),
       baselineMode: 'bounded',
@@ -708,6 +711,9 @@ describe('cli parser', () => {
     )
     expect(() => parseCompareArgs(['how does login work', '--exec', 'claude -p "$(cat {prompt_file})"', '--limit=5abc'])).toThrow(
       'error: --limit must be a positive integer',
+    )
+    expect(() => parseCompareArgs(['how does login work', '--exec', 'claude -p "$(cat {prompt_file})"', '--task', 'shipit'])).toThrow(
+      'error: --task must be one of explain, implement, review, impact',
     )
     expect(() => parseCompareArgs(['how does login work', '--exec', 'claude -p "$(cat {prompt_file})"', '--output-dir', '../outside'])).toThrow(
       'Only paths inside out/ are permitted',
@@ -1111,6 +1117,7 @@ describe('cli main', () => {
     expect(help).toContain('    --exec TEMPLATE       required command template; supports {prompt_file}, {question}, {mode}, and {output_file}')
     expect(help).toContain('    --questions PATH      load questions from a JSON file instead of a positional question')
     expect(help).toContain('    --output-dir DIR      compare output directory (default out/compare)')
+    expect(help).toContain('    --task KIND           explain|implement|review|impact (default explain)')
     expect(help).toContain('    --baseline-mode MODE  full | bounded | pack_only | native_agent (default full; pack_only compares one bounded raw-context prompt against one compiled madar pack; native_agent runs --exec twice, uses Anthropic JSON usage when available, and otherwise saves answer-only artifacts)')
     expect(help).toContain('      For Claude MCP attribution in native_agent mode, include --verbose with --output-format json')
     expect(help).toContain('    --per-arm-timeout S   per-arm timeout seconds for native_agent runs (default 600)')
@@ -1167,6 +1174,8 @@ describe('cli main', () => {
         'benchmark-questions.json',
         '--exec',
         'gemini -p "$(cat {prompt_file})"',
+        '--task',
+        'implement',
         '--graph',
         'custom.json',
         '--output-dir',
@@ -1200,6 +1209,7 @@ describe('cli main', () => {
       question: null,
       graphPath: 'custom.json',
       execTemplate: 'gemini -p "$(cat {prompt_file})"',
+      task: 'implement',
       questionsPath: 'benchmark-questions.json',
       outputDir: resolve('out/compare/custom'),
       baselineMode: 'bounded',
@@ -1489,7 +1499,7 @@ describe('cli main', () => {
 
     expect(exitCode).toBe(2)
     expect(logs).toEqual([])
-    expect(errors).toEqual(['Usage: madar compare [question] --exec TEMPLATE [--graph path] [--questions PATH] [--output-dir DIR] [--baseline-mode MODE] [--per-arm-timeout S] [--heartbeat-interval-ms N] [--strict-madar-first] [--strict] [--allow-no-install] [--yes] [--limit N] [--why]'])
+    expect(errors).toEqual(['Usage: madar compare [question] --exec TEMPLATE [--graph path] [--questions PATH] [--output-dir DIR] [--task KIND] [--baseline-mode MODE] [--per-arm-timeout S] [--heartbeat-interval-ms N] [--strict-madar-first] [--strict] [--allow-no-install] [--yes] [--limit N] [--why]'])
   })
 
   it('prefers the explicit compare command over an implicit generate path match', async () => {

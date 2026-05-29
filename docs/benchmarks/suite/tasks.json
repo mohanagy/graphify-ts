@@ -19,8 +19,10 @@
     "id": "implement",
     "name": "Implement task",
     "description": "A real edit prompt suitable for measuring likely edit-file and validation guidance quality later.",
-    "status": "planned",
-    "prompts": {}
+    "status": "ready",
+    "prompts": {
+      "nestjs-mid": "Change login validation behavior so invalid sessions are rejected before persistence, then update the focused tests."
+    }
   },
   {
     "id": "review",
