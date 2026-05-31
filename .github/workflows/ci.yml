@@ -47,6 +47,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.node-version == '22'
         run: npm run registry:validate
 
+      - name: Verify release hygiene
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '22'
+        run: npm run release:verify
+
       - name: Typecheck
         run: npm run typecheck
 

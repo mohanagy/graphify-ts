@@ -16,12 +16,15 @@ From the repository root:
 
 ```bash
 npm install
+npm run release:verify
 npm run registry:validate
 npm run typecheck
 npm run build
 npm run test:run
 npm pack --dry-run
 ```
+
+`npm run release:verify` locks the public package metadata, changelog version entry, and npm-visible README links before publish so repository/documentation drift is caught in one pass.
 
 If the change touches packaging, installer behavior, or public MCP Registry metadata, keep the `npm pack --dry-run` output with the release notes or pull request for easy review.
 
@@ -47,8 +50,8 @@ Recommended follow-up checks:
 
 After the verification steps are green:
 
-1. Push the release branch or merge commit.
-2. Publish from the verified tree with `npm publish --access public` when you are ready.
+1. Push and merge the verified release commit so the published README links already exist on the `main` branch.
+2. Publish from that merged `main` commit with `npm publish --access public` when you are ready.
 3. Create the matching Git tag if `npm version` did not already do so in your workflow.
 4. Draft or publish the GitHub release notes from the changelog entry.
 
