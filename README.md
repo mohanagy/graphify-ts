@@ -8,7 +8,7 @@ A structural graph tells the agent what exists in your codebase. Madar tells the
 [![node >=20](https://img.shields.io/badge/node-%E2%89%A520-3c873a)](https://nodejs.org/)
 [![Local first](https://img.shields.io/badge/local--first-no%20cloud%20required-0f766e)](#trust--limitations)
 [![No API keys](https://img.shields.io/badge/API%20keys-none%20required-111827)](#trust--limitations)
-[![license MIT](https://img.shields.io/badge/license-MIT-16a34a)](LICENSE)
+[![license MIT](https://img.shields.io/badge/license-MIT-16a34a)](https://github.com/mohanagy/madar/blob/main/LICENSE)
 
 ---
 
@@ -21,7 +21,7 @@ A structural graph tells the agent what exists in your codebase. Madar tells the
 
 https://github.com/user-attachments/assets/a502185f-fa12-4a8f-80d2-172847f209fd
 
-30 seconds: install → `madar generate .` on the GoValidate repo (1,048 files) → `madar claude install --profile core` → `madar compare "Explain the auth flow End to End"`. The repo includes the saved artifact for that run plus the follow-up benchmark notes and caveats. Treat it as a worked receipt, not a universal benchmark headline. Receipts: [`docs/benchmarks/2026-05-09-govalidate-auth-e2e/`](docs/benchmarks/2026-05-09-govalidate-auth-e2e/).
+30 seconds: install → `madar generate .` on the GoValidate repo (1,048 files) → `madar claude install --profile core` → `madar compare "Explain the auth flow End to End"`. The repo includes the saved artifact for that run plus the follow-up benchmark notes and caveats. Treat it as a worked receipt, not a universal benchmark headline. Receipts: [`docs/benchmarks/2026-05-09-govalidate-auth-e2e/`](https://github.com/mohanagy/madar/tree/main/docs/benchmarks/2026-05-09-govalidate-auth-e2e/).
 
 ---
 
@@ -82,19 +82,19 @@ madar prompt "how does auth work?" --provider claude     # provider-ready compil
 
 If you enable `--semantic` or `--rerank` without that optional package installed, madar now fails with an explicit install hint instead of pulling the transformer/native stack into every default install.
 
-Want a tiny reproducible workspace for local demos? Start with [`examples/sample-workspace/`](examples/sample-workspace/) and the [sample workspace tutorial](docs/tutorials/sample-workspace.md).
+Want a tiny reproducible workspace for local demos? Start with [`examples/sample-workspace/`](https://github.com/mohanagy/madar/tree/main/examples/sample-workspace/) and the [sample workspace tutorial](https://github.com/mohanagy/madar/blob/main/docs/tutorials/sample-workspace.md).
 
-Want a broader local-first walkthrough that also covers install, `prompt`, and a safe `compare` smoke check? Use the [end-to-end getting started tutorial](docs/tutorials/getting-started.md).
+Want a broader local-first walkthrough that also covers install, `prompt`, and a safe `compare` smoke check? Use the [end-to-end getting started tutorial](https://github.com/mohanagy/madar/blob/main/docs/tutorials/getting-started.md).
 
 ---
 
 ## What's new in 0.27.4
 
-See the [`0.27.4` changelog entry](CHANGELOG.md#0274---2026-05-29) for the full release notes.
+See the [`0.27.4` changelog entry](https://github.com/mohanagy/madar/blob/main/CHANGELOG.md#0274---2026-05-29) for the full release notes.
 
 The larger **What's new in 0.23.0** additions are still part of the main flow too: `madar summary`, the core MCP `graph_summary` tool, runtime `execution_slice` output, share-safe `report.share-safe.json` compare artifacts, and `compare --baseline-mode pack_only`.
 
-If you want the broader proof-oriented workflow behind the current surfaces, start with [proof workflows](docs/proof-workflows.md) and the [GoValidate shared benchmark suite](docs/benchmarks/govalidate-suite/README.md).
+If you want the broader proof-oriented workflow behind the current surfaces, start with [proof workflows](https://github.com/mohanagy/madar/blob/main/docs/proof-workflows.md) and the [GoValidate shared benchmark suite](https://github.com/mohanagy/madar/blob/main/docs/benchmarks/govalidate-suite/README.md).
 
 ### When to use `--spi`
 
@@ -155,7 +155,7 @@ That means the same selected nodes can render differently for `explain`, `review
 - Producing deterministic, share-safe artifacts (`report.share-safe.json`, Pack Schema v1, static `execution_slice` output) that can be reviewed without sharing workstation paths.
 - Staying local-first: tree-sitter AST, BM25 retrieval, optional ONNX embeddings — all on your machine unless you explicitly invoke a model you configured yourself.
 
-> Deepest extraction is still **TypeScript/JavaScript** with framework-aware passes for Express, NestJS, Next.js, React Router, Redux Toolkit, **Hono, Fastify, tRPC, Prisma, and routing-controllers** (10 substrates via `--spi`). Python now has a conservative semantic layer for cross-file import/call resolution, FastAPI router composition plus route/dependency semantics, and first-pass Django URL-conf route-to-view mapping. Go now has a conservative first semantic pass for local-package import resolution, receiver/method call edges, and statically visible `net/http` / Gin / Chi route relationships. Ruby, Java, and Rust still use the tree-sitter AST baseline. C / Kotlin / C# / Scala / PHP / Swift / Zig use a generic structural extractor. Full matrix: [`docs/language-capability-matrix.md`](docs/language-capability-matrix.md).
+> Deepest extraction is still **TypeScript/JavaScript** with framework-aware passes for Express, NestJS, Next.js, React Router, Redux Toolkit, **Hono, Fastify, tRPC, Prisma, and routing-controllers** (10 substrates via `--spi`). Python now has a conservative semantic layer for cross-file import/call resolution, FastAPI router composition plus route/dependency semantics, and first-pass Django URL-conf route-to-view mapping. Go now has a conservative first semantic pass for local-package import resolution, receiver/method call edges, and statically visible `net/http` / Gin / Chi route relationships. Ruby, Java, and Rust still use the tree-sitter AST baseline. C / Kotlin / C# / Scala / PHP / Swift / Zig use a generic structural extractor. Full matrix: [`docs/language-capability-matrix.md`](https://github.com/mohanagy/madar/blob/main/docs/language-capability-matrix.md).
 
 ---
 
@@ -174,7 +174,7 @@ On the GoValidate backend service (NestJS + BullMQ, SPI graph, install verified)
 | `measurement_validity` | n/a | `valid` | — |
 | `token_regression` | n/a | `false` | — |
 
-This cell also recorded `install_verified: true`, `madar_mcp_call_count: 1`, and `exploration_outcome: madar_invoked`, meaning the first Madar tool call was `mcp__madar__retrieve` and there was no broad exploration after it. Trace artifact: [`docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/`](docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/).
+This cell also recorded `install_verified: true`, `madar_mcp_call_count: 1`, and `exploration_outcome: madar_invoked`, meaning the first Madar tool call was `mcp__madar__retrieve` and there was no broad exploration after it. Trace artifact: [`docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/`](https://github.com/mohanagy/madar/tree/main/docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/).
 
 This is **one cell**: one prompt, one repo, one agent runtime, one verified install path. Your results will vary by repo shape, prompt type, agent runtime, and what other MCPs or skills you have loaded.
 
@@ -182,8 +182,8 @@ Runtime-generation prompts stay compact: the pack shaping follows the strongest 
 
 ## In progress
 
-- **Reproducible benchmark suite with per-repo spread.** The public suite now ships fixed manifests, methodology, and the `madar bench:suite` runner under [`docs/benchmarks/suite/`](docs/benchmarks/suite/).
-- **Exploration behavior across more repos and prompts.** Strict install guidance now pushes agents toward one graph/pack-first pass, but the public evidence is still mixed. The current counterexample note is in [`docs/benchmarks/2026-05-25-founder-command-center-auth-flow/`](docs/benchmarks/2026-05-25-founder-command-center-auth-flow/).
+- **Reproducible benchmark suite with per-repo spread.** The public suite now ships fixed manifests, methodology, and the `madar bench:suite` runner under [`docs/benchmarks/suite/`](https://github.com/mohanagy/madar/tree/main/docs/benchmarks/suite/).
+- **Exploration behavior across more repos and prompts.** Strict install guidance now pushes agents toward one graph/pack-first pass, but the public evidence is still mixed. The current counterexample note is in [`docs/benchmarks/2026-05-25-founder-command-center-auth-flow/`](https://github.com/mohanagy/madar/tree/main/docs/benchmarks/2026-05-25-founder-command-center-auth-flow/).
 - **Clearer compare evidence.** Native-agent compare traces now preserve more machine-readable metadata, but we still treat them as repo/task-specific receipts rather than a universal claim.
 
 ## Not yet measured
@@ -202,11 +202,11 @@ Runtime-generation prompts stay compact: the pack shaping follows the strongest 
 
 ## How we measure
 
-- We publish dated artifact folders under [`docs/benchmarks/`](docs/benchmarks/) and map each public claim to evidence in [`docs/claims-and-evidence.md`](docs/claims-and-evidence.md).
-- This release README cites one verified cell under [`docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/`](docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/), not a universal benchmark headline.
-- The benchmark-suite direction is **per-repo spread**, fixed tasks, and reproducible artifacts under [`docs/benchmarks/suite/`](docs/benchmarks/suite/). There is **no single-number cross-repo headline** in the public docs.
+- We publish dated artifact folders under [`docs/benchmarks/`](https://github.com/mohanagy/madar/tree/main/docs/benchmarks/) and map each public claim to evidence in [`docs/claims-and-evidence.md`](https://github.com/mohanagy/madar/blob/main/docs/claims-and-evidence.md).
+- This release README cites one verified cell under [`docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/`](https://github.com/mohanagy/madar/tree/main/docs/benchmarks/regression/0.27.0-next.4-govalidate-explain/), not a universal benchmark headline.
+- The benchmark-suite direction is **per-repo spread**, fixed tasks, and reproducible artifacts under [`docs/benchmarks/suite/`](https://github.com/mohanagy/madar/tree/main/docs/benchmarks/suite/). There is **no single-number cross-repo headline** in the public docs.
 - Suite runs use the same prompt against a baseline path and an install-verified Madar path, capture verbose tool traces, and keep multi-trial reporting attached to the specific repo/task cell rather than flattening it into one marketing number.
-- Published benchmark cells run in isolation mode ([`docs/benchmarks/suite/isolation/`](docs/benchmarks/suite/isolation/)). Your local numbers may differ if your Claude Code config differs.
+- Published benchmark cells run in isolation mode ([`docs/benchmarks/suite/isolation/`](https://github.com/mohanagy/madar/tree/main/docs/benchmarks/suite/isolation/)). Your local numbers may differ if your Claude Code config differs.
 - Run `madar bench:suite --dry-run` to inspect the current matrix, then `madar bench:suite --repo nestjs-mid --task explain-runtime ...` to populate a wired cell.
 - Any stronger public claim belongs behind a reproducible suite artifact, not a one-off anecdote.
 
@@ -235,11 +235,11 @@ Aider and OpenCode are intentionally context-pack-first: run `madar generate .`,
 
 Codex is intentionally context-pack-first: run `madar generate .`, install with `madar codex install`, and start broad codebase work with `madar pack "<task>" --task explain` before raw file search. In the installed guidance, `out/GRAPH_REPORT.md` remains fallback-only when the pack or graph tools are unavailable, stale, or insufficient. To remove the profile, run `madar codex uninstall`; it removes the madar AGENTS.md section and Codex hook while preserving unrelated content. Manual verification does not require Codex to be installed: inspect `AGENTS.md` and `.codex/hooks.json` after install, then confirm uninstall removes only madar content.
 
-For practical multi-agent workflows across Claude Code, Codex, Copilot, Cursor, and Gemini, see the [agent orchestration guide](docs/integrations/agent-orchestration.md).
+For practical multi-agent workflows across Claude Code, Codex, Copilot, Cursor, and Gemini, see the [agent orchestration guide](https://github.com/mohanagy/madar/blob/main/docs/integrations/agent-orchestration.md).
 
 ### MCP Registry metadata
 
-The checked-in public registry manifest lives at [`docs/mcp-registry/server.json`](docs/mcp-registry/server.json). Validate it locally with `npm run registry:validate`.
+The checked-in public registry manifest lives at [`docs/mcp-registry/server.json`](https://github.com/mohanagy/madar/blob/main/docs/mcp-registry/server.json). Validate it locally with `npm run registry:validate`.
 
 The official MCP Registry hosts metadata, not Madar code or your local graph artifact. Madar's registry entry still points back to the public npm package and the same local-first runtime flow: run `madar generate .` to create `out/graph.json`, then start the local stdio server with `npx @lubab/madar serve --stdio out/graph.json` (or let `madar <agent> install` write that wiring for you).
 
@@ -261,7 +261,7 @@ These seven MCP tools handle the most common agent workflows in the default **co
 | `graph_stats` | "How big is this graph?" — node/edge counts, density, file-type mix |
 | `graph_summary` | "Give me the repo at a glance" — bounded deterministic overview of counts, domains, top modules, entrypoints, frameworks, and runtime paths |
 
-Full-profile additions: `context_pack`, `context_expand`, `context_prompt`, `context_session_reset`, `risk_map`, `implementation_checklist`, `relevant_files`, `feature_map`, `time_travel_compare`, `community_details`, `query_graph`, `get_node`, `get_neighbors`, `explain_node`, `shortest_path`, `graph_diff`, `god_nodes`, `semantic_anomalies`, `get_community`. Full reference: [examples/mcp-tool-examples.md](examples/mcp-tool-examples.md).
+Full-profile additions: `context_pack`, `context_expand`, `context_prompt`, `context_session_reset`, `risk_map`, `implementation_checklist`, `relevant_files`, `feature_map`, `time_travel_compare`, `community_details`, `query_graph`, `get_node`, `get_neighbors`, `explain_node`, `shortest_path`, `graph_diff`, `god_nodes`, `semantic_anomalies`, `get_community`. Full reference: [examples/mcp-tool-examples.md](https://github.com/mohanagy/madar/blob/main/examples/mcp-tool-examples.md).
 
 Within one MCP stdio session, identical `context_pack` requests for `task=explain` are reused automatically when the graph version and relevant prompt/options match. The cache is memory-only, skips delta-session packs, and invalidates itself when `graph.json` changes.
 
@@ -320,23 +320,23 @@ Everything stays local by default. No telemetry, no cloud upload, no API key req
 
 ## Documentation & receipts
 
-- [Quick start guide](docs/proof-workflows.md) — three reproducible workflows: local proof, A/B compare, federated proof
-- [Claims and evidence map](docs/claims-and-evidence.md) — which public claims are demonstrated, in progress, or not yet measured
-- [Benchmark suite](docs/benchmarks/suite/README.md) — fixed manifests, methodology, CLI runner, and per-repo spread results
-- [GoValidate shared benchmark suite](docs/benchmarks/govalidate-suite/README.md) — public prompt set plus deterministic pack/answer quality gates
-- [Public roadmap](docs/roadmap.md) — contributor-facing priority tracks and issue links
-- [Language and capability matrix](docs/language-capability-matrix.md) — exactly what each file type and language gets
-- [Performance benchmark harness](docs/benchmarks/performance/README.md) — repeatable `generate` / `update` / `cluster-only` measurements
-- [MCP tool examples](examples/mcp-tool-examples.md) — real input/output for every tool
+- [Quick start guide](https://github.com/mohanagy/madar/blob/main/docs/proof-workflows.md) — three reproducible workflows: local proof, A/B compare, federated proof
+- [Claims and evidence map](https://github.com/mohanagy/madar/blob/main/docs/claims-and-evidence.md) — which public claims are demonstrated, in progress, or not yet measured
+- [Benchmark suite](https://github.com/mohanagy/madar/blob/main/docs/benchmarks/suite/README.md) — fixed manifests, methodology, CLI runner, and per-repo spread results
+- [GoValidate shared benchmark suite](https://github.com/mohanagy/madar/blob/main/docs/benchmarks/govalidate-suite/README.md) — public prompt set plus deterministic pack/answer quality gates
+- [Public roadmap](https://github.com/mohanagy/madar/blob/main/docs/roadmap.md) — contributor-facing priority tracks and issue links
+- [Language and capability matrix](https://github.com/mohanagy/madar/blob/main/docs/language-capability-matrix.md) — exactly what each file type and language gets
+- [Performance benchmark harness](https://github.com/mohanagy/madar/blob/main/docs/benchmarks/performance/README.md) — repeatable `generate` / `update` / `cluster-only` measurements
+- [MCP tool examples](https://github.com/mohanagy/madar/blob/main/examples/mcp-tool-examples.md) — real input/output for every tool
 - [Benchmark hub](https://github.com/mohanagy/madar/tree/main/docs/benchmarks) — committed wrappers and provider-reported evidence
-- [Changelog](CHANGELOG.md) — full per-release notes
-- [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+- [Changelog](https://github.com/mohanagy/madar/blob/main/CHANGELOG.md) — full per-release notes
+- [Contributing](https://github.com/mohanagy/madar/blob/main/CONTRIBUTING.md) · [Security](https://github.com/mohanagy/madar/blob/main/SECURITY.md)
 
 ---
 
 ## Contributors
 
-Thanks to everyone shaping madar. The list below is regenerated automatically on every push to `main` by [`.github/workflows/contributors.yml`](.github/workflows/contributors.yml).
+Thanks to everyone shaping madar. The list below is regenerated automatically on every push to `main` by [`.github/workflows/contributors.yml`](https://github.com/mohanagy/madar/blob/main/.github/workflows/contributors.yml).
 
 <!-- readme: contributors -start -->
 <table>
