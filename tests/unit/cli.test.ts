@@ -553,6 +553,7 @@ describe('cli parser', () => {
       execTemplate: 'claude -p "$(cat {prompt_file})"',
       questionsPath: null,
       outputDir: resolve('out/compare'),
+      task: 'explain',
       baselineMode: 'full',
       perArmTimeoutSeconds: 600,
       heartbeatIntervalMs: 30000,
@@ -569,6 +570,7 @@ describe('cli parser', () => {
       execTemplate: 'gemini -p "$(cat {prompt_file})"',
       questionsPath: 'benchmark-questions.json',
       outputDir: resolve('out/compare'),
+      task: 'explain',
       baselineMode: 'full',
       perArmTimeoutSeconds: 600,
       heartbeatIntervalMs: 30000,
@@ -609,6 +611,7 @@ describe('cli parser', () => {
       execTemplate: 'claude -p "$(cat {prompt_file})"',
       questionsPath: null,
       outputDir: resolve('out/compare/custom'),
+      task: 'explain',
       baselineMode: 'bounded',
       perArmTimeoutSeconds: 900,
       heartbeatIntervalMs: 15000,
@@ -635,6 +638,7 @@ describe('cli parser', () => {
       execTemplate: 'claude -p "$(cat {prompt_file})"',
       questionsPath: null,
       outputDir: resolve('out/compare'),
+      task: 'explain',
       baselineMode: 'pack_only',
       perArmTimeoutSeconds: 600,
       heartbeatIntervalMs: 30000,
@@ -643,6 +647,35 @@ describe('cli parser', () => {
       allowNoInstall: false,
       yes: false,
       limit: null,
+    })
+  })
+
+  it('parses compare args with an explicit task kind', () => {
+    expect(
+      parseCompareArgs([
+        'implement session sliding expiration',
+        '--exec',
+        'claude -p "$(cat {prompt_file})"',
+        '--baseline-mode',
+        'native_agent',
+        '--task',
+        'implement',
+      ]),
+    ).toEqual({
+      question: 'implement session sliding expiration',
+      graphPath: 'out/graph.json',
+      execTemplate: 'claude -p "$(cat {prompt_file})"',
+      questionsPath: null,
+      outputDir: resolve('out/compare'),
+      baselineMode: 'native_agent',
+      perArmTimeoutSeconds: 600,
+      heartbeatIntervalMs: 30000,
+      strictMadarFirst: false,
+      strictBenchmarkReadiness: false,
+      allowNoInstall: false,
+      yes: false,
+      limit: null,
+      task: 'implement',
     })
   })
 
@@ -660,6 +693,7 @@ describe('cli parser', () => {
       execTemplate: 'claude -p "$(cat {prompt_file})"',
       questionsPath: null,
       outputDir: resolve('out/compare'),
+      task: 'explain',
       baselineMode: 'full',
       perArmTimeoutSeconds: 600,
       heartbeatIntervalMs: 30000,
@@ -685,6 +719,7 @@ describe('cli parser', () => {
     execTemplate: 'claude -p "$(cat {prompt_file})"',
     questionsPath: null,
     outputDir: resolve('out/compare'),
+    task: 'explain',
     baselineMode: 'full',
     perArmTimeoutSeconds: 600,
     heartbeatIntervalMs: 30000,
@@ -1147,6 +1182,7 @@ describe('cli main', () => {
     expect(help).toContain('    --exec TEMPLATE       required command template; supports {prompt_file}, {question}, {mode}, and {output_file}')
     expect(help).toContain('    --questions PATH      load questions from a JSON file instead of a positional question')
     expect(help).toContain('    --output-dir DIR      compare output directory (default out/compare)')
+    expect(help).toContain('    --task TASK           explain | implement (default explain; implement currently requires --baseline-mode native_agent)')
     expect(help).toContain('    --baseline-mode MODE  full | bounded | pack_only | native_agent (default full; pack_only compares one bounded raw-context prompt against one compiled madar pack; native_agent runs --exec twice, uses Anthropic JSON usage when available, and otherwise saves answer-only artifacts)')
     expect(help).toContain('      For Claude MCP attribution in native_agent mode, include --verbose with --output-format json')
     expect(help).toContain('    --per-arm-timeout S   per-arm timeout seconds for native_agent runs (default 600)')
@@ -1242,6 +1278,7 @@ describe('cli main', () => {
       execTemplate: 'gemini -p "$(cat {prompt_file})"',
       questionsPath: 'benchmark-questions.json',
       outputDir: resolve('out/compare/custom'),
+      task: 'explain',
       baselineMode: 'bounded',
       perArmTimeoutSeconds: 900,
       heartbeatIntervalMs: 15000,
@@ -1606,7 +1643,7 @@ describe('cli main', () => {
 
     expect(exitCode).toBe(2)
     expect(logs).toEqual([])
-    expect(errors).toEqual(['Usage: madar compare [question] --exec TEMPLATE [--graph path] [--questions PATH] [--output-dir DIR] [--baseline-mode MODE] [--per-arm-timeout S] [--heartbeat-interval-ms N] [--strict-madar-first] [--strict] [--allow-no-install] [--yes] [--limit N] [--why]'])
+    expect(errors).toEqual(['Usage: madar compare [question] --exec TEMPLATE [--graph path] [--questions PATH] [--output-dir DIR] [--task TASK] [--baseline-mode MODE] [--per-arm-timeout S] [--heartbeat-interval-ms N] [--strict-madar-first] [--strict] [--allow-no-install] [--yes] [--limit N] [--why]'])
   })
 
   it('prefers the explicit compare command over an implicit generate path match', async () => {
