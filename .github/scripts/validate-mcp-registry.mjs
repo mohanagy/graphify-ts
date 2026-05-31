@@ -63,6 +63,7 @@ const registryManifestSchema = {
     packages: {
       type: 'array',
       minItems: 1,
+      maxItems: 1,
       items: {
         type: 'object',
         additionalProperties: false,
@@ -196,8 +197,8 @@ function main() {
   assert.equal(registryManifest.repository.id, REPOSITORY_ID, 'server.json repository.id must match the GitHub repository id')
   assert.equal(registryManifest.version, packageManifest.version, 'server.json version must match package.json version')
 
+  assert.equal(registryManifest.packages.length, 1, 'server.json must define exactly one npm package entry')
   const [npmPackage] = registryManifest.packages
-  assert.ok(npmPackage, 'server.json must define one npm package entry')
   assert.equal(npmPackage.identifier, packageManifest.name, 'server.json package identifier must match package.json name')
   assert.equal(npmPackage.version, packageManifest.version, 'server.json package version must match package.json version')
 

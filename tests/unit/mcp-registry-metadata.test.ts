@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
@@ -109,17 +110,48 @@ describe('MCP Registry metadata', () => {
 
   it('exposes a repeatable local validation command for the checked-in registry metadata', () => {
     const packageManifest = loadPackageManifest()
-    const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
-    expect(packageManifest.scripts?.['registry:validate']).toBeDefined()
+    expect(packageManifest.scripts?.['registry:validate']).toBe('node .github/scripts/validate-mcp-registry.mjs')
 
     expect(() =>
-      execFileSync(npmCommand, ['run', 'registry:validate'], {
+      execFileSync(process.execPath, [resolve('.github/scripts/validate-mcp-registry.mjs')], {
         cwd: process.cwd(),
         encoding: 'utf8',
         stdio: 'pipe',
       }),
     ).not.toThrow()
+  })
+
+  it('rejects duplicate package entries in the registry manifest validator', () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'madar-registry-'))
+    const packageManifest = loadPackageManifest()
+    const registryManifest = loadRegistryManifest()
+
+    mkdirSync(join(tempRoot, 'docs', 'mcp-registry'), { recursive: true })
+    writeFileSync(join(tempRoot, 'package.json'), JSON.stringify(packageManifest, null, 2))
+    writeFileSync(
+      join(tempRoot, 'docs', 'mcp-registry', 'server.json'),
+      JSON.stringify(
+        {
+          ...registryManifest,
+          packages: [...(registryManifest.packages ?? []), ...(registryManifest.packages ?? [])],
+        },
+        null,
+        2,
+      ),
+    )
+
+    try {
+      expect(() =>
+        execFileSync(process.execPath, [resolve('.github/scripts/validate-mcp-registry.mjs')], {
+          cwd: tempRoot,
+          encoding: 'utf8',
+          stdio: 'pipe',
+        }),
+      ).toThrow()
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true })
+    }
   })
 
   it('documents the public-registry decision, validation command, and local-first trust boundary', () => {
