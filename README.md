@@ -234,10 +234,10 @@ madar produces local context packs that any modern coding agent can consume — 
 
 | Agent | Connection | Install command | `doctor` / `status` lint surface |
 |---|---|---|---|
-| Claude Code | MCP via `.mcp.json` | `madar claude <install|uninstall> [--profile core|full|strict]` | `CLAUDE.md` + `.claude/settings.json` hook + `.mcp.json` |
-| Cursor | MCP via `.cursor/mcp.json` | `madar cursor <install|uninstall> [--profile core|full|strict]` | `.cursor/rules/madar.mdc` + `.cursor/mcp.json` |
-| GitHub Copilot CLI | MCP via `.vscode/mcp.json` | `madar copilot <install|uninstall> [--profile core|full|strict]` | `.vscode/mcp.json` |
-| Gemini CLI | MCP server | `madar gemini <install|uninstall> [--profile core|full|strict]` | `GEMINI.md` + `.gemini/settings.json` hook |
+| Claude Code | MCP via `.mcp.json` | `madar claude <install\|uninstall> [--profile core\|full\|strict]` | `CLAUDE.md` + `.claude/settings.json` hook + `.mcp.json` |
+| Cursor | MCP via `.cursor/mcp.json` | `madar cursor <install\|uninstall> [--profile core\|full\|strict]` | `.cursor/rules/madar.mdc` + `.cursor/mcp.json` |
+| GitHub Copilot CLI | MCP via `.vscode/mcp.json` | `madar copilot <install\|uninstall> [--profile core\|full\|strict]` | `.vscode/mcp.json` |
+| Gemini CLI | MCP server | `madar gemini <install\|uninstall> [--profile core\|full\|strict]` | `GEMINI.md` + `.gemini/settings.json` hook |
 | Aider | AGENTS.md context-pack-first profile | `madar aider install` | `AGENTS.md` Aider profile |
 | OpenCode | AGENTS.md + `.opencode/plugins/madar.js` + MCP via `opencode.json` / `opencode.jsonc` | `madar opencode install` | `AGENTS.md` OpenCode profile + plugin registration + MCP entry |
 | Codex CLI | AGENTS.md + `.codex/hooks.json` context-pack-first profile | `madar codex install` | `AGENTS.md` Codex profile + `.codex/hooks.json` |
