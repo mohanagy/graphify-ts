@@ -417,6 +417,7 @@ export function formatHelp(binaryName = 'madar'): string {
     '    --exec TEMPLATE       required command template; supports {prompt_file}, {question}, {mode}, and {output_file}',
     '    --questions PATH      load questions from a JSON file instead of a positional question',
     '    --output-dir DIR      compare output directory (default out/compare)',
+    '    --task TASK           explain | implement (default explain; implement currently requires --baseline-mode native_agent)',
     '    --baseline-mode MODE  full | bounded | pack_only | native_agent (default full; pack_only compares one bounded raw-context prompt against one compiled madar pack; native_agent runs --exec twice, uses Anthropic JSON usage when available, and otherwise saves answer-only artifacts)',
     '      For Claude MCP attribution in native_agent mode, include --verbose with --output-format json',
     '    --per-arm-timeout S   per-arm timeout seconds for native_agent runs (default 600)',

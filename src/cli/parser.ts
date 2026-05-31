@@ -105,6 +105,7 @@ export interface CompareCliOptions {
   execTemplate: string
   questionsPath: string | null
   outputDir: string
+  task: 'explain' | 'implement'
   baselineMode: 'full' | 'bounded' | 'pack_only' | 'native_agent'
   perArmTimeoutSeconds: number
   heartbeatIntervalMs: number
@@ -192,7 +193,7 @@ export interface InstallCliOptions {
   platform: InstallPlatform
 }
 
-const COMPARE_USAGE = 'Usage: madar compare [question] --exec TEMPLATE [--graph path] [--questions PATH] [--output-dir DIR] [--baseline-mode MODE] [--per-arm-timeout S] [--heartbeat-interval-ms N] [--strict-madar-first] [--strict] [--allow-no-install] [--yes] [--limit N] [--why]'
+const COMPARE_USAGE = 'Usage: madar compare [question] --exec TEMPLATE [--graph path] [--questions PATH] [--output-dir DIR] [--task TASK] [--baseline-mode MODE] [--per-arm-timeout S] [--heartbeat-interval-ms N] [--strict-madar-first] [--strict] [--allow-no-install] [--yes] [--limit N] [--why]'
 
 export interface PlatformActionCliOptions {
   action: 'install' | 'uninstall'
@@ -312,6 +313,14 @@ function parseContextPackTask(value: string): ContextPackTaskKind {
     return normalized
   }
   throw new UsageError('error: --task must be one of explain, implement, review, impact')
+}
+
+function parseCompareTask(value: string): 'explain' | 'implement' {
+  const task = parseContextPackTask(value)
+  if (task === 'explain' || task === 'implement') {
+    return task
+  }
+  throw new UsageError('error: compare --task must be one of explain, implement')
 }
 
 function parsePromptProvider(value: string): PromptCliProvider {
@@ -1089,6 +1098,7 @@ export function parseCompareArgs(args: string[]): CompareCliOptions {
   let execTemplate = ''
   let questionsPath: string | null = null
   let outputDir = 'out/compare'
+  let task: 'explain' | 'implement' = 'explain'
   let baselineMode: 'full' | 'bounded' | 'pack_only' | 'native_agent' = 'full'
   let perArmTimeoutSeconds = 600
   let heartbeatIntervalMs = 30000
@@ -1162,6 +1172,18 @@ export function parseCompareArgs(args: string[]): CompareCliOptions {
     if (argument.startsWith('--output-dir=')) {
       const [, value] = argument.split('=', 2)
       outputDir = requireOptionValue('--output-dir', value)
+      continue
+    }
+
+    if (argument === '--task') {
+      task = parseCompareTask(requireOptionValue('--task', args[index + 1]))
+      index += 1
+      continue
+    }
+
+    if (argument.startsWith('--task=')) {
+      const [, value] = argument.split('=', 2)
+      task = parseCompareTask(requireOptionValue('--task', value))
       continue
     }
 
@@ -1261,6 +1283,7 @@ export function parseCompareArgs(args: string[]): CompareCliOptions {
     execTemplate,
     questionsPath,
     outputDir,
+    task,
     baselineMode,
     perArmTimeoutSeconds,
     heartbeatIntervalMs,
