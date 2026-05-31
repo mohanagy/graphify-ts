@@ -251,6 +251,8 @@ Aider and OpenCode are intentionally context-pack-first: run `madar generate .`,
 
 Codex is intentionally context-pack-first: run `madar generate .`, install with `madar codex install`, and start broad codebase work with `madar pack "<task>" --task explain` before raw file search. In the installed guidance, `out/GRAPH_REPORT.md` remains fallback-only when the pack or graph tools are unavailable, stale, or insufficient. To remove the profile, run `madar codex uninstall`; it removes the madar AGENTS.md section and Codex hook while preserving unrelated content. Manual verification does not require Codex to be installed: inspect `AGENTS.md` and `.codex/hooks.json` after install, then confirm uninstall removes only madar content.
 
+For the full install matrix — generated files, verification paths, profile behavior, and known limitations for both dedicated installers and `madar install --platform ...` — see the [compatibility guide](https://github.com/mohanagy/madar/blob/main/docs/integrations/compatibility.md).
+
 For practical multi-agent workflows across Claude Code, Codex, Copilot, Cursor, and Gemini, see the [agent orchestration guide](https://github.com/mohanagy/madar/blob/main/docs/integrations/agent-orchestration.md).
 
 ### MCP Registry metadata
