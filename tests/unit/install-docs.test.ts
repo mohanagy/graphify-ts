@@ -28,6 +28,15 @@ describe('install documentation', () => {
     expect(readme).toContain('mark the agent as `partial` and suggest the matching reinstall command')
   })
 
+  it('documents handoff as the share-safe remote-agent artifact distinct from local pack and prompt flows', () => {
+    const readme = readFileSync(resolve('README.md'), 'utf8')
+
+    expect(readme).toContain('madar handoff "add auth telemetry" --task implement --consumer copilot')
+    expect(readme).toContain('share-safe remote/background-agent artifact')
+    expect(readme).toContain('`madar pack` stays the richer local/full-context surface')
+    expect(readme).toContain('`madar prompt` stays local')
+  })
+
   it('documents the strict MCP install profile for claude, cursor, copilot, and gemini', () => {
     const readme = readFileSync(resolve('README.md'), 'utf8')
 

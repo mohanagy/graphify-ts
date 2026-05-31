@@ -74,7 +74,7 @@ Want the opt-in semantic retrieval / rerank path too? Install the optional local
 npm install @huggingface/transformers
 ```
 
-`madar prompt` stays local and only compiles a prompt payload. By contrast, compare and benchmark flows can spend paid model tokens when you swap the local smoke-check runner for a real model CLI or hosted model configuration.
+`madar prompt` stays local and only compiles a prompt payload. `madar handoff` is the share-safe remote/background-agent artifact when you need to pass a bounded brief to a cloud or async worker without shipping the richer local pack verbatim. `madar pack` stays the richer local/full-context surface. By contrast, compare and benchmark flows can spend paid model tokens when you swap the local smoke-check runner for a real model CLI or hosted model configuration.
 
 **Install commands:**
 
@@ -93,6 +93,7 @@ madar opencode install    # OpenCode
 madar summary                             # bounded JSON overview before pack/prompt
 madar pack "how does auth work?" --task explain --format text   # human-readable execution brief
 madar pack "add auth telemetry" --task implement --format json  # Pack Schema v1 for automation
+madar handoff "add auth telemetry" --task implement --consumer copilot   # share-safe remote/background-agent artifact
 madar prompt "how does auth work?" --provider claude     # provider-ready compiled prompt
 ```
 

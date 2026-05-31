@@ -39,6 +39,15 @@ export interface PackCliOptions {
   retrievalStrategy?: ContextPackRetrievalStrategy
 }
 
+export interface HandoffCliOptions {
+  prompt: string
+  budget: number
+  task: ContextPackTaskKind
+  graphPath: string
+  consumer: 'generic' | 'codex' | 'cursor' | 'copilot'
+  allowSnippets?: boolean
+}
+
 export type PromptCliProvider = 'claude' | 'gemini'
 
 export interface PromptCliOptions {
@@ -360,6 +369,10 @@ function parseValidatedGraphPath(flag: string, value: string | undefined): strin
   return validateGraphPath(requireOptionValue(flag, value))
 }
 
+function parseGraphPathArgument(flag: string, value: string | undefined): string {
+  return validateCliText(flag, requireOptionValue(flag, value))
+}
+
 export function parseQueryArgs(args: string[]): QueryCliOptions {
   const question = args[0]?.trim()
   if (!question) {
@@ -580,6 +593,97 @@ export function parsePackArgs(args: string[]): PackCliOptions {
   }
 }
 
+export function parseHandoffArgs(args: string[]): HandoffCliOptions {
+  const usage = 'Usage: madar handoff "<prompt>" [--budget N] [--task KIND] [--graph path] [--consumer generic|codex|cursor|copilot] [--allow-snippets]'
+  const prompt = args[0]?.trim()
+  if (!prompt) {
+    throw new UsageError(usage)
+  }
+
+  let budget = 3000
+  let task: ContextPackTaskKind = 'explain'
+  let graphPath = 'out/graph.json'
+  let consumer: HandoffCliOptions['consumer'] = 'generic'
+  let allowSnippets = false
+
+  const normalizedPrompt = validateCliQuestionText('prompt', prompt)
+
+  for (let index = 1; index < args.length; index += 1) {
+    const argument = args[index]
+    if (!argument) {
+      continue
+    }
+
+    if (!argument.startsWith('--')) {
+      throw new UsageError(usage)
+    }
+
+    if (argument === '--budget') {
+      budget = parseBudget(requireOptionValue('--budget', args[index + 1]))
+      index += 1
+      continue
+    }
+
+    if (argument.startsWith('--budget=')) {
+      const [, value] = argument.split('=', 2)
+      budget = parseBudget(requireOptionValue('--budget', value))
+      continue
+    }
+
+    if (argument === '--task') {
+      task = parseContextPackTask(requireOptionValue('--task', args[index + 1]))
+      index += 1
+      continue
+    }
+
+    if (argument.startsWith('--task=')) {
+      const [, value] = argument.split('=', 2)
+      task = parseContextPackTask(requireOptionValue('--task', value))
+      continue
+    }
+
+    if (argument === '--graph') {
+      graphPath = parseGraphPathArgument('--graph', args[index + 1])
+      index += 1
+      continue
+    }
+
+    if (argument.startsWith('--graph=')) {
+      const [, value] = argument.split('=', 2)
+      graphPath = parseGraphPathArgument('--graph', value)
+      continue
+    }
+
+    if (argument === '--consumer') {
+      consumer = parseHandoffConsumer(requireOptionValue('--consumer', args[index + 1]))
+      index += 1
+      continue
+    }
+
+    if (argument.startsWith('--consumer=')) {
+      const [, value] = argument.split('=', 2)
+      consumer = parseHandoffConsumer(requireOptionValue('--consumer', value))
+      continue
+    }
+
+    if (argument === '--allow-snippets') {
+      allowSnippets = true
+      continue
+    }
+
+    throw new UsageError(`error: unknown option for handoff: ${argument}`)
+  }
+
+  return {
+    prompt: normalizedPrompt,
+    budget,
+    task,
+    graphPath,
+    consumer,
+    ...(allowSnippets ? { allowSnippets: true } : {}),
+  }
+}
+
 function parseContextPackFormat(value: string): PackCliOptions['format'] {
   const normalized = value.trim().toLowerCase()
   if (
@@ -592,6 +696,14 @@ function parseContextPackFormat(value: string): PackCliOptions['format'] {
     return normalized as PackCliOptions['format']
   }
   throw new UsageError('error: --format must be one of json, text, markdown, claude, copilot')
+}
+
+function parseHandoffConsumer(value: string): HandoffCliOptions['consumer'] {
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'generic' || normalized === 'codex' || normalized === 'cursor' || normalized === 'copilot') {
+    return normalized as HandoffCliOptions['consumer']
+  }
+  throw new UsageError('error: --consumer must be one of generic, codex, cursor, copilot')
 }
 
 function parseRetrievalLevel(value: string): PackCliOptions['retrievalLevel'] {
