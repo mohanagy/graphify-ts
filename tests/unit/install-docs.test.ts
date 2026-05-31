@@ -40,4 +40,13 @@ describe('install documentation', () => {
     expect(readme).toContain('prefer Madar over non-Madar MCPs for codebase questions')
     expect(readme).toContain('override conflicting auto-activated exploration skills')
   })
+
+  it('documents the local trust boundary and least-privilege install guidance', () => {
+    const readme = readFileSync(resolve('README.md'), 'utf8')
+
+    expect(readme).toContain('Treat every Madar MCP install, plugin, hook, or AGENTS profile as a local trust boundary.')
+    expect(readme).toContain('Only enable it for repositories and local agent runtimes you trust.')
+    expect(readme).toContain('Prefer `--profile strict` when you only need the lean core MCP tools.')
+    expect(readme).toContain('docs/security/mcp-threat-model.md')
+  })
 })
