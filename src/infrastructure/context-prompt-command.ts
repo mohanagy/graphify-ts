@@ -27,6 +27,7 @@ type CompiledProviderPrompt =
       session_payload_token_count: number
       effective_token_count: number
       reused_context_tokens: number
+      session_diagnostics: ComparePromptPack['session_diagnostics']
       session_state: ComparePromptPack['session_state']
     }
   | {
@@ -46,6 +47,7 @@ function compilePromptForProvider(provider: PromptCliProvider, promptPack: Compa
       session_payload_token_count: promptPack.session_payload_token_count,
       effective_token_count: promptPack.effective_token_count,
       reused_context_tokens: promptPack.reused_context_tokens,
+      session_diagnostics: promptPack.session_diagnostics,
       session_state: promptPack.session_state,
     }
   }

@@ -1598,6 +1598,7 @@ export function handleToolCall(id: string | number | null, graphPath: string, pa
               session_payload_token_count: promptPack.session_payload_token_count,
               effective_token_count: promptPack.effective_token_count,
               reused_context_tokens: promptPack.reused_context_tokens,
+              session_diagnostics: promptPack.session_diagnostics,
               session_state: promptPack.session_state,
               ...(sessionId ? { session_id: sessionId } : {}),
             }

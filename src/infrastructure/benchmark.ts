@@ -254,6 +254,7 @@ async function runRunnerBackedBenchmark(
       query_tokens: run.query_tokens,
       effective_query_tokens: run.effective_query_tokens,
       reused_context_tokens: run.reused_context_tokens,
+      session_diagnostics: run.session_diagnostics,
       total_tokens: run.total_tokens,
       prompt_tokens_estimated: run.prompt_tokens_estimated,
       prompt_token_source: run.prompt_token_source,

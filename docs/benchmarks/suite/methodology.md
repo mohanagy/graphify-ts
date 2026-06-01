@@ -31,6 +31,8 @@ The fixed task set is tracked in [`tasks.json`](./tasks.json).
   - Madar
   - SPI Madar when the repo entry supports SPI
 
+When a benchmark run uses an ordered question list, Madar keeps one session across that list so repeated-turn savings can be measured instead of only first-turn cost. Those per-question receipts include `reused_context_tokens`, `effective_query_tokens`, and `session_diagnostics`; single-question cells remain first-turn only.
+
 ## What is measured
 
 Primary metric:

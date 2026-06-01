@@ -76,6 +76,8 @@ npm install @huggingface/transformers
 
 `madar prompt` stays local and only compiles a prompt payload. `madar handoff` is the share-safe remote/background-agent artifact when you need to pass a bounded brief to a cloud or async worker without shipping the richer local pack verbatim. `madar pack` stays the richer local/full-context surface. By contrast, compare and benchmark flows can spend paid model tokens when you swap the local smoke-check runner for a real model CLI or hosted model configuration.
 
+For Claude MCP follow-ups, reuse the same `session_id` with the `context_prompt` tool. Its compiled output includes `session_diagnostics`, which shows whether the turn is an initial prompt or a follow-up plus which stable refs were reused, added, updated, or invalidated. Expect the biggest reuse gains when follow-up prompts keep a mostly stable retrieved graph context; first turns, Gemini/plain prompt flows, or heavily changed retrieved context will naturally show little or no reuse.
+
 **Install commands:**
 
 ```bash

@@ -71,6 +71,9 @@ describe('benchmark suite docs', () => {
     expect(content).toContain('`status: \"planned\"`')
     expect(content).toContain('`report.json` is a checked-in share-safe alias')
     expect(content).toContain('`started_at` / `completed_at` fixture anchors')
+    expect(content).toContain('ordered question list')
+    expect(content).toContain('`session_diagnostics`')
+    expect(content).toContain('single-question cells remain first-turn only')
   })
 
   it('keeps claims conservative while acknowledging initial workflow-outcome receipts', () => {

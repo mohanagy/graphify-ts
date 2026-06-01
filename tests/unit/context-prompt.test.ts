@@ -75,6 +75,16 @@ describe('context prompt', () => {
     expect(followUp.session_payload).toContain('"invalidated": [\n    "beta"\n  ]')
     expect(followUp.metrics.reused_context_tokens).toBeGreaterThan(0)
     expect(followUp.metrics.effective_prompt_tokens).toBeLessThan(followUp.metrics.raw_prompt_tokens)
+    expect(followUp.session_diagnostics).toEqual({
+      mode: 'follow_up',
+      previous_revision: 1,
+      reused_refs: ['__stable_prefix:instructions', 'gamma'],
+      added_refs: ['delta'],
+      updated_refs: ['alpha'],
+      invalidated_refs: ['beta'],
+      reused_context_tokens: followUp.metrics.reused_context_tokens,
+      effective_token_count: followUp.metrics.effective_prompt_tokens,
+    })
   })
 
   it('counts the full stable prefix as reused when only the dynamic suffix changes', () => {

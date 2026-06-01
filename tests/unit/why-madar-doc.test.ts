@@ -93,6 +93,14 @@ describe('public marketing copy honesty', () => {
       expect(lower).toContain('disk cache')
     })
 
+    it('explains when follow-up prompt sessions should and should not show reuse gains', () => {
+      expect(content).toContain('reuse the same `session_id`')
+      expect(content).toContain('`session_diagnostics`')
+      expect(lower).toContain('mostly stable retrieved graph context')
+      expect(lower).toContain('first turns')
+      expect(lower).toContain('heavily changed retrieved context')
+    })
+
     it('keeps the README core MCP surface aligned with the shipped graph_summary tool', () => {
       expect(content).toContain('These seven MCP tools')
       expect(content).toContain('`graph_stats`')

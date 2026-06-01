@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-import type { ContextSessionDelta, ContextSessionState } from '../contracts/context-session.js'
+import type { ContextSessionDelta, ContextSessionDiagnostics, ContextSessionState } from '../contracts/context-session.js'
 import { buildContextSession } from '../runtime/context-session.js'
 import { estimateQueryTokens } from '../runtime/serve.js'
 
@@ -58,6 +58,7 @@ export interface BuiltContextPrompt {
   ordered_stable_refs: string[]
   session_state: ContextSessionState
   session_delta: ContextSessionDelta
+  session_diagnostics: ContextSessionDiagnostics
   metrics: ContextPromptMetrics
   /**
    * #80 (v0.16) — sha256-16 of the stable_prefix. Byte-stable across
@@ -157,6 +158,22 @@ function renderSessionPayload(sessionDelta: ContextSessionDelta, dynamicSuffix: 
   ])
 }
 
+function buildSessionDiagnostics(
+  sessionDelta: ContextSessionDelta,
+  effectiveTokenCount: number,
+): ContextSessionDiagnostics {
+  return {
+    mode: sessionDelta.previous_revision === null ? 'initial' : 'follow_up',
+    previous_revision: sessionDelta.previous_revision,
+    reused_refs: [...sessionDelta.reused_refs],
+    added_refs: sessionDelta.added.map((entry) => entry.ref),
+    updated_refs: sessionDelta.updated.map((entry) => entry.ref),
+    invalidated_refs: [...sessionDelta.invalidated],
+    reused_context_tokens: sessionDelta.reused_token_count,
+    effective_token_count: effectiveTokenCount,
+  }
+}
+
 export function buildContextPrompt(input: BuildContextPromptInput): BuiltContextPrompt {
   const { ordered_sections, stable_prefix, session_refs } = renderStablePrefix(input)
   const dynamic_suffix = renderDynamicSuffix(input.dynamic_sections)
@@ -174,6 +191,7 @@ export function buildContextPrompt(input: BuildContextPromptInput): BuiltContext
     session_delta.previous_revision === null
       ? raw_prompt_tokens
       : Math.max(0, raw_prompt_tokens - session_delta.reused_token_count)
+  const session_diagnostics = buildSessionDiagnostics(session_delta, effective_prompt_tokens)
 
   const stable_prefix_hash = createHash('sha256').update(stable_prefix).digest('hex').slice(0, 16)
 
@@ -186,6 +204,7 @@ export function buildContextPrompt(input: BuildContextPromptInput): BuiltContext
     ordered_stable_refs: ordered_sections.map((section) => section.ref),
     session_state,
     session_delta,
+    session_diagnostics,
     metrics: {
       raw_prompt_tokens,
       stable_prefix_tokens,

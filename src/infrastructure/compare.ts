@@ -5,7 +5,7 @@ import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } 
 
 import type { ContextPackExecutionPhase, ContextPackRoutingDebug, ContextPackTaskKind, ImplementationPackGuidance } from '../contracts/context-pack.js'
 import { KnowledgeGraph } from '../contracts/graph.js'
-import type { ContextSessionState } from '../contracts/context-session.js'
+import type { ContextSessionDiagnostics, ContextSessionState } from '../contracts/context-session.js'
 import { buildContextPrompt, type ContextPromptStableSection } from './context-prompt.js'
 import { buildAnswerReadyPackSchema, buildExplainPackPayloadCore } from './context-pack-command.js'
 import { isMadarProjectHook } from './install.js'
@@ -59,6 +59,7 @@ export interface ComparePromptPack {
   session_payload_token_count: number
   effective_token_count: number
   reused_context_tokens: number
+  session_diagnostics: ContextSessionDiagnostics
   session_state: ContextSessionState
 }
 
@@ -1863,6 +1864,7 @@ export function buildBaselinePromptPack(input: BuildBaselinePromptPackInput): Co
     session_payload_token_count: builtPrompt.metrics.session_payload_tokens,
     effective_token_count: builtPrompt.metrics.effective_prompt_tokens,
     reused_context_tokens: builtPrompt.metrics.reused_context_tokens,
+    session_diagnostics: builtPrompt.session_diagnostics,
     session_state: builtPrompt.session_state,
   }
 }
@@ -1904,6 +1906,7 @@ export function buildMadarPromptPack(input: BuildMadarPromptPackInput): CompareP
     session_payload_token_count: builtPrompt.metrics.session_payload_tokens,
     effective_token_count: builtPrompt.metrics.effective_prompt_tokens,
     reused_context_tokens: builtPrompt.metrics.reused_context_tokens,
+    session_diagnostics: builtPrompt.session_diagnostics,
     session_state: builtPrompt.session_state,
   }
 }

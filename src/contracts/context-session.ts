@@ -26,3 +26,14 @@ export interface ContextSessionDelta {
   reused_refs: string[]
   reused_token_count: number
 }
+
+export interface ContextSessionDiagnostics {
+  mode: 'initial' | 'follow_up'
+  previous_revision: number | null
+  reused_refs: string[]
+  added_refs: string[]
+  updated_refs: string[]
+  invalidated_refs: string[]
+  reused_context_tokens: number
+  effective_token_count: number
+}

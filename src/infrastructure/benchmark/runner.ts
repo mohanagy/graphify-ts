@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { basename, dirname, join, relative, resolve } from 'node:path'
 
 import { KnowledgeGraph } from '../../contracts/graph.js'
-import type { ContextSessionState } from '../../contracts/context-session.js'
+import type { ContextSessionDiagnostics, ContextSessionState } from '../../contracts/context-session.js'
 import { type RetrieveResult, retrieveContext } from '../../runtime/retrieve.js'
 import { QUERY_TOKEN_ESTIMATOR } from '../../runtime/serve.js'
 import { toShareSafeArtifactPath } from '../../shared/share-safe-artifacts.js'
@@ -59,6 +59,7 @@ export interface BenchmarkPromptRun {
   query_tokens: number
   effective_query_tokens: number
   reused_context_tokens: number
+  session_diagnostics: ContextSessionDiagnostics
   total_tokens: number | null
   prompt_token_source: BenchmarkPromptTokenSource
   usage: PromptRunnerUsage | null
@@ -242,6 +243,14 @@ export async function runBenchmarkPrompt(options: RunBenchmarkPromptOptions): Pr
         ? usage.input_total_tokens - usage.cache_read_input_tokens
         : promptPack.effective_token_count,
     reused_context_tokens: usage?.cache_read_input_tokens ?? promptPack.reused_context_tokens,
+    session_diagnostics: {
+      ...promptPack.session_diagnostics,
+      reused_context_tokens: usage?.cache_read_input_tokens ?? promptPack.reused_context_tokens,
+      effective_token_count:
+        usage?.input_total_tokens !== undefined
+          ? usage.input_total_tokens - usage.cache_read_input_tokens
+          : promptPack.effective_token_count,
+    },
     total_tokens: usage?.total_tokens ?? null,
     prompt_token_source: benchmarkPromptTokenSource(usage),
     usage,
@@ -262,6 +271,7 @@ export async function runBenchmarkPrompt(options: RunBenchmarkPromptOptions): Pr
     query_tokens: run.query_tokens,
     effective_query_tokens: run.effective_query_tokens,
     reused_context_tokens: run.reused_context_tokens,
+    session_diagnostics: run.session_diagnostics,
     total_tokens: run.total_tokens,
     prompt_token_source: run.prompt_token_source,
     usage: run.usage,

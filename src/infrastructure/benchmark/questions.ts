@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 
 import { KnowledgeGraph } from '../../contracts/graph.js'
+import type { ContextSessionDiagnostics } from '../../contracts/context-session.js'
 import { bfs, estimateQueryTokens, queryGraph, scoreNodes } from '../../runtime/serve.js'
 
 import { type PromptRunnerUsage } from '../prompt-runner.js'
@@ -13,6 +14,7 @@ export interface BenchmarkQuestionResult {
   query_tokens: number
   effective_query_tokens?: number
   reused_context_tokens?: number
+  session_diagnostics?: ContextSessionDiagnostics
   reduction: number
   expected_labels: string[]
   matched_expected_labels: string[]

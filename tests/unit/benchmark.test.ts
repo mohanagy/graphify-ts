@@ -680,7 +680,6 @@ describe('runBenchmark', () => {
           }),
         }),
       )
-
       expect(benchmark.matched_question_count).toBe(2)
       expect(benchmark.unmatched_questions).toEqual(['xyzzy plugh zorkmid'])
       expect(benchmark.avg_query_tokens).toBe(250)
@@ -696,6 +695,7 @@ describe('runBenchmark', () => {
         total_runs: 2,
         providers: ['claude'],
       })
+      const firstRun = benchmark.per_question[0]
       expect(benchmark.per_question).toEqual([
         expect.objectContaining({
           question: 'how does authentication work',
@@ -721,6 +721,14 @@ describe('runBenchmark', () => {
           reused_context_tokens: 10,
           total_tokens: 210,
           prompt_token_source: 'claude_reported_input',
+          session_diagnostics: expect.objectContaining({
+            mode: 'follow_up',
+            previous_revision: 1,
+            reused_refs: ['__stable_prefix:instructions', '__stable_prefix:title'],
+            added_refs: [],
+            updated_refs: ['explain_pack_payload'],
+            invalidated_refs: [],
+          }),
           usage: expect.objectContaining({
             provider: 'claude',
             input_total_tokens: 180,
@@ -732,6 +740,32 @@ describe('runBenchmark', () => {
           }),
         }),
       ])
+      expect(shareSafeReport).toEqual(expect.objectContaining({
+        session_diagnostics: {
+          mode: 'initial',
+          previous_revision: null,
+          reused_refs: [],
+          added_refs: ['__stable_prefix:instructions', '__stable_prefix:title', 'explain_pack_payload'],
+          updated_refs: [],
+          invalidated_refs: [],
+          reused_context_tokens: firstRun?.reused_context_tokens ?? 0,
+          effective_token_count: firstRun?.effective_query_tokens ?? 0,
+        },
+      }))
+      expect(firstRun?.session_diagnostics).toEqual({
+        mode: 'initial',
+        previous_revision: null,
+        reused_refs: [],
+        added_refs: ['__stable_prefix:instructions', '__stable_prefix:title', 'explain_pack_payload'],
+        updated_refs: [],
+        invalidated_refs: [],
+        reused_context_tokens: firstRun?.reused_context_tokens ?? 0,
+        effective_token_count: firstRun?.effective_query_tokens ?? 0,
+      })
+      const followUpRun = benchmark.per_question[1]
+      expect(followUpRun?.session_diagnostics?.reused_context_tokens).toBeGreaterThan(0)
+      expect(followUpRun?.session_diagnostics?.reused_context_tokens).toBe(followUpRun?.reused_context_tokens)
+      expect(followUpRun?.session_diagnostics?.effective_token_count).toBe(followUpRun?.effective_query_tokens)
     })
   })
 })

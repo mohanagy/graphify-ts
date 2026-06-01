@@ -1174,6 +1174,16 @@ describe('stdio runtime', () => {
           token_count: expect.any(Number),
           session_payload_token_count: expect.any(Number),
           reused_context_tokens: 0,
+          session_diagnostics: {
+            mode: 'initial',
+            previous_revision: null,
+            reused_refs: [],
+            added_refs: expect.any(Array),
+            updated_refs: [],
+            invalidated_refs: [],
+            reused_context_tokens: 0,
+            effective_token_count: expect.any(Number),
+          },
           session_state: expect.objectContaining({ revision: 1 }),
         }),
       }))
@@ -1193,6 +1203,16 @@ describe('stdio runtime', () => {
       expect(followUpPromptPayload.compiled.session_state.revision).toBe(2)
       expect(followUpPromptPayload.compiled.reused_context_tokens).toBeGreaterThan(0)
       expect(followUpPromptPayload.compiled.effective_token_count).toBeLessThan(followUpPromptPayload.compiled.token_count)
+      expect(followUpPromptPayload.compiled.session_diagnostics).toEqual({
+        mode: 'follow_up',
+        previous_revision: 1,
+        reused_refs: ['__stable_prefix:instructions', '__stable_prefix:title'],
+        added_refs: [],
+        updated_refs: ['explain_pack_payload'],
+        invalidated_refs: [],
+        reused_context_tokens: followUpPromptPayload.compiled.reused_context_tokens,
+        effective_token_count: followUpPromptPayload.compiled.effective_token_count,
+      })
 
       expect(resetSessionPayload).toEqual({
         session_id: 'auth-thread',
@@ -1200,6 +1220,7 @@ describe('stdio runtime', () => {
       })
       expect(resetPromptPayload.compiled.session_state.revision).toBe(1)
       expect(resetPromptPayload.compiled.reused_context_tokens).toBe(0)
+      expect(resetPromptPayload.compiled.session_diagnostics.mode).toBe('initial')
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
