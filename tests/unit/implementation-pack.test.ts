@@ -550,6 +550,12 @@ describe('buildImplementationPackGuidance workflow-center scoring (#295)', () =>
       expect.objectContaining({ path: 'src/users/service.ts' }),
       expect.objectContaining({ path: 'src/users/repository.ts' }),
     ]))
+    expect(guidance.likely_edit_files).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: 'src/http/app.ts' }),
+    ]))
+    expect(guidance.cautions).toEqual(expect.arrayContaining([
+      expect.stringContaining('Treat src/http/app.ts as supporting context first'),
+    ]))
   })
 })
 
