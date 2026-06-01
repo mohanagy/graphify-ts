@@ -203,7 +203,7 @@ describe('package metadata', () => {
     expect(ciWorkflow).toContain('mrr < 0.95')
   })
 
-  it('documents framework-aware JS/TS support explicitly in the language capability matrix', () => {
+  it('documents framework-aware JS/TS support and conservative deeper retrieval hints in the language capability matrix', () => {
     const matrix = loadLanguageCapabilityMatrix()
 
     expect(matrix).toContain('## Framework awareness')
@@ -212,8 +212,19 @@ describe('package metadata', () => {
     expect(matrix).toContain('React Router')
     expect(matrix).toContain('NestJS')
     expect(matrix).toContain('Next.js')
+    expect(matrix).toContain('Hono')
+    expect(matrix).toContain('Fastify')
+    expect(matrix).toContain('tRPC')
+    expect(matrix).toContain('Prisma')
     expect(matrix).toContain('`framework_role`')
     expect(matrix).toContain('compact MCP payloads by default')
+    expect(matrix).toContain('request-flow')
+    expect(matrix).toContain('storage')
+    expect(matrix).toContain('runtime-boundary')
+    expect(matrix).toContain('generic AST structure')
+    expect(matrix).toContain('visible client/server boundaries')
+    expect(matrix).toContain('source-visible Hono, Fastify, tRPC, and Prisma workflows get conservative deeper retrieval hints on the opt-in `--spi` pipeline')
+    expect(matrix).toContain('Hono, Fastify, tRPC, and Prisma currently contribute conservative request-flow and storage hints only on the opt-in `--spi` path')
   })
 
   it('pins non-vulnerable dependency floors for the CI security audit', () => {

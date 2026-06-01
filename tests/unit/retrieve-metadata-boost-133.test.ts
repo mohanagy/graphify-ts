@@ -8,6 +8,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { KnowledgeGraph } from '../../src/contracts/graph.js'
 import { generateGraph } from '../../src/infrastructure/generate.js'
 import { retrieveContext } from '../../src/runtime/retrieve.js'
 import { loadGraph } from '../../src/runtime/serve.js'
@@ -214,5 +215,96 @@ describe('Framework metadata-aware retrieval boost (#133)', () => {
     const relatedListUsers = retrievedRelated.matched_nodes.find((n) => n.label === 'listUsers()')
     // Related query's boost should be strictly higher than unrelated.
     expect((relatedListUsers?.framework_boost ?? 0)).toBeGreaterThan(unrelatedListUsers?.framework_boost ?? 0)
+  })
+
+  it('boosts runtime_boundary metadata only for matching client/server prompts', () => {
+    const graph = new KnowledgeGraph({ directed: true })
+    graph.addNode('server_boundary', {
+      label: 'persistDashboardOwnerFilter()',
+      source_file: '/app/dashboard/actions.ts',
+      line_number: 8,
+      node_kind: 'function',
+      file_type: 'code',
+      framework: 'nextjs',
+      runtime_boundary: 'server',
+      community: 0,
+    })
+    graph.addNode('client_boundary', {
+      label: 'persistDashboardOwnerFilter()',
+      source_file: '/components/dashboard-client.tsx',
+      line_number: 8,
+      node_kind: 'function',
+      file_type: 'code',
+      framework: 'nextjs',
+      runtime_boundary: 'client',
+      community: 0,
+    })
+
+    const serverPrompt = retrieveContext(graph, {
+      question: 'move dashboard owner filter persistence into the Next.js server boundary',
+      budget: 2000,
+      fileType: 'code',
+    })
+    const clientPrompt = retrieveContext(graph, {
+      question: 'keep dashboard owner filter presentational in the Next.js client boundary',
+      budget: 2000,
+      fileType: 'code',
+    })
+
+    const serverAction = serverPrompt.matched_nodes.find((node) => node.node_id === 'server_boundary')
+    const serverDistractor = serverPrompt.matched_nodes.find((node) => node.node_id === 'client_boundary')
+    const clientComponent = clientPrompt.matched_nodes.find((node) => node.node_id === 'client_boundary')
+    const clientDistractor = clientPrompt.matched_nodes.find((node) => node.node_id === 'server_boundary')
+
+    expect(serverAction).toBeDefined()
+    expect(serverDistractor).toBeDefined()
+    expect(clientComponent).toBeDefined()
+    expect(clientDistractor).toBeDefined()
+    expect(serverAction?.framework_boost ?? 0).toBeGreaterThan(serverDistractor?.framework_boost ?? 0)
+    expect(clientComponent?.framework_boost ?? 0).toBeGreaterThan(clientDistractor?.framework_boost ?? 0)
+  })
+
+  it('does not let runtime_boundary metadata alone seed unrelated server/client nodes', () => {
+    const graph = new KnowledgeGraph({ directed: true })
+    graph.addNode('relevant_server_boundary', {
+      label: 'persistDashboardOwnerFilter()',
+      source_file: '/app/dashboard/actions.ts',
+      line_number: 8,
+      node_kind: 'function',
+      file_type: 'code',
+      framework: 'nextjs',
+      runtime_boundary: 'server',
+      community: 0,
+    })
+    graph.addNode('unrelated_server_boundary', {
+      label: 'sendWelcomeEmail()',
+      source_file: '/app/onboarding/actions.ts',
+      line_number: 12,
+      node_kind: 'function',
+      file_type: 'code',
+      framework: 'nextjs',
+      runtime_boundary: 'server',
+      community: 0,
+    })
+    graph.addNode('unrelated_client_boundary', {
+      label: 'MarketingBanner()',
+      source_file: '/components/marketing-banner.tsx',
+      line_number: 4,
+      node_kind: 'function',
+      file_type: 'code',
+      framework: 'nextjs',
+      runtime_boundary: 'client',
+      community: 0,
+    })
+
+    const retrieved = retrieveContext(graph, {
+      question: 'move dashboard owner filter persistence into the Next.js server boundary',
+      budget: 2000,
+      fileType: 'code',
+    })
+
+    expect(retrieved.matched_nodes.find((node) => node.node_id === 'relevant_server_boundary')).toBeDefined()
+    expect(retrieved.matched_nodes.find((node) => node.node_id === 'unrelated_server_boundary')).toBeUndefined()
+    expect(retrieved.matched_nodes.find((node) => node.node_id === 'unrelated_client_boundary')).toBeUndefined()
   })
 })

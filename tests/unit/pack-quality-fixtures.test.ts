@@ -11,11 +11,46 @@ const EXPECTED_IMPLEMENT_FIXTURES = [
   'source-test-adjacency',
   'noisy-helper-distractor',
   'indirect-seed-workflow-owner',
+  'framework-request-flow-owner',
+  'framework-runtime-boundary-distractor',
 ] as const
 
 const EXPECTED_EXPLAIN_FIXTURES = [
   'runtime-generation-explain-report-flow',
 ] as const
+
+const EXPECTED_TOP_WORKFLOW_CENTER = {
+  'framework-request-flow-owner': 'src/users/router.ts',
+  'framework-runtime-boundary-distractor': 'app/dashboard/actions.ts',
+} as const
+
+const EXPECTED_TOP_LIKELY_EDIT_FILE = {
+  'framework-runtime-boundary-distractor': 'app/dashboard/actions.ts',
+} as const
+
+const EXPECTED_WORKFLOW_ORDER = {
+  'framework-runtime-boundary-distractor': [
+    'app/dashboard/actions.ts',
+    'components/dashboard-client.tsx',
+  ],
+} as const
+
+const EXPECTED_LIKELY_EDIT_ORDER = {
+  'framework-runtime-boundary-distractor': [
+    'app/dashboard/actions.ts',
+    'components/dashboard-client.tsx',
+  ],
+} as const
+
+const FORBIDDEN_LIKELY_EDIT_FILES = {
+  'framework-request-flow-owner': ['src/http/app.ts'],
+  'framework-runtime-boundary-distractor': ['app/dashboard/page.tsx'],
+} as const
+
+const EXPECTED_NEGATIVE_GUIDANCE_SNIPPETS = {
+  'framework-request-flow-owner': ['src/http/app.ts'],
+  'framework-runtime-boundary-distractor': ['app/dashboard/page.tsx'],
+} as const
 
 const EXPECTED_FIXTURES = [
   ...EXPECTED_IMPLEMENT_FIXTURES,
@@ -39,6 +74,51 @@ describe('pack-quality fixtures (#298)', () => {
         expect.arrayContaining(result.fixture.expected_likely_edit_files),
       )
 
+      const expectedTopWorkflowCenter = EXPECTED_TOP_WORKFLOW_CENTER[
+        fixtureName as keyof typeof EXPECTED_TOP_WORKFLOW_CENTER
+      ]
+      if (expectedTopWorkflowCenter) {
+        expect(result.payload.workflow_centers?.[0]?.path).toBe(expectedTopWorkflowCenter)
+      }
+
+      const expectedTopLikelyEditFile = EXPECTED_TOP_LIKELY_EDIT_FILE[
+        fixtureName as keyof typeof EXPECTED_TOP_LIKELY_EDIT_FILE
+      ]
+      if (expectedTopLikelyEditFile) {
+        expect(result.payload.likely_edit_files?.[0]?.path).toBe(expectedTopLikelyEditFile)
+      }
+
+      const expectedWorkflowOrder = EXPECTED_WORKFLOW_ORDER[
+        fixtureName as keyof typeof EXPECTED_WORKFLOW_ORDER
+      ]
+      if (expectedWorkflowOrder) {
+        const workflowCenters = result.payload.workflow_centers?.map((entry) => entry.path) ?? []
+        expect(workflowCenters.indexOf(expectedWorkflowOrder[0])).toBeGreaterThanOrEqual(0)
+        expect(workflowCenters.indexOf(expectedWorkflowOrder[0])).toBeLessThan(
+          workflowCenters.indexOf(expectedWorkflowOrder[1]),
+        )
+      }
+
+      const expectedLikelyEditOrder = EXPECTED_LIKELY_EDIT_ORDER[
+        fixtureName as keyof typeof EXPECTED_LIKELY_EDIT_ORDER
+      ]
+      if (expectedLikelyEditOrder) {
+        const likelyEditFiles = result.payload.likely_edit_files?.map((entry) => entry.path) ?? []
+        expect(likelyEditFiles.indexOf(expectedLikelyEditOrder[0])).toBeGreaterThanOrEqual(0)
+        expect(likelyEditFiles.indexOf(expectedLikelyEditOrder[0])).toBeLessThan(
+          likelyEditFiles.indexOf(expectedLikelyEditOrder[1]),
+        )
+      }
+
+      const forbiddenLikelyEditFiles = FORBIDDEN_LIKELY_EDIT_FILES[
+        fixtureName as keyof typeof FORBIDDEN_LIKELY_EDIT_FILES
+      ]
+      if (forbiddenLikelyEditFiles) {
+        expect(result.payload.likely_edit_files?.map((entry) => entry.path)).not.toEqual(
+          expect.arrayContaining([...forbiddenLikelyEditFiles]),
+        )
+      }
+
       if (result.fixture.expected_likely_test_files.length > 0) {
         expect(result.payload.likely_test_files?.map((entry) => entry.path)).toEqual(
           expect.arrayContaining(result.fixture.expected_likely_test_files),
@@ -59,6 +139,15 @@ describe('pack-quality fixtures (#298)', () => {
 
       for (const snippet of result.fixture.expected_negative_guidance) {
         expect(result.payload.negative_guidance?.some((entry) => entry.includes(snippet))).toBe(true)
+      }
+
+      const expectedNegativeGuidanceSnippets = EXPECTED_NEGATIVE_GUIDANCE_SNIPPETS[
+        fixtureName as keyof typeof EXPECTED_NEGATIVE_GUIDANCE_SNIPPETS
+      ]
+      if (expectedNegativeGuidanceSnippets) {
+        for (const snippet of expectedNegativeGuidanceSnippets) {
+          expect(result.payload.negative_guidance?.some((entry) => entry.includes(snippet))).toBe(true)
+        }
       }
     })
   }

@@ -149,6 +149,54 @@ function buildIndirectSeedExpansionGraph() {
   return graph
 }
 
+function buildFrameworkWorkflowOwnerGraph() {
+  const root = mkdtempSync(join(tmpdir(), 'madar-framework-owner-'))
+  tempFixtureRoots.push(root)
+  writeFileSync(join(root, 'package.json'), JSON.stringify({
+    name: 'madar-framework-owner-fixture',
+    private: true,
+    scripts: {
+      typecheck: 'tsc --noEmit',
+      build: 'tsc -p tsconfig.build.json',
+      'test:run': 'vitest run',
+    },
+  }))
+
+  const graph = build(
+    [
+      {
+        schema_version: 1,
+        nodes: [
+          { id: 'app_shell', label: 'createApp', file_type: 'code', source_file: `${root}/src/http/app.ts`, source_location: 'L5', node_kind: 'function', community: 0 },
+          { id: 'users_route', label: 'GET /users/:userId', file_type: 'code', source_file: `${root}/src/users/router.ts`, source_location: 'L14', node_kind: 'route', framework_role: 'hono_route', community: 0 },
+          { id: 'users_route_flow', label: 'enforceOwnedUserRequestFlow', file_type: 'code', source_file: `${root}/src/users/router.ts`, source_location: 'L7', node_kind: 'function', community: 0 },
+          { id: 'users_service_file', label: 'service.ts', file_type: 'code', source_file: `${root}/src/users/service.ts`, source_location: 'L1', community: 1 },
+          { id: 'users_service_class', label: 'UserService', file_type: 'code', source_file: `${root}/src/users/service.ts`, source_location: 'L2', node_kind: 'class', community: 1 },
+          { id: 'users_service_ctor', label: '.constructor()', file_type: 'code', source_file: `${root}/src/users/service.ts`, source_location: 'L4', node_kind: 'method', community: 1 },
+          { id: 'users_service', label: 'UserService.loadProfile', file_type: 'code', source_file: `${root}/src/users/service.ts`, source_location: 'L6', node_kind: 'method', community: 1 },
+          { id: 'users_repository', label: 'UserRepository.findOwnedUser', file_type: 'code', source_file: `${root}/src/users/repository.ts`, source_location: 'L20', node_kind: 'method', community: 2 },
+          { id: 'users_prisma', label: 'prisma.user.findFirst', file_type: 'code', source_file: `${root}/src/users/repository.ts`, source_location: 'L21', community: 2 },
+        ],
+        edges: [
+          { source: 'app_shell', target: 'users_route', relation: 'imports_from', confidence: 'EXTRACTED', source_file: `${root}/src/http/app.ts` },
+          { source: 'users_route', target: 'users_route_flow', relation: 'calls', confidence: 'EXTRACTED', source_file: `${root}/src/users/router.ts` },
+          { source: 'users_route_flow', target: 'users_service_file', relation: 'imports_from', confidence: 'EXTRACTED', source_file: `${root}/src/users/router.ts` },
+          { source: 'users_service_file', target: 'users_service_class', relation: 'exports', confidence: 'EXTRACTED', source_file: `${root}/src/users/service.ts` },
+          { source: 'users_service_class', target: 'users_service_ctor', relation: 'calls', confidence: 'EXTRACTED', source_file: `${root}/src/users/service.ts` },
+          { source: 'users_service_class', target: 'users_service', relation: 'calls', confidence: 'EXTRACTED', source_file: `${root}/src/users/service.ts` },
+          { source: 'users_route_flow', target: 'users_service', relation: 'calls', confidence: 'EXTRACTED', source_file: `${root}/src/users/router.ts` },
+          { source: 'users_service', target: 'users_repository', relation: 'calls', confidence: 'EXTRACTED', source_file: `${root}/src/users/service.ts` },
+          { source: 'users_repository', target: 'users_prisma', relation: 'calls', confidence: 'EXTRACTED', source_file: `${root}/src/users/repository.ts` },
+        ],
+      },
+    ],
+    { directed: true },
+  )
+
+  graph.graph.root_path = root
+  return graph
+}
+
 describe('buildImplementationPackGuidance workflow-center scoring (#295)', () => {
   it('ranks the workflow owner above a lexically stronger helper', () => {
     const graph = buildWorkflowCenterGraph()
@@ -341,6 +389,172 @@ describe('buildImplementationPackGuidance workflow-center scoring (#295)', () =>
     expect(guidance.workflow_centers[0]!.matched_symbols).toEqual(expect.arrayContaining([
       'InvoiceWorkflow.run',
       'formatInvoiceRetryMessage',
+    ]))
+  })
+
+  it('prefers the framework workflow owner over route-shell distractors when storage semantics are part of the prompt', () => {
+    const graph = buildFrameworkWorkflowOwnerGraph()
+    const retrieval = {
+      question: 'enforce account ownership in the Hono users route handler for users/:userId before calling prisma.user.findFirst',
+      token_count: 220,
+      matched_nodes: [
+        {
+          node_id: 'app_shell',
+          label: 'app.ts',
+          source_file: `${graph.graph.root_path}/src/http/app.ts`,
+          line_number: 5,
+          node_kind: 'function',
+          file_type: 'code',
+          snippet: 'export function createApp() {}',
+          match_score: 0.91,
+          relevance_band: 'direct' as const,
+          community: 0,
+          community_label: 'HTTP shell',
+        },
+        {
+          node_id: 'users_route',
+          label: 'registerUserRoutes()',
+          source_file: `${graph.graph.root_path}/src/users/router.ts`,
+          line_number: 14,
+          node_kind: 'route',
+          framework_role: 'hono_route',
+          file_type: 'code',
+          snippet: 'router.get("/:userId", async (context) => {})',
+          match_score: 0.95,
+          relevance_band: 'direct' as const,
+          community: 0,
+          community_label: 'Users routes',
+        },
+        {
+          node_id: 'users_route_flow',
+          label: 'enforceOwnedUserRequestFlow',
+          source_file: `${graph.graph.root_path}/src/users/router.ts`,
+          line_number: 7,
+          node_kind: 'function',
+          file_type: 'code',
+          snippet: 'async function enforceOwnedUserRequestFlow() {}',
+          match_score: 0.89,
+          relevance_band: 'direct' as const,
+          community: 0,
+          community_label: 'Users routes',
+        },
+        {
+          node_id: 'users_service_file',
+          label: 'service.ts',
+          source_file: `${graph.graph.root_path}/src/users/service.ts`,
+          line_number: 1,
+          node_kind: 'module',
+          file_type: 'code',
+          snippet: 'export * from "./service"',
+          match_score: 0.77,
+          relevance_band: 'direct' as const,
+          community: 1,
+          community_label: 'Users service',
+        },
+        {
+          node_id: 'users_service_class',
+          label: 'UserService',
+          source_file: `${graph.graph.root_path}/src/users/service.ts`,
+          line_number: 2,
+          node_kind: 'class',
+          file_type: 'code',
+          snippet: 'export class UserService {}',
+          match_score: 0.76,
+          relevance_band: 'direct' as const,
+          community: 1,
+          community_label: 'Users service',
+        },
+        {
+          node_id: 'users_service_ctor',
+          label: '.constructor()',
+          source_file: `${graph.graph.root_path}/src/users/service.ts`,
+          line_number: 4,
+          node_kind: 'method',
+          file_type: 'code',
+          snippet: 'constructor(repository: UserRepository) {}',
+          match_score: 0.71,
+          relevance_band: 'direct' as const,
+          community: 1,
+          community_label: 'Users service',
+        },
+        {
+          node_id: 'users_service',
+          label: 'UserService.loadProfile',
+          source_file: `${graph.graph.root_path}/src/users/service.ts`,
+          line_number: 6,
+          node_kind: 'method',
+          file_type: 'code',
+          snippet: 'export class UserService { async loadProfile() {} }',
+          match_score: 0.72,
+          relevance_band: 'direct' as const,
+          community: 1,
+          community_label: 'Users service',
+        },
+        {
+          node_id: 'users_repository',
+          label: 'UserRepository.findOwnedUser',
+          source_file: `${graph.graph.root_path}/src/users/repository.ts`,
+          line_number: 20,
+          node_kind: 'method',
+          file_type: 'code',
+          snippet: 'export class UserRepository { async findOwnedUser() {} }',
+          match_score: 0.74,
+          relevance_band: 'direct' as const,
+          community: 2,
+          community_label: 'Users repository',
+        },
+        {
+          node_id: 'users_prisma',
+          label: 'prisma.user.findFirst',
+          source_file: `${graph.graph.root_path}/src/users/repository.ts`,
+          line_number: 21,
+          node_kind: 'call_expression',
+          file_type: 'code',
+          snippet: 'return prisma.user.findFirst({ where })',
+          match_score: 0.82,
+          relevance_band: 'direct' as const,
+          community: 2,
+          community_label: 'Users repository',
+        },
+      ],
+      relationships: [],
+      community_context: [],
+      graph_signals: { god_nodes: [], bridge_nodes: [] },
+      claims: [],
+      expandable: [],
+      coverage: {
+        required_evidence: ['primary', 'supporting', 'structural'] as const,
+        semantic_required: ['implementation', 'structure'] as const,
+        semantic_optional: ['contracts', 'tests'] as const,
+        entries: [],
+        semantic_entries: [],
+        missing_required: [],
+        missing_semantic: [],
+        available_relationships: 0,
+        selected_relationships: 0,
+      },
+    } satisfies import('../../src/runtime/retrieve.js').RetrieveResult
+
+    const guidance = buildImplementationPackGuidance(graph, retrieval, {
+      budget: 2400,
+      taskIntent: 'implement',
+      limit: 4,
+    })
+
+    expect(guidance.workflow_centers[0]).toEqual(expect.objectContaining({
+      path: 'src/users/service.ts',
+      phases: expect.arrayContaining(['seed', 'expand', 'promote']),
+    }))
+    expect(guidance.workflow_centers[0]!.path).not.toBe('src/http/app.ts')
+    expect(guidance.likely_edit_files).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: 'src/users/service.ts' }),
+      expect.objectContaining({ path: 'src/users/repository.ts' }),
+    ]))
+    expect(guidance.likely_edit_files).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: 'src/http/app.ts' }),
+    ]))
+    expect(guidance.cautions).toEqual(expect.arrayContaining([
+      expect.stringContaining('Treat src/http/app.ts as supporting context first'),
     ]))
   })
 })

@@ -17,5 +17,8 @@
     "skipLibCheck": true
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"],
-  "exclude": ["tests/fixtures/spi/nest-di-runtime-calls-realistic/**/*"]
+  "exclude": [
+    "tests/fixtures/pack-quality/**/workspace/**/*",
+    "tests/fixtures/spi/nest-di-runtime-calls-realistic/**/*"
+  ]
 }
