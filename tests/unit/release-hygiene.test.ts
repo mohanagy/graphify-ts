@@ -25,6 +25,48 @@ function collectMarkdownLinkTargets(markdown: string): string[] {
   return [...markdown.matchAll(/\[[^\]]+\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)].map((match) => match[1] ?? '')
 }
 
+function withReleaseFixture(
+  version: string,
+  readmeLink: string,
+  runAssertion: (runVerify: () => string) => void,
+): void {
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'madar-release-hygiene-'))
+
+  try {
+    writeFileSync(
+      join(fixtureDir, 'package.json'),
+      JSON.stringify(
+        {
+          name: '@lubab/madar',
+          version,
+          repository: {
+            type: 'git',
+            url: 'git+https://github.com/mohanagy/madar.git',
+          },
+          bugs: {
+            url: 'https://github.com/mohanagy/madar/issues',
+          },
+          homepage: 'https://github.com/mohanagy/madar#readme',
+        },
+        null,
+        2,
+      ),
+    )
+    writeFileSync(join(fixtureDir, 'README.md'), `[release notes](${readmeLink})\n`)
+    writeFileSync(join(fixtureDir, 'CHANGELOG.md'), `## [${version}] - 2026-05-29\n`)
+
+    runAssertion(() =>
+      execFileSync(process.execPath, [releaseVerifyScriptPath()], {
+        cwd: fixtureDir,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }),
+    )
+  } finally {
+    rmSync(fixtureDir, { recursive: true, force: true })
+  }
+}
+
 describe('release hygiene', () => {
   it('keeps npm-visible README links stable', () => {
     const readme = loadFile('README.md')
@@ -39,6 +81,7 @@ describe('release hygiene', () => {
     const scripts = loadPackageManifest().scripts ?? {}
 
     expect(scripts['release:verify']).toBe('node .github/scripts/verify-release-hygiene.mjs')
+    expect(scripts['publish:next']).toBe('npm publish --tag next --access public')
     expect(() =>
       execFileSync(process.execPath, [releaseVerifyScriptPath()], {
         cwd: process.cwd(),
@@ -49,50 +92,36 @@ describe('release hygiene', () => {
   })
 
   it('requires the README changelog link to match the current release heading exactly', () => {
-    const fixtureDir = mkdtempSync(join(tmpdir(), 'madar-release-hygiene-'))
-
-    try {
-      writeFileSync(
-        join(fixtureDir, 'package.json'),
-        JSON.stringify(
-          {
-            name: '@lubab/madar',
-            version: '0.27.4',
-            repository: {
-              type: 'git',
-              url: 'git+https://github.com/mohanagy/madar.git',
-            },
-            bugs: {
-              url: 'https://github.com/mohanagy/madar/issues',
-            },
-            homepage: 'https://github.com/mohanagy/madar#readme',
-          },
-          null,
-          2,
-        ),
-      )
-      writeFileSync(
-        join(fixtureDir, 'README.md'),
-        '[release notes](https://github.com/mohanagy/madar/blob/main/CHANGELOG.md#0274---wrong-date)\n',
-      )
-      writeFileSync(join(fixtureDir, 'CHANGELOG.md'), '## [0.27.4] - 2026-05-29\n')
-
-      expect(() =>
-        execFileSync(process.execPath, [releaseVerifyScriptPath()], {
-          cwd: fixtureDir,
-          encoding: 'utf8',
-          stdio: 'pipe',
-        }),
-      ).toThrow(/matching changelog entry/)
-    } finally {
-      rmSync(fixtureDir, { recursive: true, force: true })
-    }
+    withReleaseFixture('0.27.4', 'https://github.com/mohanagy/madar/blob/main/CHANGELOG.md#0274---wrong-date', (runVerify) => {
+      expect(runVerify).toThrow(/matching changelog entry/)
+    })
   })
 
   it('documents the release verification command in the release checklist', () => {
     const releaseDoc = loadFile('docs/release.md')
 
     expect(releaseDoc).toContain('npm run release:verify')
-    expect(releaseDoc).toContain('merged `main` commit')
+    expect(releaseDoc).toContain('`main` for stable releases, `next` for prereleases')
+    expect(releaseDoc).toContain('npm publish --tag next --access public --provenance')
+  })
+
+  it('requires prerelease README changelog links to target next', () => {
+    withReleaseFixture(
+      '0.27.7-next.0',
+      'https://github.com/mohanagy/madar/blob/main/CHANGELOG.md#0277-next0---2026-05-29',
+      (runVerify) => {
+        expect(runVerify).toThrow(/matching changelog entry/)
+      },
+    )
+  })
+
+  it('accepts prerelease README changelog links that target next', () => {
+    withReleaseFixture(
+      '0.27.7-next.0',
+      'https://github.com/mohanagy/madar/blob/next/CHANGELOG.md#0277-next0---2026-05-29',
+      (runVerify) => {
+        expect(runVerify).not.toThrow()
+      },
+    )
   })
 })

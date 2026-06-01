@@ -126,11 +126,13 @@ The current telemetry model is still local-first and source-safe. It records onl
 
 ---
 
-## What's new in 0.27.6
+## What's new in 0.27.7-next.0
 
-See the [`0.27.6` changelog entry](https://github.com/mohanagy/madar/blob/main/CHANGELOG.md#0276---2026-05-29) for the full release notes.
+See the [`0.27.7-next.0` changelog entry](https://github.com/mohanagy/madar/blob/next/CHANGELOG.md#0277-next0---2026-06-01) for the full release notes.
 
-This patch removes the legacy `madar add <url>` ingest surface, keeps `save-result` available for exporting query results, and preserves backward-compatible legacy ingest provenance for older saved artifacts.
+This `@next` build keeps the current `0.27.6` CLI/runtime fixes and adds a checked-in federation flagship proof: a reproducible three-repo fixture, a synthetic federation receipt, and doc updates that make the multi-repo enterprise workflow concrete without overstating the current implementation.
+
+It also carries the latest next-track roadmap docs for design-partner workflow loops, plugin distribution channels, and language-expansion decisions, so the beta line stays aligned with the product direction already merged on `next`.
 
 The larger **What's new in 0.23.0** additions are still part of the main flow too: `madar summary`, the core MCP `graph_summary` tool, runtime `execution_slice` output, share-safe `report.share-safe.json` compare artifacts, and `compare --baseline-mode pack_only`.
 
@@ -138,7 +140,7 @@ If you want the broader proof-oriented workflow behind the current surfaces, sta
 
 ### When to use `--spi`
 
-`--spi` is **still opt-in** in 0.27.6. Use it when your repo is framework-heavy TypeScript/JavaScript and you want the extra framework-shaped metadata plus disk cache behavior.
+`--spi` is **still opt-in** in 0.27.7-next.0. Use it when your repo is framework-heavy TypeScript/JavaScript and you want the extra framework-shaped metadata plus disk cache behavior.
 
 `--spi` is usually worth it for NestJS, Next.js App Router, Prisma, tRPC, Hono, Fastify, and similar repos where users ask storage-oriented prompts, client/server boundary questions, or request-flow questions. The default pipeline is still fine for simpler repos, non-JS/TS workspaces, or quick first runs when you do not need the extra framework detail yet.
 

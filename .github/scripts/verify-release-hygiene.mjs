@@ -36,6 +36,10 @@ function changelogAnchorForVersion(version) {
     .replaceAll(' ', '-')
 }
 
+function changelogBranchForVersion(version) {
+  return version.includes('-') ? 'next' : 'main'
+}
+
 function main() {
   const packageManifest = loadJson(PACKAGE_JSON_PATH)
   const readme = loadText(README_PATH)
@@ -61,7 +65,7 @@ function main() {
   )
 
   const expectedVersionedChangelogLink =
-    `${REPOSITORY_WEB_URL}/blob/main/CHANGELOG.md#${changelogAnchorForVersion(packageManifest.version)}`
+    `${REPOSITORY_WEB_URL}/blob/${changelogBranchForVersion(packageManifest.version)}/CHANGELOG.md#${changelogAnchorForVersion(packageManifest.version)}`
   assert.ok(
     readme.includes(expectedVersionedChangelogLink),
     'README.md must link the current "What\'s new" section to the matching changelog entry',

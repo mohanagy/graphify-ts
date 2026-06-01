@@ -1,6 +1,6 @@
 {
     "name": "@lubab/madar",
-    "version": "0.27.6",
+    "version": "0.27.7-next.0",
     "description": "Local task-aware context packs for AI coding agents. Start from what runs for this task and turn TypeScript/Node workspaces plus PR diffs into compact, verifiable context packs for Claude Code, Codex, Copilot, Cursor, and other agents.",
     "license": "MIT",
     "author": "mohanagy",
@@ -61,6 +61,7 @@
         "prepack": "npm run clean && npm run build",
         "pack:dry-run": "npm pack --dry-run",
         "publish:public": "npm publish --access public",
+        "publish:next": "npm publish --tag next --access public",
         "publish:dry-run": "npm publish --dry-run",
         "release:verify": "node .github/scripts/verify-release-hygiene.mjs",
         "registry:validate": "node .github/scripts/validate-mcp-registry.mjs"
