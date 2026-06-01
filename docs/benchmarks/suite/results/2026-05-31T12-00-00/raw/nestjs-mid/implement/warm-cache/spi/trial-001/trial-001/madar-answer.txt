@@ -1,1 +1,11 @@
-Madar answer for nestjs-mid implement trial 1 (spi)
+Madar answer fixture
+Model: claude-sonnet
+Prompt: Add request-id propagation to the login session flow and keep the existing auth controller contract intact.
+Temperature: n/a
+Repo: nestjs-mid
+Task: implement
+Trial: 1
+Arm: spi
+
+Summary: Madar sample output for nestjs-mid/implement showing the published fixture format.
+Evidence note: deterministic madar receipt for suite matrix serialization checks.

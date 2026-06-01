@@ -1,1 +1,11 @@
-Madar answer for ts-small explain-runtime trial 3 (legacy)
+Madar answer fixture
+Model: claude-sonnet
+Prompt: How does the password reset flow move from account routes through the password-reset service to email delivery and audit logging?
+Temperature: n/a
+Repo: ts-small
+Task: explain-runtime
+Trial: 3
+Arm: legacy
+
+Summary: Madar sample output for ts-small/explain-runtime showing the published fixture format.
+Evidence note: deterministic madar receipt for suite matrix serialization checks.

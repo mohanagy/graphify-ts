@@ -1,1 +1,11 @@
-Baseline answer for nestjs-mid implement trial 1 (legacy)
+Baseline answer fixture
+Model: claude-sonnet
+Prompt: Add request-id propagation to the login session flow and keep the existing auth controller contract intact.
+Temperature: n/a
+Repo: nestjs-mid
+Task: implement
+Trial: 1
+Arm: legacy
+
+Summary: Baseline sample output for nestjs-mid/implement showing the published fixture format.
+Evidence note: deterministic baseline receipt for suite matrix serialization checks.

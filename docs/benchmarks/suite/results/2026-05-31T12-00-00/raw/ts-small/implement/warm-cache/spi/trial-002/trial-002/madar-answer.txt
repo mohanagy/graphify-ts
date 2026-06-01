@@ -1,1 +1,11 @@
-Madar answer for ts-small implement trial 2 (spi)
+Madar answer fixture
+Model: claude-sonnet
+Prompt: Add audit-log context to password reset emails without changing the route contract.
+Temperature: n/a
+Repo: ts-small
+Task: implement
+Trial: 2
+Arm: spi
+
+Summary: Madar sample output for ts-small/implement showing the published fixture format.
+Evidence note: deterministic madar receipt for suite matrix serialization checks.

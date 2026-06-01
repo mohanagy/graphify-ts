@@ -1,1 +1,11 @@
-Madar answer for ts-monorepo-large impact trial 2 (spi)
+Madar answer fixture
+Model: claude-sonnet
+Prompt: What breaks if invite-service changes how invite tokens are validated before crossing the package boundary?
+Temperature: n/a
+Repo: ts-monorepo-large
+Task: impact
+Trial: 2
+Arm: spi
+
+Summary: Madar sample output for ts-monorepo-large/impact showing the published fixture format.
+Evidence note: deterministic madar receipt for suite matrix serialization checks.

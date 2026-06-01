@@ -1,4 +1,5 @@
 {
+  "data_source": "fixture",
   "baseline_mode": "native_agent",
   "question": "Add request-id propagation to the login session flow and keep the existing auth controller contract intact.",
   "graph_path": "<project-root>/out/graph.json",
@@ -71,7 +72,9 @@
       "turns": "flat"
     },
     "evidence": [
-      "fixture-style deterministic benchmark row"
+      "token reduction: 28.3%",
+      "cost reduction: $0.44",
+      "fixture receipt: nestjs-mid/implement/legacy/trial-001"
     ]
   },
   "workflow_outcome": {

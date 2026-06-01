@@ -1,4 +1,5 @@
 {
+  "data_source": "fixture",
   "baseline_mode": "native_agent",
   "question": "How does the password reset flow move from account routes through the password-reset service to email delivery and audit logging?",
   "graph_path": "<project-root>/out/graph.json",
@@ -71,10 +72,16 @@
       "turns": "flat"
     },
     "evidence": [
-      "fixture-style deterministic benchmark row"
+      "token reduction: 40.0%",
+      "cost reduction: $0.62",
+      "fixture receipt: ts-small/explain-runtime/spi/trial-001"
     ]
   },
-  "workflow_outcome": null,
+  "workflow_outcome": {
+    "evidence": [
+      "not applicable for explain-runtime fixture cells"
+    ]
+  },
   "prompt_token_source": {
     "baseline": "anthropic_provider_reported",
     "madar": "anthropic_provider_reported"

@@ -1,1 +1,11 @@
-Baseline answer for ts-monorepo-large review trial 1 (legacy)
+Baseline answer fixture
+Model: claude-sonnet
+Prompt: Review the invite-service change for package-boundary violations or incorrect invite expiry handling.
+Temperature: n/a
+Repo: ts-monorepo-large
+Task: review
+Trial: 1
+Arm: legacy
+
+Summary: Baseline sample output for ts-monorepo-large/review showing the published fixture format.
+Evidence note: deterministic baseline receipt for suite matrix serialization checks.

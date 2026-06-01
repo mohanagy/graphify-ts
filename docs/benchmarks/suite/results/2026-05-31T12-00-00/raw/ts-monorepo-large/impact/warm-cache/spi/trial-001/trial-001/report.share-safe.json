@@ -1,4 +1,5 @@
 {
+  "data_source": "fixture",
   "baseline_mode": "native_agent",
   "question": "What breaks if invite-service changes how invite tokens are validated before crossing the package boundary?",
   "graph_path": "<project-root>/out/graph.json",
@@ -71,10 +72,16 @@
       "turns": "flat"
     },
     "evidence": [
-      "fixture-style deterministic benchmark row"
+      "token reduction: 33.6%",
+      "cost reduction: $0.62",
+      "fixture receipt: ts-monorepo-large/impact/spi/trial-001"
     ]
   },
-  "workflow_outcome": null,
+  "workflow_outcome": {
+    "evidence": [
+      "not applicable for impact fixture cells"
+    ]
+  },
   "prompt_token_source": {
     "baseline": "anthropic_provider_reported",
     "madar": "anthropic_provider_reported"

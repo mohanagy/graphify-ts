@@ -1,4 +1,5 @@
 {
+  "data_source": "fixture",
   "baseline_mode": "native_agent",
   "question": "Review the invite-service change for package-boundary violations or incorrect invite expiry handling.",
   "graph_path": "<project-root>/out/graph.json",
@@ -71,7 +72,9 @@
       "turns": "flat"
     },
     "evidence": [
-      "fixture-style deterministic benchmark row"
+      "token reduction: 31.3%",
+      "cost reduction: $0.62",
+      "fixture receipt: ts-monorepo-large/review/spi/trial-003"
     ]
   },
   "workflow_outcome": {

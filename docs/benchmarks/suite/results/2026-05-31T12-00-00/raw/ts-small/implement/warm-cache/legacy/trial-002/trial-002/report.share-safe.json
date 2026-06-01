@@ -1,4 +1,5 @@
 {
+  "data_source": "fixture",
   "baseline_mode": "native_agent",
   "question": "Add audit-log context to password reset emails without changing the route contract.",
   "graph_path": "<project-root>/out/graph.json",
@@ -71,7 +72,9 @@
       "turns": "flat"
     },
     "evidence": [
-      "fixture-style deterministic benchmark row"
+      "token reduction: 30.1%",
+      "cost reduction: $0.44",
+      "fixture receipt: ts-small/implement/legacy/trial-002"
     ]
   },
   "workflow_outcome": {

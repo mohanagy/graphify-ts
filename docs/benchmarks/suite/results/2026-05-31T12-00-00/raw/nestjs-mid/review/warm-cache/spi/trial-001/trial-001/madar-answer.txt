@@ -1,1 +1,11 @@
-Madar answer for nestjs-mid review trial 1 (spi)
+Madar answer fixture
+Model: claude-sonnet
+Prompt: Review the auth session flow for persistence bugs, missing validation, or request-boundary regressions.
+Temperature: n/a
+Repo: nestjs-mid
+Task: review
+Trial: 1
+Arm: spi
+
+Summary: Madar sample output for nestjs-mid/review showing the published fixture format.
+Evidence note: deterministic madar receipt for suite matrix serialization checks.

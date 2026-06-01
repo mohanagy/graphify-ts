@@ -1,1 +1,11 @@
-Madar answer for ts-small review trial 3 (legacy)
+Madar answer fixture
+Model: claude-sonnet
+Prompt: Review the password-reset flow for missing tests, route leaks, or email side effects before merge.
+Temperature: n/a
+Repo: ts-small
+Task: review
+Trial: 3
+Arm: legacy
+
+Summary: Madar sample output for ts-small/review showing the published fixture format.
+Evidence note: deterministic madar receipt for suite matrix serialization checks.

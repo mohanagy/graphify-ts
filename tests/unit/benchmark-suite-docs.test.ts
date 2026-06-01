@@ -23,8 +23,10 @@ describe('benchmark suite docs', () => {
 
   it('checks in full share-safe receipts for the latest published bundle', () => {
     const report = JSON.parse(readDoc('docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/implement/warm-cache/legacy/trial-001/trial-001/report.share-safe.json')) as {
+      data_source?: string
       baseline?: { kind?: string }
       madar?: { kind?: string }
+      benchmark_outcome?: { evidence?: string[] }
       tool_call_counts?: unknown
       measurement_validity?: string
       workflow_outcome?: unknown
@@ -32,13 +34,19 @@ describe('benchmark suite docs', () => {
     const baselineAnswer = readDoc('docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/implement/warm-cache/legacy/trial-001/trial-001/baseline-answer.txt')
     const madarAnswer = readDoc('docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/implement/warm-cache/legacy/trial-001/trial-001/madar-answer.txt')
 
+    expect(report.data_source).toBe('fixture')
     expect(report.baseline?.kind).toBe('succeeded')
     expect(report.madar?.kind).toBe('succeeded')
+    expect(report.benchmark_outcome?.evidence?.some((entry) => entry.includes('token reduction'))).toBe(true)
     expect(report.tool_call_counts).toBeTruthy()
     expect(report.measurement_validity).toBe('valid')
     expect(report.workflow_outcome).toBeTruthy()
-    expect(baselineAnswer).not.toBe('baseline\n')
-    expect(madarAnswer).not.toBe('madar\n')
+    expect(baselineAnswer).toContain('Model:')
+    expect(baselineAnswer).toContain('Prompt:')
+    expect(baselineAnswer.trim().split('\n').length).toBeGreaterThan(3)
+    expect(madarAnswer).toContain('Model:')
+    expect(madarAnswer).toContain('Prompt:')
+    expect(madarAnswer.trim().split('\n').length).toBeGreaterThan(3)
   })
 
   it('defines workflow outcome metrics alongside token and latency reporting', () => {
@@ -49,6 +57,8 @@ describe('benchmark suite docs', () => {
     expect(content).toContain('review time')
     expect(content).toContain('rework')
     expect(content).toContain('human intervention')
+    expect(content).toContain('`status: \"ready\"`')
+    expect(content).toContain('`status: \"planned\"`')
   })
 
   it('keeps claims conservative while acknowledging initial workflow-outcome receipts', () => {

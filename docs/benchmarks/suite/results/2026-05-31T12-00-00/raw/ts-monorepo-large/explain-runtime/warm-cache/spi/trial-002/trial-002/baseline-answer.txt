@@ -1,1 +1,11 @@
-Baseline answer for ts-monorepo-large explain-runtime trial 2 (spi)
+Baseline answer fixture
+Model: claude-sonnet
+Prompt: How does invite creation and membership validation flow work inside the monorepo invite service?
+Temperature: n/a
+Repo: ts-monorepo-large
+Task: explain-runtime
+Trial: 2
+Arm: spi
+
+Summary: Baseline sample output for ts-monorepo-large/explain-runtime showing the published fixture format.
+Evidence note: deterministic baseline receipt for suite matrix serialization checks.

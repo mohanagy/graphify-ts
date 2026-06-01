@@ -1,1 +1,11 @@
-Baseline answer for ts-monorepo-large implement trial 3 (spi)
+Baseline answer fixture
+Model: claude-sonnet
+Prompt: Add invite expiry validation inside the domain invite service without widening the package boundary.
+Temperature: n/a
+Repo: ts-monorepo-large
+Task: implement
+Trial: 3
+Arm: spi
+
+Summary: Baseline sample output for ts-monorepo-large/implement showing the published fixture format.
+Evidence note: deterministic baseline receipt for suite matrix serialization checks.

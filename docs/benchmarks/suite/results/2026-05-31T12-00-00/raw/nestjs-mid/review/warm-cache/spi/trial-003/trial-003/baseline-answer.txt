@@ -1,1 +1,11 @@
-Baseline answer for nestjs-mid review trial 3 (spi)
+Baseline answer fixture
+Model: claude-sonnet
+Prompt: Review the auth session flow for persistence bugs, missing validation, or request-boundary regressions.
+Temperature: n/a
+Repo: nestjs-mid
+Task: review
+Trial: 3
+Arm: spi
+
+Summary: Baseline sample output for nestjs-mid/review showing the published fixture format.
+Evidence note: deterministic baseline receipt for suite matrix serialization checks.

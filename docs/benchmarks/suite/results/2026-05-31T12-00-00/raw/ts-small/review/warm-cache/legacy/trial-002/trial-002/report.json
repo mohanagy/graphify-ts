@@ -1,4 +1,5 @@
 {
+  "data_source": "fixture",
   "baseline_mode": "native_agent",
   "question": "Review the password-reset flow for missing tests, route leaks, or email side effects before merge.",
   "graph_path": "<project-root>/out/graph.json",
@@ -71,7 +72,9 @@
       "turns": "flat"
     },
     "evidence": [
-      "fixture-style deterministic benchmark row"
+      "token reduction: 29.1%",
+      "cost reduction: $0.44",
+      "fixture receipt: ts-small/review/legacy/trial-002"
     ]
   },
   "workflow_outcome": {

@@ -1,1 +1,11 @@
-Baseline answer for nestjs-mid impact trial 2 (spi)
+Baseline answer fixture
+Model: claude-sonnet
+Prompt: What breaks if I change session persistence in the auth service to stop returning stored session ids?
+Temperature: n/a
+Repo: nestjs-mid
+Task: impact
+Trial: 2
+Arm: spi
+
+Summary: Baseline sample output for nestjs-mid/impact showing the published fixture format.
+Evidence note: deterministic baseline receipt for suite matrix serialization checks.

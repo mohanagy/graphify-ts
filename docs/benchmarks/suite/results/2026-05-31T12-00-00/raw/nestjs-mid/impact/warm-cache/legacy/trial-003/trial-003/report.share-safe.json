@@ -1,4 +1,5 @@
 {
+  "data_source": "fixture",
   "baseline_mode": "native_agent",
   "question": "What breaks if I change session persistence in the auth service to stop returning stored session ids?",
   "graph_path": "<project-root>/out/graph.json",
@@ -71,10 +72,16 @@
       "turns": "flat"
     },
     "evidence": [
-      "fixture-style deterministic benchmark row"
+      "token reduction: 28.6%",
+      "cost reduction: $0.44",
+      "fixture receipt: nestjs-mid/impact/legacy/trial-003"
     ]
   },
-  "workflow_outcome": null,
+  "workflow_outcome": {
+    "evidence": [
+      "not applicable for impact fixture cells"
+    ]
+  },
   "prompt_token_source": {
     "baseline": "anthropic_provider_reported",
     "madar": "anthropic_provider_reported"

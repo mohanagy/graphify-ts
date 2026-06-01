@@ -1,4 +1,5 @@
 {
+  "data_source": "fixture",
   "baseline_mode": "native_agent",
   "question": "How does invite creation and membership validation flow work inside the monorepo invite service?",
   "graph_path": "<project-root>/out/graph.json",
@@ -71,10 +72,16 @@
       "turns": "flat"
     },
     "evidence": [
-      "fixture-style deterministic benchmark row"
+      "token reduction: 27.9%",
+      "cost reduction: $0.44",
+      "fixture receipt: ts-monorepo-large/explain-runtime/legacy/trial-002"
     ]
   },
-  "workflow_outcome": null,
+  "workflow_outcome": {
+    "evidence": [
+      "not applicable for explain-runtime fixture cells"
+    ]
+  },
   "prompt_token_source": {
     "baseline": "anthropic_provider_reported",
     "madar": "anthropic_provider_reported"

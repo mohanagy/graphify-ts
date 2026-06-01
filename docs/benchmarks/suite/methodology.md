@@ -8,7 +8,8 @@ The fixed repo set is tracked in [`repos.json`](./repos.json).
 
 - Keep the shape mix explicit: small TypeScript, mid-size service, larger TypeScript monorepo, Python service, Go service.
 - The suite may use public repos or fixture-style proxies. It must not require the private GoValidate codebase.
-- Only rows marked `status: "ready"` are prompt-wired today. Planned rows stay visible in the manifest so the public surface shows the intended spread honestly.
+- `status: "ready"` means the repo/task cell is prompt-wired and intended to run once the local install gate passes.
+- `status: "planned"` means the row stays visible in the manifest for roadmap clarity but must not be counted as measured evidence yet.
 - Actual execution still verifies a local Madar install in each repo path. Ready rows without a verified install are reported as skipped, not silently treated as measured evidence.
 
 ## Task selection
@@ -46,11 +47,11 @@ Secondary metrics:
 
 Workflow outcome metrics, when the compare receipt provides them:
 
-- wrong-file edits
-- validation pass/fail
-- review time
-- rework
-- human intervention
+- wrong-file edits — count of edits applied outside the intended target file or package boundary for the cell.
+- validation pass/fail — boolean receipt for whether the task-specific validation command or check completed successfully.
+- review time — elapsed seconds spent producing the review-style result for that cell.
+- rework — count of extra fix/retry loops required before the reported outcome stabilized.
+- human intervention — boolean receipt for whether a person had to step in to unblock or correct the run.
 
 Per-cell artifacts keep `report.share-safe.json` as the canonical persisted report so summaries can be inspected without leaking private local paths.
 

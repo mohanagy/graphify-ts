@@ -1,4 +1,5 @@
 {
+  "data_source": "fixture",
   "baseline_mode": "native_agent",
   "question": "Review the auth session flow for persistence bugs, missing validation, or request-boundary regressions.",
   "graph_path": "<project-root>/out/graph.json",
@@ -71,7 +72,9 @@
       "turns": "flat"
     },
     "evidence": [
-      "fixture-style deterministic benchmark row"
+      "token reduction: 33.6%",
+      "cost reduction: $0.62",
+      "fixture receipt: nestjs-mid/review/spi/trial-002"
     ]
   },
   "workflow_outcome": {

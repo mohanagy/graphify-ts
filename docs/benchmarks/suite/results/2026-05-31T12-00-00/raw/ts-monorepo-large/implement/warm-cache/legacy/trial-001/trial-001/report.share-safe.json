@@ -1,4 +1,5 @@
 {
+  "data_source": "fixture",
   "baseline_mode": "native_agent",
   "question": "Add invite expiry validation inside the domain invite service without widening the package boundary.",
   "graph_path": "<project-root>/out/graph.json",
@@ -71,7 +72,9 @@
       "turns": "flat"
     },
     "evidence": [
-      "fixture-style deterministic benchmark row"
+      "token reduction: 26.6%",
+      "cost reduction: $0.44",
+      "fixture receipt: ts-monorepo-large/implement/legacy/trial-001"
     ]
   },
   "workflow_outcome": {
