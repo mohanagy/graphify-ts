@@ -643,6 +643,115 @@ describe('runBenchmarkSuite', () => {
     })
   })
 
+  it('passes implement tasks through to native-agent compare inputs', async () => {
+    await withTempDir(async (tempDir) => {
+      const runnableRepoPath = createFixtureRepo(join(tempDir, 'repos', 'nestjs-mid'))
+      const repos: BenchmarkSuiteRepo[] = [
+        {
+          id: 'nestjs-mid',
+          name: 'Fixture NestJS-like service',
+          path: runnableRepoPath,
+          description: 'Ready fixture',
+          size: 'mid',
+          language: 'typescript',
+          shape: 'service',
+          status: 'ready',
+          supportsSpi: true,
+        },
+      ]
+      const tasks: BenchmarkSuiteTask[] = [
+        {
+          id: 'implement',
+          name: 'Implement task',
+          description: 'Edit login validation behavior.',
+          status: 'ready',
+          prompts: {
+            'nestjs-mid': 'Change login validation behavior.',
+          },
+        },
+      ]
+      const seenTasks: string[] = []
+
+      await runBenchmarkSuite(
+        {
+          repo: null,
+          task: 'implement',
+          mode: 'cold',
+          trials: 1,
+          outputDir: join(tempDir, 'results'),
+          execTemplate: 'mock-runner',
+          dryRun: false,
+          yes: true,
+        },
+        {
+          repos,
+          tasks,
+          now: () => new Date('2026-05-27T12:34:56Z'),
+          generateGraph: (rootPath = '.', options = {}) => {
+            const outputDir = join(rootPath, 'out')
+            mkdirSync(outputDir, { recursive: true })
+            const graphPath = join(outputDir, 'graph.json')
+            writeFileSync(graphPath, '{}\n', 'utf8')
+            return {
+              mode: options.useSpi ? 'generate' : 'generate',
+              rootPath,
+              outputDir,
+              graphPath,
+              reportPath: join(outputDir, 'GRAPH_REPORT.md'),
+              htmlPath: null,
+              wikiPath: null,
+              obsidianPath: null,
+              svgPath: null,
+              graphmlPath: null,
+              cypherPath: null,
+              docsPath: null,
+              totalFiles: 1,
+              codeFiles: 1,
+              nonCodeFiles: 0,
+              extractableFiles: 1,
+              extractedFiles: 1,
+              totalWords: 10,
+              nodeCount: 1,
+              edgeCount: 0,
+              communityCount: 1,
+              changedFiles: 0,
+              deletedFiles: 0,
+              cache: null,
+              warning: null,
+              notes: [],
+            } satisfies GenerateGraphResult
+          },
+          executeNativeAgentCompare: async (input) => {
+            seenTasks.push(((input as { task?: string }).task) ?? 'missing')
+            return makeCompareResult({
+              question: input.question ?? 'unknown',
+              graphPath: input.graphPath,
+              outputDir: input.outputDir,
+              baselineInputTokens: 300,
+              madarInputTokens: 200,
+              baselineTurns: 6,
+              madarTurns: 4,
+              baselineDurationMs: 9000,
+              madarDurationMs: 6000,
+              baselineCostUsd: 1.2,
+              madarCostUsd: 0.8,
+              baselineToolTotal: 9,
+              madarToolTotal: 5,
+              baselineRead: 4,
+              madarRead: 3,
+              baselineGlob: 2,
+              madarGlob: 1,
+              baselineGrep: 1,
+              madarGrep: 1,
+            })
+          },
+        },
+      )
+
+      expect(seenTasks).toEqual(['implement', 'implement'])
+    })
+  })
+
   it('regenerates fresh workspaces for each cold-cache trial while reusing warm ones', async () => {
     await withTempDir(async (tempDir) => {
       const runnableRepoPath = createFixtureRepo(join(tempDir, 'repos', 'nestjs-mid'))

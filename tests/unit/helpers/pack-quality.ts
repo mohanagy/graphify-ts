@@ -43,6 +43,10 @@ interface PackSchemaPayload {
   likely_test_files?: Array<{ path?: string }>
   validation_commands?: string[]
   negative_guidance?: string[]
+  claims?: Array<{ node_labels?: string[] }>
+  expandable?: Array<{
+    preview?: Array<{ label?: string }>
+  }>
   retrieval_pipeline?: {
     phases?: Array<{ phase?: string }>
   }

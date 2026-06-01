@@ -26,6 +26,7 @@ import { classifyRetrievalLevel } from '../runtime/retrieval-gate.js'
 import { compactRetrieveResult, retrieveContext, tokenizeLabel, type CompactRetrieveResult, type RetrieveResult } from '../runtime/retrieve.js'
 import { buildRoutingDebug } from '../runtime/routing-debug.js'
 import { QUERY_TOKEN_ESTIMATOR, estimateQueryTokens, loadGraph } from '../runtime/serve.js'
+import { resolveToolProfileFromEnv, type McpToolProfile } from '../runtime/stdio/definitions.js'
 import { sidecarAwareFileFingerprint } from '../shared/binary-ingest-sidecar.js'
 import { sanitizeShareSafeText, toShareSafeArtifactPath, type ShareSafePathRoots } from '../shared/share-safe-artifacts.js'
 import { MAX_TEXT_BYTES, validateGraphOutputPath, validateGraphPath } from '../shared/security.js'
@@ -161,6 +162,7 @@ interface NativeAgentInstallArtifactCheck {
 export interface NativeAgentInstallCheck {
   verified: boolean
   artifacts: NativeAgentInstallArtifactCheck[]
+  tool_profile: McpToolProfile
 }
 
 export interface ComparePromptReport {
@@ -231,7 +233,7 @@ export interface GenerateCompareArtifactsInput {
   questionsPath?: string | null
   outputDir: string
   execTemplate: string
-  task?: 'explain' | 'implement'
+  task?: ContextPackTaskKind
   baselineMode: CompareBaselineMode
   perArmTimeoutSeconds?: number
   heartbeatIntervalMs?: number
@@ -862,6 +864,7 @@ function parseAnthropicTraceRecords(stdout: string): Record<string, unknown>[] {
   return records
 }
 
+const MADAR_CORE_ENTRY_TOOL_NAMES = new Set(['retrieve'])
 const MADAR_CONTEXT_PACK_TOOL_NAMES = new Set(['context_pack'])
 const MADAR_FOCUSED_FOLLOW_UP_TOOL_NAMES = new Set([
   'context_expand',
@@ -883,6 +886,22 @@ const TRACE_BROAD_EXPLORATION_TOOL_NAMES = new Set(['bash', 'glob', 'grep', 'too
 
 function canonicalTraceToolName(toolName: string): string {
   return toolName.startsWith('mcp__madar__') ? toolName.slice('mcp__madar__'.length) : toolName
+}
+
+function nativeAgentPromptContractEntryTool(profile: McpToolProfile): 'context_pack' | 'retrieve' {
+  return profile === 'full' ? 'context_pack' : 'retrieve'
+}
+
+function nativeAgentPromptContractEntryToolNames(profile: McpToolProfile): ReadonlySet<string> {
+  return profile === 'full' ? MADAR_CONTEXT_PACK_TOOL_NAMES : MADAR_CORE_ENTRY_TOOL_NAMES
+}
+
+function nativeAgentPromptContractSuccessEvidence(profile: McpToolProfile): string {
+  return `started with ${nativeAgentPromptContractEntryTool(profile)} and avoided disallowed exploration`
+}
+
+function nativeAgentPromptContractViolationEvidence(profile: McpToolProfile): string {
+  return `first Madar call was not ${nativeAgentPromptContractEntryTool(profile)}`
 }
 
 function isMadarTraceToolName(toolName: string): boolean {
@@ -1612,8 +1631,8 @@ function createCompareRetrievalGraph(
   return { graph: retrievalGraph, originalSourceFiles }
 }
 
-function compareTaskKind(input: Pick<GenerateCompareArtifactsInput, 'task'>): 'explain' | 'implement' {
-  return input.task === 'implement' ? 'implement' : 'explain'
+function compareTaskKind(input: Pick<GenerateCompareArtifactsInput, 'task'>): ContextPackTaskKind {
+  return input.task ?? 'explain'
 }
 
 function retrieveCompareContext(
@@ -1688,10 +1707,21 @@ function suggestBenchmarkGraphScope(graphPath: string, sourceFiles: readonly str
   return normalizedGraphPath.endsWith(`/${suggested}`) ? null : suggested
 }
 
-function retrievalHasSpiEvidence(retrieval: RetrieveResult): boolean {
-  return collectBenchmarkReadinessSourceFiles(retrieval).some((sourceFile) =>
-    /(^|\/)spi(\/|$)|\.spi\./.test(sourceFile),
-  )
+function graphPathHasSpiMode(graphPath: string): boolean {
+  if (!existsSync(graphPath)) {
+    return false
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(graphPath, 'utf8')) as unknown
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return false
+    }
+
+    return (parsed as { spi_mode?: unknown }).spi_mode === true
+  } catch {
+    return false
+  }
 }
 
 function benchmarkReadinessSeverity(current: BenchmarkReadinessStatus, next: BenchmarkReadinessStatus): BenchmarkReadinessStatus {
@@ -1745,7 +1775,7 @@ export function assessBenchmarkReadinessFromRetrieveResult(input: {
     reasons.push('runtime slice confidence is medium')
   }
 
-  if (!retrievalHasSpiEvidence(retrieval)) {
+  if (!graphPathHasSpiMode(graphPath)) {
     status = benchmarkReadinessSeverity(status, suggestedGraphScope ? 'not_ready' : 'degraded')
     reasons.push(
       suggestedGraphScope
@@ -1923,11 +1953,19 @@ function formatImplementationPromptGuidance(guidance: ImplementationPackGuidance
 
 export function buildNativeAgentPrompt(
   question: string,
-  options: {
-    task?: 'explain' | 'implement'
-    implementation?: ImplementationPackGuidance
-  } = {},
+  optionsOrProfile:
+    | McpToolProfile
+    | {
+      profile?: McpToolProfile
+      task?: ContextPackTaskKind
+      implementation?: ImplementationPackGuidance
+    } = 'core',
 ): string {
+  const options = typeof optionsOrProfile === 'string'
+    ? { profile: optionsOrProfile }
+    : optionsOrProfile
+  const profile = options.profile ?? 'core'
+
   if (options.task === 'implement' && options.implementation) {
     return [
       'Follow the Madar implementation-pack contract exactly.',
@@ -1948,13 +1986,25 @@ export function buildNativeAgentPrompt(
     ].join('\n')
   }
 
+  const profileInstructions = profile === 'full'
+    ? [
+        'Call context_pack first for explain, review, impact, or runtime questions before any raw file or broad repo search.',
+        'Inspect evidence.pack_confidence, evidence.coverage, evidence.agent_directive, missing_context, and recommended_first_read before deciding what to do next.',
+        'If evidence.agent_directive is answer_from_pack, answer from the pack and stop without raw search.',
+        'Allow at most one focused Madar follow-up before raw search when evidence.agent_directive is verify_one_targeted_file or explore_with_caution.',
+        'Broad raw search requires an explicit missing-context reason grounded in missing_context or coverage gaps.',
+      ]
+    : [
+        'Call retrieve first for explain or runtime questions before any raw file or broad repo search.',
+        'Inspect matched_nodes, snippets, relationships, and community context before deciding what to do next.',
+        'If retrieve already answers the question, answer from the retrieved evidence and stop without raw search.',
+        'Allow at most one focused Madar follow-up before raw search when retrieve leaves a specific gap.',
+        'Broad raw search requires an explicit missing-context reason grounded in gaps from the retrieve result.',
+      ]
+
   return [
     'Follow the Madar pack contract exactly.',
-    'Call context_pack first for explain or runtime questions before any raw file or broad repo search.',
-    'Inspect evidence.pack_confidence, evidence.coverage, evidence.agent_directive, missing_context, and recommended_first_read before deciding what to do next.',
-    'If evidence.agent_directive is answer_from_pack, answer from the pack and stop without raw search.',
-    'Allow at most one focused Madar follow-up before raw search when evidence.agent_directive is verify_one_targeted_file or explore_with_caution.',
-    'Broad raw search requires an explicit missing-context reason grounded in missing_context or coverage gaps.',
+    ...profileInstructions,
     'Any broad search before the first Madar call violates the prompt contract.',
     '',
     `Question: ${question}`,
@@ -2602,7 +2652,7 @@ export interface ImplementOutcomeReport {
 
 export interface NativeAgentCompareReport {
   baseline_mode: 'native_agent'
-  task: 'explain' | 'implement'
+  task: ContextPackTaskKind
   question: string
   graph_path: string
   isolation: boolean
@@ -2703,6 +2753,7 @@ export interface NativeAgentRunnerInput {
   outputFile: string
   command: string
   cwd?: string
+  workspaceRoot?: string
   signal?: AbortSignal
 }
 
@@ -3035,6 +3086,27 @@ function hasMadarMcpEntry(configPath: string): boolean {
   return [config.mcpServers, config.servers].some((servers) => isRecord(servers) && isRecord(servers.madar))
 }
 
+function readInstalledToolProfile(configPath: string): McpToolProfile {
+  const config = readJsonObject(configPath)
+  if (!config) {
+    return 'core'
+  }
+
+  const server = [config.mcpServers, config.servers]
+    .find((servers) => isRecord(servers) && isRecord(servers.madar))
+  if (!isRecord(server) || !isRecord(server.madar) || !isRecord(server.madar.env)) {
+    return 'core'
+  }
+
+  const env: NodeJS.ProcessEnv = {}
+  for (const [key, value] of Object.entries(server.madar.env)) {
+    if (typeof value === 'string') {
+      env[key] = value
+    }
+  }
+  return resolveToolProfileFromEnv(env)
+}
+
 export function inspectClaudeNativeAgentInstall(projectRoot: string): NativeAgentInstallCheck {
   const mcpPath = join(projectRoot, '.mcp.json')
   const claudeRulesPath = join(projectRoot, 'CLAUDE.md')
@@ -3066,6 +3138,7 @@ export function inspectClaudeNativeAgentInstall(projectRoot: string): NativeAgen
   return {
     verified: artifacts.every((artifact) => artifact.ok),
     artifacts,
+    tool_profile: readInstalledToolProfile(mcpPath),
   }
 }
 
@@ -3779,7 +3852,10 @@ function nativeAgentAttributionGapEvidence(report: NativeAgentCompareReport): st
   return 'Madar MCP attribution is missing.'
 }
 
-function assessNativeAgentPromptContract(report: Pick<NativeAgentCompareReport, 'trace_status' | 'madar_trace'>): NativeAgentPromptContractAssessment {
+function assessNativeAgentPromptContract(
+  report: Pick<NativeAgentCompareReport, 'trace_status' | 'madar_trace'>,
+  toolProfile: McpToolProfile,
+): NativeAgentPromptContractAssessment {
   if (report.trace_status !== 'trace_available' || report.madar_trace === undefined) {
     return {
       status: 'not_measured',
@@ -3793,14 +3869,21 @@ function assessNativeAgentPromptContract(report: Pick<NativeAgentCompareReport, 
   }
   if (
     report.madar_trace.first_madar_tool_name
-    && !MADAR_CONTEXT_PACK_TOOL_NAMES.has(canonicalTraceToolName(report.madar_trace.first_madar_tool_name))
+    && !nativeAgentPromptContractEntryToolNames(toolProfile).has(canonicalTraceToolName(report.madar_trace.first_madar_tool_name))
   ) {
-    evidence.push('first Madar call was not context_pack')
+    evidence.push(nativeAgentPromptContractViolationEvidence(toolProfile))
   }
   if ((report.madar_trace.pre_madar_broad_exploration_tool_call_count ?? 0) > 0) {
     evidence.push('broad exploration occurred before the first Madar call')
   }
   if (report.madar_trace.broad_exploration_tool_call_count > 0) {
+    if (evidence.length > 0) {
+      evidence.push('broad exploration occurred after the first Madar call, but the trace does not show whether missing_context justified it')
+      return {
+        status: 'violated',
+        evidence,
+      }
+    }
     return {
       status: 'not_measured',
       evidence: ['broad exploration occurred after the first Madar call, but the trace does not show whether missing_context justified it'],
@@ -3823,7 +3906,7 @@ function assessNativeAgentPromptContract(report: Pick<NativeAgentCompareReport, 
 
   return {
     status: 'followed',
-    evidence: ['started with context_pack and avoided disallowed exploration'],
+    evidence: [nativeAgentPromptContractSuccessEvidence(toolProfile)],
   }
 }
 
@@ -4003,6 +4086,7 @@ export async function executeNativeAgentCompare(
 
     const promptFile = join(questionDir, 'native_agent-prompt.txt')
     writeFileSync(promptFile, buildNativeAgentPrompt(question, {
+      profile: installCheck.tool_profile,
       task,
       ...(implementationGuidance ? { implementation: implementationGuidance } : {}),
     }), 'utf8')
@@ -4152,7 +4236,7 @@ export async function executeNativeAgentCompare(
             promptFile,
             outputFile: baselineAnswerPath,
             command: baselineCommand,
-            ...(baselineWorkspace ? { cwd: baselineWorkspace.workspaceRoot } : {}),
+            ...(baselineWorkspace ? { cwd: baselineWorkspace.workspaceRoot, workspaceRoot: baselineWorkspace.workspaceRoot } : {}),
           },
           timeoutMs,
           heartbeatIntervalMs,
@@ -4283,7 +4367,7 @@ export async function executeNativeAgentCompare(
           promptFile,
           outputFile: madarAnswerPath,
           command: madarCommand,
-          ...(madarWorkspace ? { cwd: madarWorkspace.workspaceRoot } : {}),
+          ...(madarWorkspace ? { cwd: madarWorkspace.workspaceRoot, workspaceRoot: madarWorkspace.workspaceRoot } : {}),
         },
         timeoutMs,
         heartbeatIntervalMs,
@@ -4432,7 +4516,7 @@ export async function executeNativeAgentCompare(
       madarTrace: reportShell.madar_trace,
       strictMadarFirst: input.strictMadarFirst,
     })
-    reportShell.prompt_contract = assessNativeAgentPromptContract(reportShell)
+    reportShell.prompt_contract = assessNativeAgentPromptContract(reportShell, installCheck.tool_profile)
     const claimAssessment = assessNativeAgentClaims(reportShell)
     if (claimAssessment !== undefined) {
       reportShell.claim_assessment = claimAssessment

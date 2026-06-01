@@ -52,10 +52,14 @@ describe('generateGraph useSpi:true (v0.18)', () => {
     ].join('\n') + '\n')
 
     const result = generateGraph(sandbox, { useSpi: true, noHtml: true })
+    const parsed = JSON.parse(readFileSync(result.graphPath, 'utf8')) as {
+      spi_mode?: unknown
+    }
 
     // Standard graph.json should exist with code nodes for foo + bar.
     expect(existsSync(result.graphPath)).toBe(true)
     expect(result.nodeCount).toBeGreaterThan(0)
+    expect(parsed.spi_mode).toBe(true)
 
     // Notes should reference the SPI pipeline.
     const hasSpiNote = result.notes.some((note) => note.toLowerCase().includes('spi'))
@@ -134,9 +138,29 @@ describe('generateGraph useSpi:true (v0.18)', () => {
     writeFile(sandbox, 'src/foo.ts', 'export function foo(): number { return 1 }\n')
 
     const result = generateGraph(sandbox, { noHtml: true })
+    const parsed = JSON.parse(readFileSync(result.graphPath, 'utf8')) as {
+      spi_mode?: unknown
+    }
 
     // No SPI notes in the legacy path.
     const hasSpiNote = result.notes.some((note) => note.toLowerCase().includes('spi'))
     expect(hasSpiNote).toBe(false)
+    expect(parsed.spi_mode).toBeUndefined()
+  })
+
+  it('clears stale spi_mode on a non-SPI update after an SPI build', () => {
+    writeFile(sandbox, 'src/foo.ts', 'export function foo(): number { return 1 }\n')
+
+    const spiResult = generateGraph(sandbox, { useSpi: true, noHtml: true })
+    const spiGraph = JSON.parse(readFileSync(spiResult.graphPath, 'utf8')) as {
+      spi_mode?: unknown
+    }
+    expect(spiGraph.spi_mode).toBe(true)
+
+    const updated = generateGraph(sandbox, { update: true, noHtml: true })
+    const updatedGraph = JSON.parse(readFileSync(updated.graphPath, 'utf8')) as {
+      spi_mode?: unknown
+    }
+    expect(updatedGraph.spi_mode).toBeUndefined()
   })
 })

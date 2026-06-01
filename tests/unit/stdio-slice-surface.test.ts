@@ -182,6 +182,60 @@ describe('stdio slice-v1 surface', () => {
     expect([...retrieveSnippetLines].some((line) => contextPackSnippetLines.has(line))).toBe(true)
   })
 
+  it('honors explain context_pack budgets below 3000', async () => {
+    const graphPath = createGraphPath()
+
+    const contextPackResponse = await Promise.resolve(handleStdioRequest(graphPath, {
+      id: 8,
+      method: 'tools/call',
+      params: {
+        name: 'context_pack',
+        arguments: {
+          prompt: 'Explain `AuthService.login`',
+          budget: 1500,
+          task: 'explain',
+        },
+      },
+    }))
+
+    const contextPackPayload = JSON.parse(((contextPackResponse as { result?: { content?: Array<{ text: string }> } }).result?.content ?? [])[0]?.text ?? '') as {
+      serialized_budget?: {
+        max_tokens?: number
+        token_count?: number
+        enforced?: boolean
+      }
+    }
+
+    expect(contextPackPayload.serialized_budget).toEqual(expect.objectContaining({
+      max_tokens: 1500,
+      enforced: true,
+    }))
+    expect(contextPackPayload.serialized_budget?.token_count).toBeLessThanOrEqual(1500)
+
+    const tinyBudgetResponse = await Promise.resolve(handleStdioRequest(graphPath, {
+      id: 9,
+      method: 'tools/call',
+      params: {
+        name: 'context_pack',
+        arguments: {
+          prompt: 'Explain `AuthService.login`',
+          budget: 1,
+          task: 'explain',
+        },
+      },
+    }))
+
+    const tinyBudgetPayload = JSON.parse(((tinyBudgetResponse as { result?: { content?: Array<{ text: string }> } }).result?.content ?? [])[0]?.text ?? '') as {
+      serialized_budget?: {
+        max_tokens?: number
+      }
+    }
+
+    expect(tinyBudgetPayload.serialized_budget).toEqual(expect.objectContaining({
+      max_tokens: 1,
+    }))
+  })
+
   it('accepts retrieval_strategy=slice-v1 for retrieve and context_pack', async () => {
     const graphPath = createGraphPath()
 

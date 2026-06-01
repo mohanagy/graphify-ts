@@ -835,6 +835,7 @@ interface SeedScoreBreakdown {
   labelExactScore: number
   labelTokenScore: number
   sourcePathScore: number
+  promptIdentifierScore: number
   communityScore: number
   total: number
 }
@@ -973,6 +974,11 @@ interface SymbolReference {
   methodName?: string
 }
 
+interface PromptIdentifierSignal {
+  normalized: string
+  tokenCount: number
+}
+
 function activeFrameworksForProfile(profile: FrameworkQuestionProfile): ReadonlySet<string> {
   const frameworks = new Set<string>()
   if (profile.express) frameworks.add('express')
@@ -1003,6 +1009,15 @@ function normalizeSeedText(value: string): string {
 
 function normalizeIdentifier(value: string): string {
   return normalizeSeedText(value.replace(/\(\)$/, ''))
+}
+
+function normalizedPromptIdentifier(value: string): string {
+  return tokenizeLabel(
+    value
+      .replace(/^[`'"]+|[`'"]+$/g, '')
+      .replace(/\(\)$/, '')
+      .replace(/\.[A-Za-z0-9]{1,6}$/, ''),
+  ).join('')
 }
 
 function compareStableText(left: string, right: string): number {
@@ -1053,6 +1068,111 @@ function labelSymbolParts(label: string): { className?: string; methodName?: str
     ...(methodOnlyMatch?.[1] ? { methodName: methodOnlyMatch[1] } : {}),
     normalized,
   }
+}
+
+function explicitPromptIdentifierSet(
+  mentionedSymbolRefs: readonly SymbolReference[],
+  mentionedPaths: readonly string[],
+): ReadonlySet<string> {
+  const explicit = new Set<string>()
+
+  for (const reference of mentionedSymbolRefs) {
+    for (const value of [reference.raw, reference.bareName, reference.className, reference.methodName]) {
+      if (typeof value !== 'string' || value.trim().length === 0) {
+        continue
+      }
+      const normalized = normalizedPromptIdentifier(value)
+      if (normalized.length > 0) {
+        explicit.add(normalized)
+      }
+    }
+  }
+
+  for (const path of mentionedPaths) {
+    const normalizedPath = normalizedPromptIdentifier(path)
+    if (normalizedPath.length > 0) {
+      explicit.add(normalizedPath)
+    }
+    const normalizedBase = normalizedPromptIdentifier(basename(path))
+    if (normalizedBase.length > 0) {
+      explicit.add(normalizedBase)
+    }
+  }
+
+  return explicit
+}
+
+function extractPromptIdentifierSignals(
+  question: string,
+  mentionedSymbolRefs: readonly SymbolReference[],
+  mentionedPaths: readonly string[],
+): PromptIdentifierSignal[] {
+  const explicit = explicitPromptIdentifierSet(mentionedSymbolRefs, mentionedPaths)
+  const seen = new Set<string>()
+  const signals: PromptIdentifierSignal[] = []
+  const candidates = question.match(/[A-Za-z0-9_./-]+/g) ?? []
+
+  for (const candidate of candidates) {
+    if (!/[A-Za-z]/.test(candidate)) {
+      continue
+    }
+    if (!(/[_./-]/.test(candidate) || /[a-z][A-Z]/.test(candidate) || /[A-Z][a-z]+[A-Z]/.test(candidate))) {
+      continue
+    }
+
+    const tokens = tokenizeLabel(candidate)
+    if (tokens.length < 2) {
+      continue
+    }
+
+    const normalized = normalizedPromptIdentifier(candidate)
+    if (normalized.length < 6 || explicit.has(normalized) || seen.has(normalized)) {
+      continue
+    }
+
+    seen.add(normalized)
+    signals.push({
+      normalized,
+      tokenCount: tokens.length,
+    })
+  }
+
+  return signals
+}
+
+function promptIdentifierMatchScore(
+  label: string,
+  sourceFile: string,
+  identifiers: readonly PromptIdentifierSignal[],
+): number {
+  if (identifiers.length === 0) {
+    return 0
+  }
+
+  const normalizedLabel = normalizeIdentifier(label)
+  const normalizedSource = normalizeSeedText(sourceFile)
+  let best = 0
+
+  for (const identifier of identifiers) {
+    const labelContains = normalizedLabel.includes(identifier.normalized)
+    const sourceContains = normalizedSource.includes(identifier.normalized)
+    if (!labelContains && !sourceContains) {
+      continue
+    }
+
+    const specificityBonus = Math.min(0.35, Math.max(0, identifier.tokenCount - 2) * 0.15)
+    let score = labelContains ? 1.1 : 0.8
+    if (sourceContains) {
+      score += labelContains ? 0.35 : 0.25
+    }
+    if (normalizedLabel === identifier.normalized) {
+      score += 0.2
+    }
+
+    best = Math.max(best, Math.min(1.75, score + specificityBonus))
+  }
+
+  return best
 }
 
 /**
@@ -1204,7 +1324,7 @@ function evidenceTierForSeedScore(score: SeedScoreBreakdown): 0 | 1 | 2 {
   if (score.labelExactScore > 0 || score.labelTokenScore > 0) {
     return 2
   }
-  if (score.sourcePathScore > 0 || score.communityScore > 0) {
+  if (score.sourcePathScore > 0 || score.promptIdentifierScore > 0 || score.communityScore > 0) {
     return 1
   }
   return 0
@@ -1394,6 +1514,7 @@ function scoreSeedCandidate(
   label: string,
   sourceFile: string,
   communityLabel: string | null,
+  promptIdentifiers: readonly PromptIdentifierSignal[],
   tokenWeights: ReadonlyMap<string, number>,
   averageLabelLength: number,
   options: { fileNodeLike: boolean; fileOrientedQuestion: boolean },
@@ -1402,6 +1523,7 @@ function scoreSeedCandidate(
   const fileNodePenaltyApplies = options.fileNodeLike && !options.fileOrientedQuestion && labelExactScore === 0
   const labelTokenScore = fileNodePenaltyApplies ? 0 : scoreNode(questionTokens, tokenizeLabel(label), tokenWeights, averageLabelLength)
   const sourcePathScore = fileNodePenaltyApplies ? 0 : scoreNode(questionTokens, tokenizeLabel(sourceFile), tokenWeights) * 0.25
+  const promptIdentifierScore = fileNodePenaltyApplies ? 0 : promptIdentifierMatchScore(label, sourceFile, promptIdentifiers)
   const communityScore = fileNodePenaltyApplies
     ? 0
     : communityLabel
@@ -1412,8 +1534,9 @@ function scoreSeedCandidate(
     labelExactScore,
     labelTokenScore,
     sourcePathScore,
+    promptIdentifierScore,
     communityScore,
-    total: labelExactScore + labelTokenScore + sourcePathScore + communityScore,
+    total: labelExactScore + labelTokenScore + sourcePathScore + promptIdentifierScore + communityScore,
   }
 }
 
@@ -1997,6 +2120,59 @@ function augmentSliceCandidateIdsForDebug(
         seen.add(helperId)
         expanded.push(helperId)
       }
+    }
+  }
+
+  return expanded
+}
+
+function runtimeGenerationSliceCandidatePromotionApplies(
+  retrievalGate: RetrievalGateDecision,
+  sliceMetadata: ContextPackSliceMetadata,
+): boolean {
+  return sliceMetadata.mode === 'explain'
+    && retrievalGate.intent === 'explain'
+    && retrievalGate.signals.generation_intent === 'runtime_generation'
+    && retrievalGate.signals.target_domain_hint === 'backend_runtime'
+}
+
+function augmentSliceCandidateIdsForRuntimeExplain(
+  graph: KnowledgeGraph,
+  orderedIds: readonly string[],
+  metadata: ContextPackSliceMetadata,
+  retrievalGate: RetrievalGateDecision,
+  question: string,
+): string[] {
+  if (!runtimeGenerationSliceCandidatePromotionApplies(retrievalGate, metadata)) {
+    return [...orderedIds]
+  }
+
+  const expanded = [...orderedIds]
+  const seen = new Set(expanded)
+  const nodeIdByLabel = new Map<string, string>()
+  for (const [nodeId, attributes] of graph.nodeEntries()) {
+    const label = String(attributes.label ?? nodeId)
+    if (!nodeIdByLabel.has(label)) {
+      nodeIdByLabel.set(label, nodeId)
+    }
+  }
+
+  const resolveNodeId = (nodeId: string | undefined, label: string): string | undefined => {
+    if (nodeId && graph.hasNode(nodeId)) {
+      return nodeId
+    }
+    return nodeIdByLabel.get(label)
+  }
+
+  const anchorIds = metadata.anchors
+    .map((anchor) => resolveNodeId(anchor.node_id, anchor.label))
+    .filter((nodeId): nodeId is string => typeof nodeId === 'string')
+  const executionScope = collectExecutionSliceScope(graph, metadata, anchorIds, question, resolveNodeId)
+
+  for (const nodeId of executionScope.orderedIds) {
+    if (!seen.has(nodeId)) {
+      seen.add(nodeId)
+      expanded.push(nodeId)
     }
   }
 
@@ -3976,6 +4152,7 @@ export function retrieveContext(graph: KnowledgeGraph, options: RetrieveOptions)
   }
   const mentionedSymbolRefs = retrievalGate.signals.mentioned_symbols.map(parseSymbolReference)
   const mentionedPaths = retrievalGate.signals.mentioned_paths
+  const promptIdentifiers = extractPromptIdentifierSignals(question, mentionedSymbolRefs, mentionedPaths)
   const excludedDomains = retrievalGate.signals.excluded_domains ?? []
   const excludedTerms = retrievalGate.signals.excluded_terms ?? []
   const excludedPathHints = retrievalGate.signals.excluded_path_hints ?? []
@@ -4011,6 +4188,7 @@ export function retrieveContext(graph: KnowledgeGraph, options: RetrieveOptions)
       label,
       sourceFile,
       community !== null ? (communityLabels[community] ?? null) : null,
+      promptIdentifiers,
       tokenWeights,
       averageLabelLength,
       { fileNodeLike, fileOrientedQuestion },
@@ -4117,10 +4295,11 @@ export function retrieveContext(graph: KnowledgeGraph, options: RetrieveOptions)
   const fusedSeedScores = reciprocalRankFuse([
     rankedSeedCandidateIds(graph, filteredSeedCandidates, (candidate) => candidate.seedScore.labelExactScore),
     rankedSeedCandidateIds(graph, filteredSeedCandidates, (candidate) => candidate.seedScore.labelTokenScore),
+    rankedSeedCandidateIds(graph, filteredSeedCandidates, (candidate) => candidate.seedScore.promptIdentifierScore),
     rankedSeedCandidateIds(graph, filteredSeedCandidates, (candidate) => candidate.seedScore.sourcePathScore),
     rankedSeedCandidateIds(graph, filteredSeedCandidates, (candidate) => candidate.seedScore.communityScore),
   ], {
-    weights: [2, 1.5, 0.5, 0.25],
+    weights: [2, 1.5, 0.5, 0.25, 0.25],
   })
   const scored: ScoredNode[] = filteredSeedCandidates.map((candidate) => ({
     id: candidate.id,
@@ -4449,7 +4628,14 @@ export function retrieveContext(graph: KnowledgeGraph, options: RetrieveOptions)
 
     if (sliced) {
       const scoredById = new Map(scored.map((node) => [node.id, node]))
-      const orderedSliceIds = augmentSliceCandidateIdsForDebug(graph, sliced.ordered_ids, sliced.metadata)
+      const runtimeExpandedSliceIds = augmentSliceCandidateIdsForRuntimeExplain(
+        graph,
+        sliced.ordered_ids,
+        sliced.metadata,
+        retrievalGate,
+        options.question,
+      )
+      const orderedSliceIds = augmentSliceCandidateIdsForDebug(graph, runtimeExpandedSliceIds, sliced.metadata)
       const sliceCandidates = orderedSliceIds.map((nodeId, index) => (
         scoredById.get(nodeId) ?? scoredNodeFromGraph(graph, nodeId, Math.max(0.25, 2 - (index * 0.1)), classificationRootPath)
       ))

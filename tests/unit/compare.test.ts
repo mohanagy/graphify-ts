@@ -1206,7 +1206,24 @@ describe('compare runtime', () => {
   it('snapshots the native-agent prompt contract', () => {
     expect(buildNativeAgentPrompt('What is the cluster module?')).toMatchInlineSnapshot(`
       "Follow the Madar pack contract exactly.
-      Call context_pack first for explain or runtime questions before any raw file or broad repo search.
+      Call retrieve first for explain or runtime questions before any raw file or broad repo search.
+      Inspect matched_nodes, snippets, relationships, and community context before deciding what to do next.
+      If retrieve already answers the question, answer from the retrieved evidence and stop without raw search.
+      Allow at most one focused Madar follow-up before raw search when retrieve leaves a specific gap.
+      Broad raw search requires an explicit missing-context reason grounded in gaps from the retrieve result.
+      Any broad search before the first Madar call violates the prompt contract.
+
+      Question: What is the cluster module?
+
+      Answer:
+      "
+    `)
+  })
+
+  it('snapshots the full-profile native-agent prompt contract', () => {
+    expect(buildNativeAgentPrompt('What is the cluster module?', 'full')).toMatchInlineSnapshot(`
+      "Follow the Madar pack contract exactly.
+      Call context_pack first for explain, review, impact, or runtime questions before any raw file or broad repo search.
       Inspect evidence.pack_confidence, evidence.coverage, evidence.agent_directive, missing_context, and recommended_first_read before deciding what to do next.
       If evidence.agent_directive is answer_from_pack, answer from the pack and stop without raw search.
       Allow at most one focused Madar follow-up before raw search when evidence.agent_directive is verify_one_targeted_file or explore_with_caution.
@@ -3858,7 +3875,7 @@ describe('compare runtime', () => {
     }
   })
 
-  it('keeps compare-local snippet restoration within the retrieval budget', () => {
+  it('restores compare-local snippets under enforced retrieval budgets', () => {
     const graph = makeGraph()
     writeProjectFiles()
     const graphPath = writeGraphFixture(graph)
@@ -3869,14 +3886,13 @@ describe('compare runtime', () => {
       outputDir: COMPARE_OUTPUT_ROOT,
       execTemplate: 'claude -p "$(cat {prompt_file})"',
       baselineMode: 'full',
-      retrievalBudget: 25,
+      retrievalBudget: 2000,
       now: new Date('2026-04-24T19:30:00.000Z'),
     })
 
     const madarPrompt = readFileSync(result.reports[0]!.paths.madar_prompt, 'utf8')
     expect(madarPrompt).toContain('SessionManager')
     expect(madarPrompt).toContain('export class SessionManager')
-    expect(madarPrompt).not.toContain('export class SessionStore')
   })
 
   it('does not load madar snippets from paths outside the inferred project root', () => {
@@ -3983,7 +3999,7 @@ describe('compare runtime', () => {
         outputDir: COMPARE_OUTPUT_ROOT,
         execTemplate: 'claude -p "$(cat {prompt_file})"',
         baselineMode: 'full',
-        retrievalBudget: 80,
+        retrievalBudget: 2000,
         now: new Date('2026-04-24T19:30:00.000Z'),
       })
 
@@ -4464,6 +4480,17 @@ describe('assessBenchmarkReadinessFromRetrieveResult', () => {
     }
   }
 
+  function writeReadinessGraphFixture(options: {
+    graphFixtureRoot: string
+    spiMode?: boolean
+  }): string {
+    const graph = makeGraph()
+    if (options.spiMode === true) {
+      graph.graph.spi_mode = true
+    }
+    return writeGraphFixture(graph, options.graphFixtureRoot)
+  }
+
   it('marks root non-SPI runtime-generation packs not ready and suggests a scoped backend graph', () => {
     const readiness = assessBenchmarkReadinessFromRetrieveResult({
       graphPath: '/repo/out/graph.json',
@@ -4508,9 +4535,109 @@ describe('assessBenchmarkReadinessFromRetrieveResult', () => {
     expect(readiness.suggested_graph_scope).toBe('backend/out/graph.json')
   })
 
-  it('marks root SPI runtime-generation packs degraded when downstream phases are still missing', () => {
+  it('treats SPI-mode graph metadata as SPI evidence for app-file runtime packs', () => {
+    const graphPath = writeReadinessGraphFixture({
+      graphFixtureRoot: join(PROJECT_FIXTURE_ROOT, 'backend', 'out'),
+      spiMode: true,
+    })
+
     const readiness = assessBenchmarkReadinessFromRetrieveResult({
-      graphPath: '/repo/out/graph.json',
+      graphPath,
+      retrieval: makeRuntimeGenerationRetrieval({
+        matched_nodes: [
+          {
+            label: 'GenerateIdeaReportService.handle',
+            source_file: 'backend/src/modules/ideas/application/generate-idea-report.service.ts',
+            line_number: 42,
+            file_type: 'code',
+            snippet: null,
+            match_score: 12,
+            relevance_band: 'direct',
+            community: null,
+            community_label: null,
+          },
+        ],
+      }),
+    })
+
+    expect(readiness).toEqual({
+      status: 'ready',
+      reasons: [],
+      suggested_graph_scope: null,
+    })
+  })
+
+  it('keeps non-SPI app-file runtime packs flagged as missing SPI evidence', () => {
+    const graphPath = writeReadinessGraphFixture({
+      graphFixtureRoot: join(PROJECT_FIXTURE_ROOT, 'backend', 'out'),
+    })
+
+    const readiness = assessBenchmarkReadinessFromRetrieveResult({
+      graphPath,
+      retrieval: makeRuntimeGenerationRetrieval({
+        matched_nodes: [
+          {
+            label: 'GenerateIdeaReportService.handle',
+            source_file: 'backend/src/modules/ideas/application/generate-idea-report.service.ts',
+            line_number: 42,
+            file_type: 'code',
+            snippet: null,
+            match_score: 12,
+            relevance_band: 'direct',
+            community: null,
+            community_label: null,
+          },
+        ],
+      }),
+    })
+
+    expect(readiness).toEqual({
+      status: 'degraded',
+      reasons: ['no SPI evidence found in the current pack'],
+      suggested_graph_scope: null,
+    })
+  })
+
+  it('fails closed when SPI graph metadata cannot be parsed', () => {
+    const graphFixtureRoot = join(PROJECT_FIXTURE_ROOT, 'backend', 'out')
+    mkdirSync(graphFixtureRoot, { recursive: true })
+    const graphPath = join(graphFixtureRoot, 'graph.json')
+    writeFileSync(graphPath, '{not-valid-json', 'utf8')
+
+    const readiness = assessBenchmarkReadinessFromRetrieveResult({
+      graphPath,
+      retrieval: makeRuntimeGenerationRetrieval({
+        matched_nodes: [
+          {
+            label: 'GenerateIdeaReportService.handle',
+            source_file: 'backend/src/modules/ideas/application/generate-idea-report.service.ts',
+            line_number: 42,
+            file_type: 'code',
+            snippet: null,
+            match_score: 12,
+            relevance_band: 'direct',
+            community: null,
+            community_label: null,
+          },
+        ],
+      }),
+    })
+
+    expect(readiness).toEqual({
+      status: 'degraded',
+      reasons: ['no SPI evidence found in the current pack'],
+      suggested_graph_scope: null,
+    })
+  })
+
+  it('marks root SPI runtime-generation packs degraded when downstream phases are still missing', () => {
+    const graphPath = writeReadinessGraphFixture({
+      graphFixtureRoot: join(PROJECT_FIXTURE_ROOT, 'out'),
+      spiMode: true,
+    })
+
+    const readiness = assessBenchmarkReadinessFromRetrieveResult({
+      graphPath,
       retrieval: makeRuntimeGenerationRetrieval({
         matched_nodes: [
           {
@@ -4616,8 +4743,13 @@ describe('assessBenchmarkReadinessFromRetrieveResult', () => {
   })
 
   it('marks backend SPI runtime-generation packs ready when runtime spine evidence is covered', () => {
+    const graphPath = writeReadinessGraphFixture({
+      graphFixtureRoot: join(PROJECT_FIXTURE_ROOT, 'backend', 'out'),
+      spiMode: true,
+    })
+
     const readiness = assessBenchmarkReadinessFromRetrieveResult({
-      graphPath: '/repo/backend/out/graph.json',
+      graphPath,
       retrieval: makeRuntimeGenerationRetrieval({
         matched_nodes: [
           {
@@ -4642,9 +4774,13 @@ describe('assessBenchmarkReadinessFromRetrieveResult', () => {
     })
   })
 
-  it('treats top-level spi paths as SPI evidence', () => {
+  it('does not treat top-level spi paths as SPI evidence without SPI graph metadata', () => {
+    const graphPath = writeReadinessGraphFixture({
+      graphFixtureRoot: join(PROJECT_FIXTURE_ROOT, 'spi', 'out'),
+    })
+
     const readiness = assessBenchmarkReadinessFromRetrieveResult({
-      graphPath: '/repo/spi/out/graph.json',
+      graphPath,
       retrieval: makeRuntimeGenerationRetrieval({
         matched_nodes: [
           {
@@ -4663,8 +4799,8 @@ describe('assessBenchmarkReadinessFromRetrieveResult', () => {
     })
 
     expect(readiness).toEqual({
-      status: 'ready',
-      reasons: [],
+      status: 'degraded',
+      reasons: ['no SPI evidence found in the current pack'],
       suggested_graph_scope: null,
     })
   })

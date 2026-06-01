@@ -2,6 +2,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 
+import type { ContextPackTaskKind } from '../../contracts/context-pack.js'
 import {
   executeNativeAgentCompare,
   inspectClaudeNativeAgentInstall,
@@ -306,6 +307,22 @@ function planCell(repo: BenchmarkSuiteRepo, task: BenchmarkSuiteTask, mode: 'col
     return { repo, task, mode, prompt: null, status: 'planned', reason: 'prompt not defined for repo' }
   }
   return { repo, task, mode, prompt, status: 'ready', reason: null }
+}
+
+function suiteTaskKind(taskId: string): ContextPackTaskKind | null {
+  if (taskId === 'explain-runtime' || taskId === 'explain-auth') {
+    return 'explain'
+  }
+  if (taskId === 'implement') {
+    return 'implement'
+  }
+  if (taskId === 'review') {
+    return 'review'
+  }
+  if (taskId === 'impact') {
+    return 'impact'
+  }
+  return null
 }
 
 function portablePath(path: string): string {
@@ -849,11 +866,13 @@ export async function runBenchmarkSuite(
         const legacyGraphPath = coldScratchRoot
           ? prepareBenchmarkWorkspace(plan.repo, runGenerateGraph, coldScratchRoot, 'legacy')
           : prepared.legacyGraphPath
+        const taskKind = suiteTaskKind(plan.task.id)
         const legacyInput = {
           graphPath: legacyGraphPath,
           question: plan.prompt,
           outputDir: join(stagingRoot, plan.repo.id, plan.task.id, `${plan.mode}-cache`, 'legacy', trialLabel),
           execTemplate: execTemplateForWorkspace(options.execTemplate, dirname(dirname(legacyGraphPath))),
+          ...(taskKind ? { task: taskKind } : {}),
           baselineMode: 'native_agent' as const,
         }
         await maybePrimeWarmCache(plan.mode, runCompare, legacyInput)
@@ -878,6 +897,7 @@ export async function runBenchmarkSuite(
             question: plan.prompt,
             outputDir: join(stagingRoot, plan.repo.id, plan.task.id, `${plan.mode}-cache`, 'spi', trialLabel),
             execTemplate: execTemplateForWorkspace(options.execTemplate, dirname(dirname(spiGraphPath))),
+            ...(taskKind ? { task: taskKind } : {}),
             baselineMode: 'native_agent' as const,
           }
           await maybePrimeWarmCache(plan.mode, runCompare, spiInput)

@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { KnowledgeGraph } from '../../src/contracts/graph.js'
+import { build } from '../../src/pipeline/build.js'
 import {
   executeNativeAgentCompare,
   formatNativeAgentCompareSummary,
@@ -24,7 +25,12 @@ function writeClaudeInstallArtifacts(projectDir: string): void {
   claudeInstall(projectDir)
 }
 
-function makeFixtureProject(options: { installState?: 'managed' | 'valid' | 'missing' } = {}): { projectDir: string; graphPath: string; outputDir: string } {
+function makeFixtureProject(
+  options: {
+    installState?: 'managed' | 'valid' | 'missing'
+    profile?: 'core' | 'full'
+  } = {},
+): { projectDir: string; graphPath: string; outputDir: string } {
   mkdirSync(FIXTURE_PARENT, { recursive: true })
   mkdirSync(COMPARE_OUTPUT_PARENT, { recursive: true })
   const projectDir = mkdtempSync(join(FIXTURE_PARENT, 'project-'))
@@ -44,10 +50,11 @@ function makeFixtureProject(options: { installState?: 'managed' | 'valid' | 'mis
     'utf8',
   )
   const graphPath = join(projectDir, 'out', 'graph.json')
+  const installClaudeWithProfile = claudeInstall as (projectDir?: string, options?: { profile?: 'core' | 'full' }) => string
   if (options.installState === 'managed') {
-    claudeInstall(projectDir)
+    installClaudeWithProfile(projectDir, options.profile ? { profile: options.profile } : undefined)
   } else if (options.installState !== 'missing') {
-    writeClaudeInstallArtifacts(projectDir)
+    installClaudeWithProfile(projectDir, options.profile ? { profile: options.profile } : undefined)
   }
   return { projectDir, graphPath, outputDir }
 }
@@ -191,6 +198,94 @@ function makeImplementationFixtureProject(): {
   toJson(graph, { 0: ['session_manager', 'config'], 1: ['session_test'] }, graphPath)
 
   return { projectDir, graphPath, outputDir, questionsPath }
+}
+
+function makeImplementFixtureProject(): { projectDir: string; graphPath: string; outputDir: string } {
+  const { projectDir, outputDir } = makeFixtureProject()
+  mkdirSync(join(projectDir, 'src', 'auth'), { recursive: true })
+  mkdirSync(join(projectDir, 'src', 'http'), { recursive: true })
+  mkdirSync(join(projectDir, 'src', 'legacy'), { recursive: true })
+  mkdirSync(join(projectDir, 'tests', 'unit'), { recursive: true })
+  mkdirSync(join(projectDir, 'tests', 'e2e'), { recursive: true })
+  mkdirSync(join(projectDir, 'scripts'), { recursive: true })
+
+  writeFileSync(join(projectDir, 'src', 'auth', 'login-service.ts'), 'export const loginValidation = "original"\n', 'utf8')
+  writeFileSync(join(projectDir, 'src', 'auth', 'login-controller.ts'), 'export const loginController = true\n', 'utf8')
+  writeFileSync(join(projectDir, 'src', 'auth', 'login-helper.ts'), 'export const normalizeLoginPayload = true\n', 'utf8')
+  writeFileSync(join(projectDir, 'src', 'auth', 'login-audit-repository.ts'), 'export const loginAuditRepository = true\n', 'utf8')
+  writeFileSync(join(projectDir, 'src', 'http', 'login-routes.ts'), 'export const loginRoutes = true\n', 'utf8')
+  writeFileSync(join(projectDir, 'src', 'legacy', 'noisy.ts'), 'export const noisy = "original"\n', 'utf8')
+  writeFileSync(join(projectDir, 'tests', 'unit', 'login-service.test.ts'), 'export const loginServiceTest = "original"\n', 'utf8')
+  writeFileSync(join(projectDir, 'tests', 'e2e', 'login-flow.test.ts'), 'export const loginFlowTest = "original"\n', 'utf8')
+  writeFileSync(
+    join(projectDir, 'scripts', 'check-implement.cjs'),
+    [
+      "const fs = require('node:fs')",
+      "const path = require('node:path')",
+      "const root = process.cwd()",
+      "const service = fs.readFileSync(path.join(root, 'src/auth/login-service.ts'), 'utf8')",
+      "const testFile = fs.readFileSync(path.join(root, 'tests/unit/login-service.test.ts'), 'utf8')",
+      "const ok = service.includes('madar-implement-change') && testFile.includes('madar-implement-test')",
+      "process.exit(ok ? 0 : 1)",
+      '',
+    ].join('\n'),
+    'utf8',
+  )
+  writeFileSync(
+    join(projectDir, 'package.json'),
+    JSON.stringify({
+      name: 'native-agent-implement-fixture',
+      private: true,
+      scripts: {
+        typecheck: 'node -e "process.exit(0)"',
+        build: 'node -e "process.exit(0)"',
+        'test:run': 'node ./scripts/check-implement.cjs',
+      },
+    }, null, 2),
+    'utf8',
+  )
+  const graph = build(
+    [
+      {
+        schema_version: 1,
+        nodes: [
+          { id: 'login_route', label: 'POST /login', file_type: 'code', source_file: join(projectDir, 'src', 'http', 'login-routes.ts'), source_location: 'L10', node_kind: 'route', framework_role: 'express_route', community: 0 },
+          { id: 'login_controller', label: 'LoginController.submit', file_type: 'code', source_file: join(projectDir, 'src', 'auth', 'login-controller.ts'), source_location: 'L20', node_kind: 'method', framework_role: 'nest_controller', community: 0 },
+          { id: 'login_service', label: 'LoginService.validate', file_type: 'code', source_file: join(projectDir, 'src', 'auth', 'login-service.ts'), source_location: 'L30', node_kind: 'method', framework_role: 'nest_provider', community: 1 },
+          { id: 'login_repository', label: 'LoginAuditRepository.saveAttempt', file_type: 'code', source_file: join(projectDir, 'src', 'auth', 'login-audit-repository.ts'), source_location: 'L40', node_kind: 'method', community: 1 },
+          { id: 'login_helper', label: 'normalizeLoginPayload', file_type: 'code', source_file: join(projectDir, 'src', 'auth', 'login-helper.ts'), source_location: 'L18', node_kind: 'function', community: 1 },
+          { id: 'login_unit_test', label: 'LoginService.validate.spec', file_type: 'code', source_file: join(projectDir, 'tests', 'unit', 'login-service.test.ts'), source_location: 'L1', node_kind: 'function', community: 2 },
+          { id: 'login_e2e_test', label: 'login flow e2e', file_type: 'code', source_file: join(projectDir, 'tests', 'e2e', 'login-flow.test.ts'), source_location: 'L1', node_kind: 'function', community: 2 },
+        ],
+        edges: [
+          { source: 'login_route', target: 'login_controller', relation: 'controller_route', confidence: 'EXTRACTED', source_file: join(projectDir, 'src', 'http', 'login-routes.ts') },
+          { source: 'login_controller', target: 'login_service', relation: 'calls', confidence: 'EXTRACTED', source_file: join(projectDir, 'src', 'auth', 'login-controller.ts') },
+          { source: 'login_service', target: 'login_repository', relation: 'calls', confidence: 'EXTRACTED', source_file: join(projectDir, 'src', 'auth', 'login-service.ts') },
+          { source: 'login_service', target: 'login_helper', relation: 'calls', confidence: 'EXTRACTED', source_file: join(projectDir, 'src', 'auth', 'login-service.ts') },
+          { source: 'login_service', target: 'login_unit_test', relation: 'covered_by', confidence: 'EXTRACTED', source_file: join(projectDir, 'src', 'auth', 'login-service.ts') },
+          { source: 'login_route', target: 'login_e2e_test', relation: 'covered_by', confidence: 'EXTRACTED', source_file: join(projectDir, 'src', 'http', 'login-routes.ts') },
+        ],
+      },
+    ],
+    { directed: true },
+  )
+  graph.graph.root_path = projectDir
+  const graphPath = join(projectDir, 'out', 'graph.json')
+  writeFileSync(
+    graphPath,
+    `${JSON.stringify({
+      schema_version: graph.graph.schema_version === 2 ? 2 : 1,
+      directed: graph.isDirected(),
+      root_path: projectDir,
+      nodes: graph.nodeEntries().map(([id, attributes]) => ({ id, ...attributes })),
+      links: graph.edgeEntries().map(([source, target, attributes]) => ({ source, target, ...attributes })),
+      hyperedges: Array.isArray(graph.graph.hyperedges) ? graph.graph.hyperedges : [],
+      community_labels: { 0: 'Auth entry', 1: 'Auth workflow', 2: 'Tests' },
+    }, null, 2)}\n`,
+    'utf8',
+  )
+
+  return { projectDir, graphPath, outputDir }
 }
 
 const BASELINE_USAGE_PAYLOAD = {
@@ -972,8 +1067,39 @@ describe('parseAnthropicResultEvent', () => {
 })
 
 describe('executeNativeAgentCompare', () => {
-  it('writes a native-agent prompt that enforces the Madar pack contract', async () => {
+  it('writes a native-agent prompt that targets retrieve first on the default core profile', async () => {
     const { projectDir, graphPath, outputDir } = makeFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'What is the cluster module?',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({ baseline: VERBOSE_BASELINE_PAYLOAD, madar: VERBOSE_MADAR_MCP_RETRIEVE_PAYLOAD }),
+          now: () => new Date('2026-05-01T00:00:00Z'),
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport
+      const prompt = readFileSync(report.paths.prompt_file, 'utf8')
+
+      expect(prompt).toContain('Call retrieve first')
+      expect(prompt).toContain('Inspect matched_nodes, snippets, relationships, and community context before deciding what to do next')
+      expect(prompt).toContain('If retrieve already answers the question, answer from the retrieved evidence and stop without raw search')
+      expect(prompt).toContain('Allow at most one focused Madar follow-up before raw search')
+      expect(prompt).toContain('Broad raw search requires an explicit missing-context reason')
+      expect(prompt).toContain('Question: What is the cluster module?')
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('writes a full-profile native-agent prompt that keeps context_pack first', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject({ profile: 'full' })
     try {
       const result = await executeNativeAgentCompare(
         {
@@ -995,9 +1121,6 @@ describe('executeNativeAgentCompare', () => {
       expect(prompt).toContain('Call context_pack first')
       expect(prompt).toContain('Inspect evidence.pack_confidence, evidence.coverage, evidence.agent_directive, missing_context, and recommended_first_read')
       expect(prompt).toContain('If evidence.agent_directive is answer_from_pack, answer from the pack and stop without raw search')
-      expect(prompt).toContain('Allow at most one focused Madar follow-up before raw search')
-      expect(prompt).toContain('Broad raw search requires an explicit missing-context reason')
-      expect(prompt).toContain('Question: What is the cluster module?')
     } finally {
       rmSync(projectDir, { recursive: true, force: true })
     }
@@ -1438,7 +1561,7 @@ describe('executeNativeAgentCompare', () => {
     }
   })
 
-  it('reports a prompt-contract violation when the first Madar call is not context_pack', async () => {
+  it('reports a followed prompt contract when a core install starts with retrieve', async () => {
     const { projectDir, graphPath, outputDir } = makeFixtureProject()
     try {
       const result = await executeNativeAgentCompare(
@@ -1456,7 +1579,63 @@ describe('executeNativeAgentCompare', () => {
       )
 
       const summary = formatNativeAgentCompareSummary(result)
+      expect(summary).toContain('prompt_contract: followed (started with retrieve and avoided disallowed exploration)')
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a prompt-contract violation when a full install starts with retrieve instead of context_pack', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject({ profile: 'full' })
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'What is the cluster module?',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({ baseline: VERBOSE_BASELINE_PAYLOAD, madar: VERBOSE_MADAR_MCP_RETRIEVE_PAYLOAD }),
+          now: () => new Date('2026-05-01T00:00:00Z'),
+        },
+      )
+
+      const summary = formatNativeAgentCompareSummary(result)
       expect(summary).toContain('prompt_contract: violated (first Madar call was not context_pack)')
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves a full-profile first-tool violation even when broad exploration happens later', async () => {
+    const { projectDir, graphPath, outputDir } = makeFixtureProject({ profile: 'full' })
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'What is the cluster module?',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+        },
+        {
+          runner: scriptedRunner({
+            baseline: VERBOSE_BASELINE_PAYLOAD,
+            madar: VERBOSE_MADAR_MCP_RETRIEVE_WITH_FOLLOWUP_EXPLORATION_PAYLOAD,
+          }),
+          now: () => new Date('2026-05-01T00:00:00Z'),
+        },
+      )
+
+      expect((result.reports[0] as NativeAgentCompareReport).prompt_contract).toEqual({
+        status: 'violated',
+        evidence: [
+          'first Madar call was not context_pack',
+          'broad exploration occurred after the first Madar call, but the trace does not show whether missing_context justified it',
+        ],
+      })
     } finally {
       rmSync(projectDir, { recursive: true, force: true })
     }
@@ -1933,6 +2112,100 @@ describe('executeNativeAgentCompare', () => {
       expect(summary).toContain('turns win')
       expect(summary).toContain('fresh_token win')
       expect(summary).toContain('cost win')
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true })
+    }
+  })
+
+  it('classifies implement outcomes from isolated touched-file overlap and passing validation', async () => {
+    const { projectDir, graphPath, outputDir } = makeImplementFixtureProject()
+    try {
+      const result = await executeNativeAgentCompare(
+        {
+          graphPath,
+          question: 'change login validation behavior',
+          outputDir,
+          execTemplate: 'mock-runner',
+          baselineMode: 'native_agent',
+          task: 'implement',
+        } as Parameters<typeof executeNativeAgentCompare>[0],
+        {
+          runner: async (input) => {
+            const workspaceRoot = ((input as { workspaceRoot?: string }).workspaceRoot) ?? projectDir
+            if (input.mode === 'baseline') {
+              writeFileSync(join(workspaceRoot, 'src', 'legacy', 'noisy.ts'), 'export const noisy = "baseline-change"\n', 'utf8')
+            } else {
+              writeFileSync(join(workspaceRoot, 'src', 'auth', 'login-service.ts'), 'export const loginValidation = "madar-implement-change"\n', 'utf8')
+              writeFileSync(join(workspaceRoot, 'tests', 'unit', 'login-service.test.ts'), 'export const loginServiceTest = "madar-implement-test"\n', 'utf8')
+            }
+            return {
+              exitCode: 0,
+              stdout: `${JSON.stringify(input.mode === 'baseline' ? VERBOSE_BASELINE_PAYLOAD : VERBOSE_MADAR_MCP_RETRIEVE_PAYLOAD)}\n`,
+              stderr: '',
+              elapsedMs: input.mode === 'baseline' ? 96368 : 34744,
+            }
+          },
+          now: () => new Date('2026-05-28T00:00:00Z'),
+        },
+      )
+
+      const report = result.reports[0] as NativeAgentCompareReport & {
+        implement_outcome?: {
+          baseline: {
+            files_touched: string[]
+            wrong_file_edits: string[]
+            validation: { status: string }
+          }
+          madar: {
+            files_touched: string[]
+            wrong_file_edits: string[]
+            validation: { status: string }
+          }
+        }
+      }
+      const savedReport = JSON.parse(readFileSync(report.paths.report, 'utf8')) as {
+        implement_outcome?: {
+          baseline: {
+            files_touched: string[]
+            wrong_file_edits: string[]
+            validation: { status: string }
+          }
+          madar: {
+            files_touched: string[]
+            wrong_file_edits: string[]
+            validation: { status: string }
+          }
+        }
+        benchmark_outcome?: unknown
+      }
+      const summary = formatNativeAgentCompareSummary(result)
+
+      expect(savedReport.implement_outcome).toEqual(expect.objectContaining({
+        baseline: expect.objectContaining({
+          files_touched: expect.arrayContaining(['src/legacy/noisy.ts']),
+          wrong_file_edits: ['src/legacy/noisy.ts'],
+          validation: expect.objectContaining({
+            status: 'failed',
+          }),
+        }),
+        madar: expect.objectContaining({
+          files_touched: expect.arrayContaining(['src/auth/login-service.ts', 'tests/unit/login-service.test.ts']),
+          wrong_file_edits: [],
+          validation: expect.objectContaining({
+            status: 'passed',
+          }),
+        }),
+      }))
+      expect(report.implement_outcome).toEqual(savedReport.implement_outcome)
+      expect(savedReport.benchmark_outcome).toEqual(expect.objectContaining({
+        outcome: 'partial_win',
+      }))
+      expect(summary).toContain('implement outcome:')
+      expect(summary).toContain('benchmark_outcome: partial_win')
+      expect(summary).toContain('wrong-file edit')
+      expect(summary).toContain('validation passed')
+      expect(readFileSync(join(projectDir, 'src', 'auth', 'login-service.ts'), 'utf8')).toBe('export const loginValidation = "original"\n')
+      expect(readFileSync(join(projectDir, 'tests', 'unit', 'login-service.test.ts'), 'utf8')).toBe('export const loginServiceTest = "original"\n')
     } finally {
       rmSync(projectDir, { recursive: true, force: true })
     }

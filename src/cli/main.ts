@@ -11,11 +11,11 @@ import { runContextPromptCommand } from '../infrastructure/context-prompt-comman
 import { runDoctorCommand, runStatusCommand } from '../infrastructure/doctor.js'
 import { runProofReportCommand, type ProofReportResult } from '../infrastructure/proof-report.js'
 import { runReviewCompareCommand } from '../infrastructure/review-compare.js'
+import { saveQueryResult } from '../infrastructure/save-query-result.js'
 import { compareRefs } from '../infrastructure/time-travel.js'
 import { federate } from '../pipeline/federate.js'
 import { generateGraph, type GenerateGraphResult, type ProgressStep } from '../infrastructure/generate.js'
 import { install as installHooks, status as hookStatus, uninstall as uninstallHooks } from '../infrastructure/hooks.js'
-import { ingest, saveQueryResult } from '../infrastructure/ingest.js'
 import {
   agentsInstall,
   agentsUninstall,
@@ -55,7 +55,6 @@ import { getUpdateNotification } from '../shared/update-notifier.js'
 import {
   parseBenchmarkArgs,
   parseBenchSuiteArgs,
-  parseAddArgs,
   type BenchSuiteCliOptions,
   type BenchmarkCliOptions,
   parseCompareArgs,
@@ -149,7 +148,6 @@ export interface CliDependencies {
   loadGraph: typeof loadGraph
   queryGraph: typeof queryGraph
   saveQueryResult: typeof saveQueryResult
-  ingest: typeof ingest
   runBenchmark: (context: BenchmarkCommandContext) => Promise<BenchmarkResult> | BenchmarkResult
   runBenchSuite: (context: BenchSuiteCommandContext) => Promise<string | void> | string | void
   runEval: (context: EvalCommandContext) => Promise<string | void> | string | void
@@ -203,7 +201,6 @@ const DEFAULT_DEPENDENCIES: CliDependencies = {
   loadGraph,
   queryGraph,
   saveQueryResult,
-  ingest,
   runBenchmark: ({ options }) => {
     const questions = options.questionsPath ? loadBenchmarkQuestions(options.questionsPath) : undefined
     return runBenchmark(options.graphPath, undefined, questions, { execTemplate: options.execTemplate })
@@ -453,9 +450,6 @@ export function formatHelp(binaryName = 'madar'): string {
     '  explain <label>        explain one node and its neighborhood from graph evidence',
     '    --graph <path>        path to graph.json (default out/graph.json)',
     '    --relation REL        optional relation filter for neighbors',
-    '  add <url> [path]       ingest a URL into raw/ and rebuild with --update',
-    '    --follow-symlinks    include in-root symlink targets during rebuild',
-    '    --no-html            skip graph.html generation during rebuild',
     '  save-result            save a Q&A result to out/memory/',
     '    --question Q          the question asked',
     '    --answer A            the answer to save',
@@ -985,20 +979,6 @@ export async function executeCli(argv: string[], io: CliIO = console, dependenci
       const options = parseExplainArgs(args)
       const graph = dependencies.loadGraph(options.graphPath)
       io.log(formatExplainSummary(graph, options.label, options.relation))
-      return 0
-    }
-
-    if (command === 'add') {
-      const options = parseAddArgs(args)
-      const assetPath = await dependencies.ingest(options.url, `${options.path}/raw`)
-      const result = dependencies.generateGraph(options.path, {
-        update: true,
-        followSymlinks: options.followSymlinks,
-        noHtml: options.noHtml,
-        onProgress: (step) => io.log(formatProgress(step)),
-      })
-      io.log(`[madar add] Saved ${assetPath}`)
-      io.log(formatGenerateSummary(result))
       return 0
     }
 

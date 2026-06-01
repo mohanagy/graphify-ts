@@ -1114,19 +1114,13 @@ describe('stdio runtime', () => {
         task_intent: 'explain',
         prompt: 'How does AuthService reach Transport?',
         budget: 1,
-        plan: expect.objectContaining({
-          task_kind: 'explain',
-          evidence: expect.objectContaining({
-            recipe_id: 'explain',
-          }),
-        }),
         pack: expect.objectContaining({
           matched_nodes: expect.any(Array),
           community_context: expect.any(Array),
         }),
       }))
-      expect(explainPackPayload.coverage).toEqual(expect.objectContaining({
-        missing_required: expect.arrayContaining(['supporting', 'structural']),
+      expect(explainPackPayload.serialized_budget).toEqual(expect.objectContaining({
+        max_tokens: 1,
       }))
       expect(explainPackPayload.missing_semantic).toEqual(expect.arrayContaining(['structure']))
       expect(explainPackPayload.expandable).toEqual(expect.arrayContaining([
@@ -1645,6 +1639,56 @@ describe('stdio runtime', () => {
         error: {
           code: -32602,
           message: "Malformed context_pack handle_id 'broken-handle'. Re-run context_pack and retry context_expand within the same MCP session.",
+        },
+      })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects stored context-pack handles with malformed focus ranges during expansion', async () => {
+    const root = createGraphFixtureRoot()
+    try {
+      const graphPath = join(root, 'graph.json')
+      const sessionState = {
+        logLevel: 'info' as const,
+        subscribedResourceUris: new Set<string>(),
+        resourceVersions: new Map<string, string>(),
+        resourceListSignature: null,
+        contextPromptSessions: new Map(),
+        contextPackHandles: new Map<string, unknown>([
+          ['broken-focus-range', {
+            prompt: 'How does AuthService reach Transport?',
+            task: 'explain',
+            task_intent: 'explain',
+            follow_up: {
+              kind: 'context_pack',
+              task_kind: 'explain',
+              evidence_class: 'primary',
+              focus_files: ['auth.ts'],
+              focus_ranges: [{}],
+            },
+          }],
+        ]),
+      }
+
+      const response = await Promise.resolve(handleStdioRequest(graphPath, {
+        id: 1,
+        method: 'tools/call',
+        params: {
+          name: 'context_expand',
+          arguments: {
+            handle_id: 'broken-focus-range',
+          },
+        },
+      }, sessionState))
+
+      expect(response).toEqual({
+        jsonrpc: '2.0',
+        id: 1,
+        error: {
+          code: -32602,
+          message: "Malformed context_pack handle_id 'broken-focus-range'. Re-run context_pack and retry context_expand within the same MCP session.",
         },
       })
     } finally {

@@ -2,11 +2,27 @@
 
 All notable changes to the TypeScript package will be documented in this file.
 
+## [0.27.6] - 2026-05-29
+
+### Changed
+
+- **The legacy `madar add <url>` surface is removed from the public CLI**: Madar now stays explicitly local-codebase-only at the command surface, while `save-result` remains available for exporting query results and older ingest-produced artifacts still preserve their legacy `builtin:ingest:*` provenance when they are read back.
+
+## [0.27.5] - 2026-05-29
+
+### Fixed
+
+- **Answer-ready explain packs now keep promoted runtime-path workflow centers**: explain pack assembly preserves nodes that are simultaneously part of the runtime primary path and promoted into `workflow_centers`, so scope-matched runs no longer emit `slice_path_nodes_not_promoted` for evidence already kept in the pack. Closes #399.
+- **Explain serialization now enforces the declared budget**: answer-ready `madar pack`, MCP `context_pack`, and stdio explain responses now trim lower-value evidence until the serialized payload fits the requested budget, set `serialized_budget.enforced: true` when trimming occurs, and reject malformed stored follow-up handles instead of expanding them silently. Closes #400.
+
 ## [0.27.4] - 2026-05-29
 
 ### Fixed
 
-- **Placeholder** — fill in before publishing.
+- **`runNativeAgentArmWithTimeout` no longer races ahead of a settling arm**: after aborting a timed-out arm the runner is given a 200 ms grace window to fully settle before the `timed_out` outcome is recorded, preventing a partially-completed result from being misclassified. Truly stuck arms that never respond to abort still resolve via the grace timeout.
+- **`assessNativeAgentPromptContract` returns `not_measured` for post-pack broad exploration**: broad exploration after a pack call can be justified by missing context or coverage gaps that the trace model does not capture, so marking it as `violated` caused false failures. The honest status is `not_measured`.
+- **`suggestBenchmarkGraphScope` handles absolute `source_file` paths**: source files from fixtures using absolute paths (e.g. `/tmp/.../backend/src/auth-route.ts`) now have their project root inferred and stripped before scope extraction, so the reported scope is `backend` instead of the first path segment.
+- **`candidateScopes` in MCP response evidence handles absolute and Windows paths**: scope detection now finds the segment immediately before a generic directory marker (`src`, `test`, `tests`, `lib`, etc.) rather than splitting on the first `/`, fixing incorrect scope attribution for long absolute paths and Windows-style paths.
 
 ## [0.27.3] - 2026-05-28
 
