@@ -122,17 +122,17 @@ madar telemetry disable
 MADAR_ENABLE_TELEMETRY=1 madar generate .
 ```
 
-The current telemetry model is still local-first and source-safe. It records only coarse success events for `install`, `generate`, `pack`, and `compare`, plus version, OS, an optional install target, and an optional repo-size bucket. It does **not** record prompt text, answer text, source paths, or source content. Full field list and controls: [`docs/telemetry.md`](https://github.com/mohanagy/madar/blob/next/docs/telemetry.md).
+The current telemetry model is still local-first and source-safe. It records only coarse success events for `install`, `generate`, `pack`, and `compare`, plus version, OS, an optional install target, and an optional repo-size bucket. It does **not** record prompt text, answer text, source paths, or source content. Full field list and controls: [`docs/telemetry.md`](https://github.com/mohanagy/madar/blob/main/docs/telemetry.md).
 
 ---
 
-## What's new in 0.27.7-next.1
+## What's new in 0.27.7
 
-See the [`0.27.7-next.1` changelog entry](https://github.com/mohanagy/madar/blob/next/CHANGELOG.md#0277-next1---2026-06-01) for the full release notes.
+See the [`0.27.7` changelog entry](https://github.com/mohanagy/madar/blob/main/CHANGELOG.md#0277---2026-06-02) for the full release notes.
 
-This `@next` build keeps the current `0.27.6` CLI/runtime fixes and adds a checked-in federation flagship proof: a reproducible three-repo fixture, a synthetic federation receipt, and doc updates that make the multi-repo enterprise workflow concrete without overstating the current implementation.
+This release keeps the current `0.27.6` CLI/runtime fixes and adds a checked-in federation flagship proof: a reproducible three-repo fixture, a synthetic federation receipt, and doc updates that make the multi-repo enterprise workflow concrete without overstating the current implementation.
 
-It also carries the latest next-track roadmap docs for design-partner workflow loops, plugin distribution channels, and language-expansion decisions, so the beta line stays aligned with the product direction already merged on `next`.
+It also carries the latest roadmap docs for design-partner workflow loops, plugin distribution channels, and language-expansion decisions, so the stable line stays aligned with the product direction already merged on `main`.
 
 The larger **What's new in 0.23.0** additions are still part of the main flow too: `madar summary`, the core MCP `graph_summary` tool, runtime `execution_slice` output, share-safe `report.share-safe.json` compare artifacts, and `compare --baseline-mode pack_only`.
 
@@ -140,7 +140,7 @@ If you want the broader proof-oriented workflow behind the current surfaces, sta
 
 ### When to use `--spi`
 
-`--spi` is **still opt-in** in 0.27.7-next.1. Use it when your repo is framework-heavy TypeScript/JavaScript and you want the extra framework-shaped metadata plus disk cache behavior.
+`--spi` is **still opt-in** in 0.27.7. Use it when your repo is framework-heavy TypeScript/JavaScript and you want the extra framework-shaped metadata plus disk cache behavior.
 
 `--spi` is usually worth it for NestJS, Next.js App Router, Prisma, tRPC, Hono, Fastify, and similar repos where users ask storage-oriented prompts, client/server boundary questions, or request-flow questions. The default pipeline is still fine for simpler repos, non-JS/TS workspaces, or quick first runs when you do not need the extra framework detail yet.
 
@@ -382,7 +382,7 @@ Everything stays local by default. No cloud upload, no API key required. Telemet
 
 - [Quick start guide](https://github.com/mohanagy/madar/blob/main/docs/proof-workflows.md) — three reproducible workflows: local proof, A/B compare, federated proof
 - [Claims and evidence map](https://github.com/mohanagy/madar/blob/main/docs/claims-and-evidence.md) — which public claims are demonstrated, in progress, or not yet measured
-- [Team and enterprise offer](https://github.com/mohanagy/madar/blob/next/docs/team-enterprise-offer.md) — local-first benchmark setup, proof-report, and procurement/security note options without a hosted control plane
+- [Team and enterprise offer](https://github.com/mohanagy/madar/blob/main/docs/team-enterprise-offer.md) — local-first benchmark setup, proof-report, and procurement/security note options without a hosted control plane
 - [Benchmark suite](https://github.com/mohanagy/madar/blob/main/docs/benchmarks/suite/README.md) — fixed manifests, methodology, CLI runner, and per-repo spread results
 - [GoValidate shared benchmark suite](https://github.com/mohanagy/madar/blob/main/docs/benchmarks/govalidate-suite/README.md) — public prompt set plus deterministic pack/answer quality gates
 - [Public roadmap](https://github.com/mohanagy/madar/blob/main/docs/roadmap.md) — contributor-facing priority tracks and issue links
@@ -390,7 +390,7 @@ Everything stays local by default. No cloud upload, no API key required. Telemet
 - [Performance benchmark harness](https://github.com/mohanagy/madar/blob/main/docs/benchmarks/performance/README.md) — repeatable `generate` / `update` / `cluster-only` measurements
 - [MCP tool examples](https://github.com/mohanagy/madar/blob/main/examples/mcp-tool-examples.md) — real input/output for every tool
 - [Benchmark hub](https://github.com/mohanagy/madar/tree/main/docs/benchmarks) — committed wrappers and provider-reported evidence
-- [Telemetry guide](https://github.com/mohanagy/madar/blob/next/docs/telemetry.md) — opt-in controls, collected fields, excluded fields, and local storage behavior
+- [Telemetry guide](https://github.com/mohanagy/madar/blob/main/docs/telemetry.md) — opt-in controls, collected fields, excluded fields, and local storage behavior
 - [Changelog](https://github.com/mohanagy/madar/blob/main/CHANGELOG.md) — full per-release notes
 - [Contributing](https://github.com/mohanagy/madar/blob/main/CONTRIBUTING.md) · [Security](https://github.com/mohanagy/madar/blob/main/SECURITY.md)
 
