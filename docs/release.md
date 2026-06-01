@@ -51,8 +51,11 @@ Recommended follow-up checks:
 
 After the verification steps are green:
 
-1. Push and merge the verified release commit so the published README links already exist on the `main` branch.
-2. Publish from that merged `main` commit with `npm publish --access public --provenance` when the release environment supports npm provenance attestations.
+1. Push and merge the verified release commit so the published README links already exist on the target release branch (`main` for stable releases, `next` for prereleases).
+2. Publish from that merged release commit:
+   - stable releases: `npm publish --access public --provenance`
+   - prereleases / `next`: `npm publish --tag next --access public --provenance`
+   If the release environment does not support npm provenance attestations, rerun the same command without `--provenance`.
 3. Create the matching Git tag if `npm version` did not already do so in your workflow.
 4. Draft or publish the GitHub release notes from the changelog entry.
 

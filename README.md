@@ -128,7 +128,7 @@ The current telemetry model is still local-first and source-safe. It records onl
 
 ## What's new in 0.27.7-next.0
 
-See the [`0.27.7-next.0` changelog entry](https://github.com/mohanagy/madar/blob/main/CHANGELOG.md#0277-next0---2026-06-01) for the full release notes.
+See the [`0.27.7-next.0` changelog entry](https://github.com/mohanagy/madar/blob/next/CHANGELOG.md#0277-next0---2026-06-01) for the full release notes.
 
 This `@next` build keeps the current `0.27.6` CLI/runtime fixes and adds a checked-in federation flagship proof: a reproducible three-repo fixture, a synthetic federation receipt, and doc updates that make the multi-repo enterprise workflow concrete without overstating the current implementation.
 
