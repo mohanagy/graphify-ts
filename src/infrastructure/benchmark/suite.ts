@@ -1,5 +1,5 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { basename, dirname, join, relative, resolve, sep } from 'node:path'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 
 import {
@@ -668,9 +668,11 @@ function copyReportArtifacts(
   report: NativeAgentCompareReport,
   destinationParent: string,
 ): string {
-  const copiedRoot = join(destinationParent, basename(report.paths.output_dir))
-  mkdirSync(dirname(copiedRoot), { recursive: true })
-  cpSync(report.paths.output_dir, copiedRoot, { recursive: true })
+  const copiedRoot = destinationParent
+  mkdirSync(copiedRoot, { recursive: true })
+  for (const entry of readdirSync(report.paths.output_dir)) {
+    cpSync(join(report.paths.output_dir, entry), join(copiedRoot, entry), { recursive: true })
+  }
   const copiedShareSafeReport = join(copiedRoot, 'report.share-safe.json')
   if (!existsSync(copiedShareSafeReport)) {
     throw new Error(`Missing share-safe report in copied benchmark artifacts: ${copiedShareSafeReport}`)

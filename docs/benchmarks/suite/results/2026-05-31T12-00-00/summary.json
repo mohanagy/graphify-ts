@@ -2,7 +2,7 @@
   "schema_version": 1,
   "started_at": "2026-05-31T12:00:00.000Z",
   "completed_at": "2026-05-31T12:00:00.000Z",
-  "output_root": "docs/benchmarks/suite/results/2026-05-31T12-00-00-001",
+  "output_root": "docs/benchmarks/suite/results/2026-05-31T12-00-00",
   "filters": {
     "repo": null,
     "task": null,
@@ -139,14 +139,14 @@
       "workflow_outcomes": null,
       "artifacts": {
         "legacy_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/explain-runtime/warm-cache/legacy/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/explain-runtime/warm-cache/legacy/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/explain-runtime/warm-cache/legacy/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/explain-runtime/warm-cache/legacy/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/explain-runtime/warm-cache/legacy/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/explain-runtime/warm-cache/legacy/trial-003/report.share-safe.json"
         ],
         "spi_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/explain-runtime/warm-cache/spi/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/explain-runtime/warm-cache/spi/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/explain-runtime/warm-cache/spi/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/explain-runtime/warm-cache/spi/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/explain-runtime/warm-cache/spi/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/explain-runtime/warm-cache/spi/trial-003/report.share-safe.json"
         ]
       }
     },
@@ -337,14 +337,14 @@
       },
       "artifacts": {
         "legacy_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/implement/warm-cache/legacy/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/implement/warm-cache/legacy/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/implement/warm-cache/legacy/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/implement/warm-cache/legacy/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/implement/warm-cache/legacy/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/implement/warm-cache/legacy/trial-003/report.share-safe.json"
         ],
         "spi_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/implement/warm-cache/spi/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/implement/warm-cache/spi/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/implement/warm-cache/spi/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/implement/warm-cache/spi/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/implement/warm-cache/spi/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/implement/warm-cache/spi/trial-003/report.share-safe.json"
         ]
       }
     },
@@ -527,14 +527,14 @@
       },
       "artifacts": {
         "legacy_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/review/warm-cache/legacy/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/review/warm-cache/legacy/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/review/warm-cache/legacy/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/review/warm-cache/legacy/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/review/warm-cache/legacy/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/review/warm-cache/legacy/trial-003/report.share-safe.json"
         ],
         "spi_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/review/warm-cache/spi/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/review/warm-cache/spi/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/review/warm-cache/spi/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/review/warm-cache/spi/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/review/warm-cache/spi/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/review/warm-cache/spi/trial-003/report.share-safe.json"
         ]
       }
     },
@@ -665,14 +665,14 @@
       "workflow_outcomes": null,
       "artifacts": {
         "legacy_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/impact/warm-cache/legacy/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/impact/warm-cache/legacy/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/impact/warm-cache/legacy/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/impact/warm-cache/legacy/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/impact/warm-cache/legacy/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/impact/warm-cache/legacy/trial-003/report.share-safe.json"
         ],
         "spi_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/impact/warm-cache/spi/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/impact/warm-cache/spi/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-small/impact/warm-cache/spi/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/impact/warm-cache/spi/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/impact/warm-cache/spi/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-small/impact/warm-cache/spi/trial-003/report.share-safe.json"
         ]
       }
     },
@@ -803,14 +803,14 @@
       "workflow_outcomes": null,
       "artifacts": {
         "legacy_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/explain-runtime/warm-cache/legacy/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/explain-runtime/warm-cache/legacy/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/explain-runtime/warm-cache/legacy/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/explain-runtime/warm-cache/legacy/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/explain-runtime/warm-cache/legacy/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/explain-runtime/warm-cache/legacy/trial-003/report.share-safe.json"
         ],
         "spi_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/explain-runtime/warm-cache/spi/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/explain-runtime/warm-cache/spi/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/explain-runtime/warm-cache/spi/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/explain-runtime/warm-cache/spi/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/explain-runtime/warm-cache/spi/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/explain-runtime/warm-cache/spi/trial-003/report.share-safe.json"
         ]
       }
     },
@@ -1001,14 +1001,14 @@
       },
       "artifacts": {
         "legacy_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/implement/warm-cache/legacy/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/implement/warm-cache/legacy/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/implement/warm-cache/legacy/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/implement/warm-cache/legacy/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/implement/warm-cache/legacy/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/implement/warm-cache/legacy/trial-003/report.share-safe.json"
         ],
         "spi_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/implement/warm-cache/spi/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/implement/warm-cache/spi/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/implement/warm-cache/spi/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/implement/warm-cache/spi/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/implement/warm-cache/spi/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/implement/warm-cache/spi/trial-003/report.share-safe.json"
         ]
       }
     },
@@ -1191,14 +1191,14 @@
       },
       "artifacts": {
         "legacy_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/review/warm-cache/legacy/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/review/warm-cache/legacy/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/review/warm-cache/legacy/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/review/warm-cache/legacy/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/review/warm-cache/legacy/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/review/warm-cache/legacy/trial-003/report.share-safe.json"
         ],
         "spi_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/review/warm-cache/spi/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/review/warm-cache/spi/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/review/warm-cache/spi/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/review/warm-cache/spi/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/review/warm-cache/spi/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/review/warm-cache/spi/trial-003/report.share-safe.json"
         ]
       }
     },
@@ -1329,14 +1329,14 @@
       "workflow_outcomes": null,
       "artifacts": {
         "legacy_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/impact/warm-cache/legacy/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/impact/warm-cache/legacy/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/impact/warm-cache/legacy/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/impact/warm-cache/legacy/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/impact/warm-cache/legacy/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/impact/warm-cache/legacy/trial-003/report.share-safe.json"
         ],
         "spi_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/impact/warm-cache/spi/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/impact/warm-cache/spi/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/nestjs-mid/impact/warm-cache/spi/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/impact/warm-cache/spi/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/impact/warm-cache/spi/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/nestjs-mid/impact/warm-cache/spi/trial-003/report.share-safe.json"
         ]
       }
     },
@@ -1467,14 +1467,14 @@
       "workflow_outcomes": null,
       "artifacts": {
         "legacy_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/explain-runtime/warm-cache/legacy/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/explain-runtime/warm-cache/legacy/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/explain-runtime/warm-cache/legacy/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/explain-runtime/warm-cache/legacy/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/explain-runtime/warm-cache/legacy/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/explain-runtime/warm-cache/legacy/trial-003/report.share-safe.json"
         ],
         "spi_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/explain-runtime/warm-cache/spi/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/explain-runtime/warm-cache/spi/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/explain-runtime/warm-cache/spi/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/explain-runtime/warm-cache/spi/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/explain-runtime/warm-cache/spi/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/explain-runtime/warm-cache/spi/trial-003/report.share-safe.json"
         ]
       }
     },
@@ -1665,14 +1665,14 @@
       },
       "artifacts": {
         "legacy_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/implement/warm-cache/legacy/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/implement/warm-cache/legacy/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/implement/warm-cache/legacy/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/implement/warm-cache/legacy/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/implement/warm-cache/legacy/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/implement/warm-cache/legacy/trial-003/report.share-safe.json"
         ],
         "spi_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/implement/warm-cache/spi/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/implement/warm-cache/spi/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/implement/warm-cache/spi/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/implement/warm-cache/spi/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/implement/warm-cache/spi/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/implement/warm-cache/spi/trial-003/report.share-safe.json"
         ]
       }
     },
@@ -1855,14 +1855,14 @@
       },
       "artifacts": {
         "legacy_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/review/warm-cache/legacy/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/review/warm-cache/legacy/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/review/warm-cache/legacy/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/review/warm-cache/legacy/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/review/warm-cache/legacy/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/review/warm-cache/legacy/trial-003/report.share-safe.json"
         ],
         "spi_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/review/warm-cache/spi/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/review/warm-cache/spi/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/review/warm-cache/spi/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/review/warm-cache/spi/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/review/warm-cache/spi/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/review/warm-cache/spi/trial-003/report.share-safe.json"
         ]
       }
     },
@@ -1993,14 +1993,14 @@
       "workflow_outcomes": null,
       "artifacts": {
         "legacy_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/impact/warm-cache/legacy/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/impact/warm-cache/legacy/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/impact/warm-cache/legacy/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/impact/warm-cache/legacy/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/impact/warm-cache/legacy/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/impact/warm-cache/legacy/trial-003/report.share-safe.json"
         ],
         "spi_share_safe_reports": [
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/impact/warm-cache/spi/trial-001/trial-001/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/impact/warm-cache/spi/trial-002/trial-002/report.share-safe.json",
-          "docs/benchmarks/suite/results/2026-05-31T12-00-00-001/raw/ts-monorepo-large/impact/warm-cache/spi/trial-003/trial-003/report.share-safe.json"
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/impact/warm-cache/spi/trial-001/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/impact/warm-cache/spi/trial-002/report.share-safe.json",
+          "docs/benchmarks/suite/results/2026-05-31T12-00-00/raw/ts-monorepo-large/impact/warm-cache/spi/trial-003/report.share-safe.json"
         ]
       }
     }
