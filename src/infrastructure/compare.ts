@@ -2951,20 +2951,41 @@ async function runShellCommand(command: string, options: { cwd?: string; signal?
   stderr: string
 }> {
   return await new Promise((resolveExecution, rejectExecution) => {
+    const useProcessGroup = process.platform !== 'win32'
     const shellCommand =
-      process.platform === 'win32'
+      !useProcessGroup
         ? { file: 'powershell.exe', args: ['-NoProfile', '-Command', command] }
         : { file: '/bin/sh', args: ['-lc', command] }
     const child = spawn(shellCommand.file, shellCommand.args, {
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
+      ...(useProcessGroup ? { detached: true } : {}),
       ...(options.cwd ? { cwd: options.cwd } : {}),
     })
     let stdout = ''
     let stderr = ''
 
     const handleAbort = () => {
-      child.kill()
+      if (!useProcessGroup || child.pid === undefined) {
+        child.kill()
+        return
+      }
+      try {
+        process.kill(-child.pid, 'SIGTERM')
+      } catch {
+        child.kill()
+        return
+      }
+      setTimeout(() => {
+        if (child.exitCode !== null) {
+          return
+        }
+        try {
+          process.kill(-child.pid!, 'SIGKILL')
+        } catch {
+          child.kill('SIGKILL')
+        }
+      }, 250).unref()
     }
     if (options.signal) {
       if (options.signal.aborted) {
@@ -2984,6 +3005,9 @@ async function runShellCommand(command: string, options: { cwd?: string; signal?
       rejectExecution(error)
     })
     child.on('close', (code) => {
+      if (options.signal) {
+        options.signal.removeEventListener('abort', handleAbort)
+      }
       resolveExecution({
         exitCode: code ?? 1,
         stdout,
