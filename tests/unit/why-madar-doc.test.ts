@@ -227,62 +227,69 @@ describe('public marketing copy honesty', () => {
       expect(content).toContain('Codex Security')
       expect(lower).toContain('does not prove that madar itself')
     })
+  })
 
-    describe('docs/claims-and-evidence.md', () => {
-      const content = readDoc('docs/claims-and-evidence.md')
-      const lower = content.toLowerCase()
+  describe('docs/claims-and-evidence.md', () => {
+    const content = readDoc('docs/claims-and-evidence.md')
+    const lower = content.toLowerCase()
 
-      it('maps public claims to evidence and tracks unmeasured claims explicitly', () => {
-        expect(content).toContain('# Claims and evidence')
-        expect(content).toContain('## Demonstrated today')
-        expect(content).toContain('## In progress')
-        expect(content).toContain('## Not yet measured')
-        expect(content).toContain('README.md')
-        expect(content).toContain('docs/benchmarks/suite/')
-        expect(lower).toContain('foundercommandcenter')
-      })
+    it('maps public claims to evidence and tracks unmeasured claims explicitly', () => {
+      expect(content).toContain('# Claims and evidence')
+      expect(content).toContain('## Demonstrated today')
+      expect(content).toContain('## In progress')
+      expect(content).toContain('## Not yet measured')
+      expect(content).toContain('README.md')
+      expect(content).toContain('docs/benchmarks/suite/')
+      expect(lower).toContain('foundercommandcenter')
+    })
 
-      it('links the dated implementation receipt while keeping generalized implementation-win claims conservative', () => {
-        expect(content).toContain('docs/benchmarks/2026-05-31-implement-outcome/')
-        expect(lower).toContain('deterministic implementation-task receipt')
-        expect(lower).toContain('files touched')
-        expect(lower).toContain('wrong-file edits')
-        expect(lower).toContain('reviewer-visible')
-        expect(lower).toContain('we do not yet have cross-repo implementation-task evidence')
-      })
+    it('links the dated implementation receipt while keeping generalized implementation-win claims conservative', () => {
+      expect(content).toContain('docs/benchmarks/2026-05-31-implement-outcome/')
+      expect(lower).toContain('deterministic implementation-task receipt')
+      expect(lower).toContain('files touched')
+      expect(lower).toContain('wrong-file edits')
+      expect(lower).toContain('reviewer-visible')
+      expect(lower).toContain('we do not yet have cross-repo implementation-task evidence')
+    })
 
-      it('keeps review and security positioning tied to workflow guidance instead of unmeasured superiority claims', () => {
-        expect(lower).toContain('review and security tools')
-        expect(content).toContain('CodeRabbit')
-        expect(content).toContain('Qodo')
-        expect(content).toContain('Codex Security')
-        expect(lower).toContain('workflow guidance, not a measured superiority claim')
-        expect(lower).toContain('no comparative review/security evaluation')
-      })
+    it('keeps review and security positioning tied to workflow guidance instead of unmeasured superiority claims', () => {
+      expect(lower).toContain('review and security tools')
+      expect(content).toContain('CodeRabbit')
+      expect(content).toContain('Qodo')
+      expect(content).toContain('Codex Security')
+      expect(lower).toContain('workflow guidance, not a measured superiority claim')
+      expect(lower).toContain('no comparative review/security evaluation')
+    })
 
-      it('keeps the README ICP and product-promise guidance bounded to the current evidence scope', () => {
-        expect(lower).toContain('medium-to-large typescript/node repos')
-        expect(lower).toContain('deterministic local context compilation')
-        expect(lower).toContain('complements agents and ide indexing')
-        expect(lower).toContain('not another generic codebase index')
-      })
+    it('keeps the README ICP and product-promise guidance bounded to the current evidence scope', () => {
+      expect(lower).toContain('medium-to-large typescript/node repos')
+      expect(lower).toContain('deterministic local context compilation')
+      expect(lower).toContain('complements agents and ide indexing')
+      expect(lower).toContain('not another generic codebase index')
+    })
 
-      it('keeps the team and enterprise offer guidance local-first and service-scoped', () => {
-        expect(lower).toContain('team and enterprise offer')
-        expect(lower).toContain('benchmark setup')
-        expect(lower).toContain('proof report')
-        expect(lower).toContain('procurement/security note')
-        expect(lower).toContain('local-first trust boundary')
-        expect(lower).toContain('not a hosted control plane')
-      })
+    it('keeps the team and enterprise offer guidance local-first and service-scoped', () => {
+      expect(lower).toContain('team and enterprise offer')
+      expect(lower).toContain('benchmark setup')
+      expect(lower).toContain('proof report')
+      expect(lower).toContain('procurement/security note')
+      expect(lower).toContain('local-first trust boundary')
+      expect(lower).toContain('not a hosted control plane')
+    })
 
-      it('keeps hosted-dashboard positioning deferred until share-safe demand exceeds the local report path', () => {
-        expect(lower).toContain('hosted dashboard')
-        expect(lower).toContain('report.share-safe.json')
-        expect(lower).toContain('graph.html')
-        expect(lower).toContain('explicit customer demand')
-        expect(lower).toContain('no cloud indexing assumption')
-      })
+    it('keeps hosted-dashboard positioning deferred until share-safe demand exceeds the local report path', () => {
+      expect(lower).toContain('hosted dashboard')
+      expect(lower).toContain('report.share-safe.json')
+      expect(lower).toContain('graph.html')
+      expect(lower).toContain('explicit customer demand')
+      expect(lower).toContain('no cloud indexing assumption')
+    })
+
+    it('keeps language-expansion claims gated on TypeScript/Node proof plus benchmark or fixture evidence', () => {
+      expect(lower).toContain('language expansion')
+      expect(lower).toContain('typescript/node proof')
+      expect(lower).toContain('benchmark or fixture evidence')
+      expect(lower).toContain('no broad parity claim')
     })
   })
 
@@ -336,6 +343,33 @@ describe('public marketing copy honesty', () => {
     })
   })
 
+  describe('docs/language-expansion-decision.md', () => {
+    const content = readDoc('docs/language-expansion-decision.md')
+    const lower = content.toLowerCase()
+
+    it('defines evidence gates before broader language expansion', () => {
+      expect(content).toContain('# Language expansion decision')
+      expect(lower).toContain('recommendation: defer')
+      expect(lower).toContain('typescript/node proof')
+      expect(lower).toContain('evidence gates')
+      expect(lower).toContain('benchmark or fixture evidence')
+    })
+
+    it('separates near-term, parked, and out-of-scope language requests clearly', () => {
+      expect(lower).toContain('near-term')
+      expect(lower).toContain('parked')
+      expect(lower).toContain('out of scope')
+      expect(lower).toContain('python')
+      expect(lower).toContain('go')
+      expect(lower).toContain('rust')
+      expect(lower).toContain('java')
+      expect(lower).toContain('typescript/node framework depth')
+      expect(lower).toContain('no broad parity claim')
+      expect(lower).toContain('claiming broad parity')
+      expect(lower).toContain('without supporting receipts')
+    })
+  })
+
   describe('docs/language-capability-matrix.md', () => {
     const content = readDoc('docs/language-capability-matrix.md')
 
@@ -361,6 +395,13 @@ describe('public marketing copy honesty', () => {
       expect(content).toContain('visible client/server boundaries')
       expect(content).toContain('source-visible Hono, Fastify, tRPC, and Prisma workflows get conservative deeper retrieval hints on the opt-in `--spi` pipeline')
       expect(content).toContain('Hono, Fastify, tRPC, and Prisma currently contribute conservative request-flow and storage hints only on the opt-in `--spi` path')
+    })
+
+    it('frames non-TS/Node language support as first-pass coverage, not broad parity', () => {
+      expect(content).toContain('TypeScript/Node remains the near-term depth priority')
+      expect(content).toContain('Python and Go are useful first-pass support')
+      expect(content).toContain('broader parity is parked')
+      expect(content).toContain('docs/language-expansion-decision.md')
     })
   })
 
