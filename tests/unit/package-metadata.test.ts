@@ -223,8 +223,8 @@ describe('package metadata', () => {
     expect(matrix).toContain('runtime-boundary')
     expect(matrix).toContain('generic AST structure')
     expect(matrix).toContain('visible client/server boundaries')
-    expect(matrix).toContain('opt-in `--spi` pipeline')
-    expect(matrix).toContain('with `--spi`')
+    expect(matrix).toContain('source-visible Hono, Fastify, tRPC, and Prisma workflows get conservative deeper retrieval hints on the opt-in `--spi` pipeline')
+    expect(matrix).toContain('Hono, Fastify, tRPC, and Prisma currently contribute conservative request-flow and storage hints only on the opt-in `--spi` path')
   })
 
   it('pins non-vulnerable dependency floors for the CI security audit', () => {
