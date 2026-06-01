@@ -741,7 +741,7 @@ function frameworkMetadataFromAttributes(attributes: Record<string, unknown>): F
     ? metadataBag as Record<string, unknown>
     : null
 
-  for (const key of ['route_path', 'http_method', 'mount_path', 'slice_name', 'procedure_name', 'router_name', 'storage_operation'] as const) {
+  for (const key of ['route_path', 'http_method', 'mount_path', 'slice_name', 'procedure_name', 'router_name', 'storage_operation', 'runtime_boundary'] as const) {
     const value = attributes[key] ?? metadata?.[key]
     if (typeof value === 'string' && value.length > 0) out[key] = value
   }
@@ -3377,6 +3377,8 @@ interface FrameworkNodeMetadata {
   router_name?: string
   /** Storage endpoint operation (e.g. 'save', 'update', 'findMany'). */
   storage_operation?: string
+  /** Runtime boundary marker (e.g. 'client', 'server'). */
+  runtime_boundary?: string
 }
 
 function frameworkBoostForNode(
@@ -3443,7 +3445,19 @@ function frameworkBoostForNode(
   if (metadata.storage_operation && questionLower) {
     const storageOperation = metadata.storage_operation.toLowerCase()
     if (storageOperation.length >= 2 && containsWholeQuestionToken(questionLower, storageOperation)) {
-      boost += 1.75
+      const requestFlowCue = profile.routeIntent
+      const storageCue = profile.storageEndpointIntent || profile.storageReadIntent || profile.storageWriteIntent
+      boost += storageCue ? 2.75 : profile.prisma && requestFlowCue ? 4.75 : 1.75
+    }
+  }
+  if (metadata.runtime_boundary && questionLower) {
+    const runtimeBoundary = metadata.runtime_boundary.toLowerCase()
+    const boundaryIntent =
+      (runtimeBoundary === 'server' && profile.serverIntent)
+      || (runtimeBoundary === 'client' && profile.clientIntent)
+      || (runtimeBoundary !== 'server' && runtimeBoundary !== 'client' && containsWholeQuestionToken(questionLower, runtimeBoundary))
+    if (runtimeBoundary.length >= 2 && boundaryIntent && containsWholeQuestionToken(questionLower, runtimeBoundary)) {
+      boost += 1.5
     }
   }
 

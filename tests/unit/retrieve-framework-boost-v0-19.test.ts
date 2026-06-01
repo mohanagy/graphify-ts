@@ -10,6 +10,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { KnowledgeGraph } from '../../src/contracts/graph.js'
 import { generateGraph } from '../../src/infrastructure/generate.js'
 import { retrieveContext } from '../../src/runtime/retrieve.js'
 import { loadGraph } from '../../src/runtime/serve.js'
@@ -175,5 +176,83 @@ describe('Framework-aware retrieval boost for v0.17 substrates (#83 → v0.19)',
     const listUsers = retrieved.matched_nodes.find((n) => n.label === 'listUsers()')
     // Either zero or unboosted — definitely not the high-boost path.
     expect((listUsers?.framework_boost ?? 0)).toBeLessThan(4)
+  })
+
+  it('promotes the Hono request-flow owner above route-shell distractors', () => {
+    const graph = new KnowledgeGraph({ directed: true })
+    graph.addNode('route_shell', {
+      label: 'GET /users/:userId',
+      source_file: '/src/users/router.ts',
+      line_number: 12,
+      node_kind: 'route',
+      file_type: 'code',
+      framework: 'hono',
+      route_path: '/users/:userId',
+      http_method: 'GET',
+      community: 0,
+    })
+    graph.addNode('primary_workflow_owner', {
+      label: 'lookupOwnedUser()',
+      source_file: '/src/users/repository.ts',
+      line_number: 18,
+      node_kind: 'function',
+      file_type: 'code',
+      framework: 'prisma',
+      framework_role: 'prisma_model_reader',
+      storage_operation: 'findFirst',
+      community: 0,
+    })
+
+    const retrieved = retrieveContext(graph, {
+      question: 'enforce account ownership in the Hono users route handler for GET /users/:userId before calling prisma.user.findFirst',
+      budget: 2000,
+      fileType: 'code',
+    })
+
+    const primaryWorkflowOwner = retrieved.matched_nodes.find((node) => node.node_id === 'primary_workflow_owner')
+    const routeShell = retrieved.matched_nodes.find((node) => node.node_id === 'route_shell')
+
+    expect(primaryWorkflowOwner).toBeDefined()
+    expect(routeShell).toBeDefined()
+    expect(primaryWorkflowOwner?.framework_boost ?? 0).toBeGreaterThan(routeShell?.framework_boost ?? 0)
+  })
+
+  it('promotes the Hono request-flow owner for endpoint phrasing too', () => {
+    const graph = new KnowledgeGraph({ directed: true })
+    graph.addNode('route_shell', {
+      label: 'GET /users/:userId',
+      source_file: '/src/users/router.ts',
+      line_number: 12,
+      node_kind: 'route',
+      file_type: 'code',
+      framework: 'hono',
+      route_path: '/users/:userId',
+      http_method: 'GET',
+      community: 0,
+    })
+    graph.addNode('primary_workflow_owner', {
+      label: 'lookupOwnedUser()',
+      source_file: '/src/users/repository.ts',
+      line_number: 18,
+      node_kind: 'function',
+      file_type: 'code',
+      framework: 'prisma',
+      framework_role: 'prisma_model_reader',
+      storage_operation: 'findFirst',
+      community: 0,
+    })
+
+    const retrieved = retrieveContext(graph, {
+      question: 'enforce account ownership in the Hono users endpoint for GET /users/:userId before calling prisma.user.findFirst',
+      budget: 2000,
+      fileType: 'code',
+    })
+
+    const primaryWorkflowOwner = retrieved.matched_nodes.find((node) => node.node_id === 'primary_workflow_owner')
+    const routeShell = retrieved.matched_nodes.find((node) => node.node_id === 'route_shell')
+
+    expect(primaryWorkflowOwner).toBeDefined()
+    expect(routeShell).toBeDefined()
+    expect(primaryWorkflowOwner?.framework_boost ?? 0).toBeGreaterThan(routeShell?.framework_boost ?? 0)
   })
 })
