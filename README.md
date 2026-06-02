@@ -20,7 +20,7 @@ Madar is deterministic local context compilation. It complements agents and IDE 
 
 ## Quickstart
 
-Madar is two steps and requires both. `madar generate` creates the local graph artifact; `madar <agent> install` wires that graph into an agent through MCP or local instruction files.
+Start with the generated graph. `madar generate` creates the local graph artifact; `madar summary`, `madar pack`, `madar prompt`, and `madar handoff` can use that graph without any agent install. Run `madar <agent> install` only when you want Madar wired into an agent through MCP or local instruction files.
 
 ```bash
 npm install -g @lubab/madar

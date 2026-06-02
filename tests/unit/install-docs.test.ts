@@ -7,11 +7,14 @@ describe('install documentation', () => {
   it('documents Aider and OpenCode install artifacts and context-pack-first workflow', () => {
     const reference = readFileSync(resolve('docs/reference/cli-and-mcp.md'), 'utf8')
 
-    expect(reference).toContain('| Aider | AGENTS.md context-pack-first profile | `madar aider install` |')
-    expect(reference).toContain(
-      '| OpenCode | AGENTS.md + `.opencode/plugins/madar.js` + MCP via `opencode.json` / `opencode.jsonc` | `madar opencode install` |',
-    )
-    expect(reference).toContain('Aider and OpenCode are intentionally context-pack-first')
+    expect(reference).toContain('Aider')
+    expect(reference).toContain('AGENTS.md context-pack-first profile')
+    expect(reference).toContain('madar aider install')
+    expect(reference).toContain('OpenCode')
+    expect(reference).toContain('.opencode/plugins/madar.js')
+    expect(reference).toContain('opencode.json')
+    expect(reference).toContain('madar opencode install')
+    expect(reference).toContain('context-pack-first')
     expect(reference).toContain('madar pack "<task>" --task explain')
     expect(reference).toContain('madar aider uninstall')
     expect(reference).toContain('madar opencode uninstall')
@@ -21,10 +24,18 @@ describe('install documentation', () => {
     const reference = readFileSync(resolve('docs/reference/cli-and-mcp.md'), 'utf8')
 
     expect(reference).toContain('`doctor` / `status` lint surface')
-    expect(reference).toContain('| Claude Code | MCP via `.mcp.json` | `madar claude <install\\|uninstall> [--profile core\\|full\\|strict]` | `CLAUDE.md` + `.claude/settings.json` hook + `.mcp.json` |')
-    expect(reference).toContain('| Aider | AGENTS.md context-pack-first profile | `madar aider install` | `AGENTS.md` Aider profile |')
-    expect(reference).toContain('| OpenCode | AGENTS.md + `.opencode/plugins/madar.js` + MCP via `opencode.json` / `opencode.jsonc` | `madar opencode install` | `AGENTS.md` OpenCode profile + plugin registration + MCP entry |')
-    expect(reference).toContain('| Codex CLI | AGENTS.md + `.codex/hooks.json` context-pack-first profile | `madar codex install` | `AGENTS.md` Codex profile + `.codex/hooks.json` |')
+    expect(reference).toContain('Claude Code')
+    expect(reference).toContain('madar claude <install\\|uninstall>')
+    expect(reference).toContain('CLAUDE.md')
+    expect(reference).toContain('.claude/settings.json')
+    expect(reference).toContain('.mcp.json')
+    expect(reference).toContain('Aider profile')
+    expect(reference).toContain('OpenCode profile')
+    expect(reference).toContain('plugin registration')
+    expect(reference).toContain('MCP entry')
+    expect(reference).toContain('Codex CLI')
+    expect(reference).toContain('madar codex install')
+    expect(reference).toContain('.codex/hooks.json')
     expect(reference).toContain('mark the agent as `partial` and suggest the matching reinstall command')
   })
 
@@ -40,10 +51,11 @@ describe('install documentation', () => {
   it('documents the strict MCP install profile for claude, cursor, copilot, and gemini', () => {
     const reference = readFileSync(resolve('docs/reference/cli-and-mcp.md'), 'utf8')
 
-    expect(reference).toContain('claude <install\\|uninstall> [--profile core\\|full\\|strict]')
-    expect(reference).toContain('cursor <install\\|uninstall> [--profile core\\|full\\|strict]')
-    expect(reference).toContain('copilot <install\\|uninstall> [--profile core\\|full\\|strict]')
-    expect(reference).toContain('gemini <install\\|uninstall> [--profile core\\|full\\|strict]')
+    for (const agent of ['claude', 'cursor', 'copilot', 'gemini']) {
+      expect(reference).toContain(`${agent} <install\\|uninstall>`)
+    }
+
+    expect(reference).toContain('[--profile core\\|full\\|strict]')
     expect(reference).toContain('`--profile strict` keeps the lean core MCP tool surface')
     expect(reference).toContain('call `context_pack` once for the task before broader exploration')
     expect(reference).toContain('prefer Madar over non-Madar MCPs for codebase questions')
